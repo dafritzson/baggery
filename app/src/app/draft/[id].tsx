@@ -18,6 +18,7 @@ import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { formatLockTime, playerLine, playerName } from '@/lib/format';
 import { type Draft, type SeasonData, coreActions, currentRosters, useSeason } from '@/lib/season';
+import { ownerName, teamLabel, teamName } from '@/lib/teams';
 import { callFunction } from '@/lib/supabase';
 
 type Tab = 'players' | 'board' | 'rosters';
@@ -141,7 +142,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
         data={data}
         draft={draft}
         playerId={selected}
-        onBehalfOf={turn && !myTurn ? teamsById.get(turn.teamId)?.manager_name : undefined}
+        onBehalfOf={turn && !myTurn ? teamLabel(data, teamsById.get(turn.teamId)) : undefined}
         dropOptions={turn ? currentRosters(data).get(turn.teamId) ?? [] : []}
         onClose={() => setSelected(null)}
         onConfirm={async (dropPlayerId) => {
@@ -167,7 +168,7 @@ function clockStatus(data: SeasonData, draft: Draft, turn: Turn | null, myTurn: 
   const lastTeam = lastAction && data.teams.find((t) => t.id === lastAction.fantasy_team_id);
   const last =
     lastAction && lastTeam
-      ? `${lastTeam.manager_name} ${
+      ? `${teamName(lastTeam)} ${
           lastAction.type === 'yield'
             ? 'yielded'
             : `took ${playerLine(data, lastAction.add_player_id!)}${lastAction.drop_player_id ? `, dropped ${playerName(data, lastAction.drop_player_id)}` : ''}`
@@ -183,7 +184,7 @@ function clockStatus(data: SeasonData, draft: Draft, turn: Turn | null, myTurn: 
   }
   if (draft.status === 'complete' || !turn) return { headline: 'Draft complete', detail: null, last };
   return {
-    headline: myTurn ? "You're on the clock!" : `${team?.manager_name} is on the clock`,
+    headline: myTurn ? "You're on the clock!" : `${teamLabel(data, team)} is on the clock`,
     detail: `Round ${turn.round} · Pick ${(turn.slot % draft.pick_order.length) + 1} · #${actionCount + 1} overall`,
     last,
   };
@@ -365,13 +366,16 @@ function Board({ data, draft, config }: { data: SeasonData; draft: Draft; config
     <ScrollView horizontal>
       <View>
         <View style={styles.boardRow}>
-          {draft.pick_order.map((teamId) => (
-            <View key={teamId} style={styles.boardCell}>
-              <ThemedText type="smallBold" numberOfLines={1}>
-                {data.teams.find((t) => t.id === teamId)?.manager_name}
-              </ThemedText>
-            </View>
-          ))}
+          {draft.pick_order.map((teamId) => {
+            const team = data.teams.find((t) => t.id === teamId);
+            const owner = team && ownerName(data, team);
+            return (
+              <View key={teamId} style={styles.boardCell}>
+                <ThemedText type="smallBold" numberOfLines={1}>{team ? teamName(team) : '—'}</ThemedText>
+                {owner && <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>{owner}</ThemedText>}
+              </View>
+            );
+          })}
         </View>
         {Array.from({ length: draft.rounds }, (_, round) => (
           <View key={round} style={styles.boardRow}>
@@ -426,7 +430,7 @@ function RecentPicks({ data, draft }: { data: SeasonData; draft: Draft }) {
         <View key={a.action_number} style={styles.sideRow}>
           <ThemedText type="small" themeColor="textSecondary" style={styles.pickNumber}>#{a.action_number + 1}</ThemedText>
           <ThemedText type="small" numberOfLines={1} style={{ flex: 1 }}>
-            <ThemedText type="smallBold">{data.teams.find((t) => t.id === a.fantasy_team_id)?.manager_name}</ThemedText>{' '}
+            <ThemedText type="smallBold">{teamLabel(data, data.teams.find((t) => t.id === a.fantasy_team_id))}</ThemedText>{' '}
             {a.type === 'yield' ? 'yielded' : playerName(data, a.add_player_id!)}
             {a.is_auto ? ' (auto)' : ''}
           </ThemedText>
@@ -445,7 +449,7 @@ function Rosters({ data, draft }: { data: SeasonData; draft: Draft }) {
         const team = data.teams.find((t) => t.id === teamId);
         const roster = rosters.get(teamId) ?? [];
         return (
-          <Card key={teamId} title={`${team?.manager_name}${team?.id === data.myTeam?.id ? ' (you)' : ''} · ${roster.length}/4`}>
+          <Card key={teamId} title={`${teamLabel(data, team)}${team?.id === data.myTeam?.id ? ' · you' : ''} · ${roster.length}/4`}>
             {roster.length === 0 && <ThemedText type="small" themeColor="textSecondary">No players yet</ThemedText>}
             {roster.map((id) => (
               <ThemedText key={id} type="small">{playerLine(data, id)}</ThemedText>
@@ -550,7 +554,7 @@ function useCommissionerActions(
 
   return {
     canStart: draft.status === 'scheduled',
-    autopickFor: onClock?.manager_name ?? null,
+    autopickFor: onClock ? teamName(onClock) : null,
     canUndo: data.actions.some((a) => a.draft_id === draft.id),
     busy,
     confirm: setConfirming,
@@ -583,7 +587,7 @@ function AutodraftSettings({ data, run }: { data: SeasonData; run: (body: object
     <>
       {data.teams.map((t) => (
         <View key={t.id} style={styles.switchRow}>
-          <ThemedText type="small" style={{ flex: 1 }}>{t.manager_name}</ThemedText>
+          <ThemedText type="small" style={{ flex: 1 }}>{teamLabel(data, t)}</ThemedText>
           <AutodraftSwitch
             value={t.autodraft}
             onChange={(v) => run({ action: 'set-autodraft', teamId: t.id, autodraft: v })}

@@ -21,8 +21,8 @@ export async function requireUser(req: Request): Promise<string> {
 
 export async function isCommissioner(seasonId: string, userId: string): Promise<boolean> {
   const rows = await sql`
-    select 1 from seasons s join fantasy_teams t on t.id = s.commissioner_team_id
-    where s.id = ${seasonId} and t.user_id = ${userId}`;
+    select 1 from seasons s join league_members m on m.league_id = s.league_id
+    where s.id = ${seasonId} and m.user_id = ${userId} and m.role = 'commissioner'`;
   return rows.length > 0;
 }
 
