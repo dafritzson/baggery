@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, use } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { UnderAppHeader } from '@/components/app-header';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 
@@ -18,9 +19,10 @@ export function Screen({
   /** Pinned above the scroll area. */
   header?: ReactNode;
 }) {
+  const underHeader = use(UnderAppHeader);
   return (
     <ThemedView style={styles.fill}>
-      <SafeAreaView style={styles.fill} edges={['top', 'left', 'right']}>
+      <SafeAreaView style={styles.fill} edges={underHeader ? ['left', 'right'] : ['top', 'left', 'right']}>
         {header && <View style={styles.header}>{header}</View>}
         <ScrollView
           contentContainerStyle={styles.scroll}
