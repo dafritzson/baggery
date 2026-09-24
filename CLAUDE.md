@@ -9,7 +9,8 @@ architecture: [docs/PLAN.md](docs/PLAN.md).
 - `app/`: Expo app (web now, iOS later). Has its own [CLAUDE.md](app/CLAUDE.md) for Expo specifics.
 - `supabase/migrations/`: Postgres schema. Never edit an applied migration; add a new one.
 - `supabase/functions/`: Edge Functions (Deno). `draft` (all draft room actions, in one locked
-  transaction) and `sync-pool` (builds the draft pool from the MLB Stats API).
+  transaction), `sync-pool` (builds the draft pool from the MLB Stats API) and `player-stats`
+  (a player's season, game log and past seasons for the player popup, from the MLB Stats API).
 - `supabase/functions/_shared/core/`: pure game logic (draft, scoring), shared by the
   functions and the app (`@core/...`). No dependencies; imports use `.ts` extensions.
 - `tests/`: Vitest unit tests for the core.

@@ -1,0 +1,458 @@
+import { Image } from 'expo-image';
+import { type ReactNode, useEffect, useState } from 'react';
+import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+
+import {
+  type Counts,
+  type PlayerStats,
+  formatRate,
+  lastGames,
+  rates,
+} from '@core/player-stats.ts';
+
+import { Button } from '@/components/button';
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
+import { Spacing } from '@/constants/theme';
+import { useLayout } from '@/hooks/use-layout';
+import { useTheme } from '@/hooks/use-theme';
+import type { DraftAction } from '@/lib/player';
+import { type SeasonData, useSeason } from '@/lib/season';
+import { supabase } from '@/lib/supabase';
+import { ownerName, teamName } from '@/lib/teams';
+
+const WINDOWS = [7, 15, 30] as const;
+
+// Stats already fetched this page load, by "playerId:season".
+const statsCache = new Map<string, PlayerStats>();
+
+function usePlayerStats(playerId: number | null, season: number | undefined): { stats?: PlayerStats; error?: string } {
+  const key = playerId && season ? `${playerId}:${season}` : null;
+  const [result, setResult] = useState<{ key: string; stats?: PlayerStats; error?: string } | null>(null);
+  const cached = key ? statsCache.get(key) : undefined;
+
+  useEffect(() => {
+    if (!key || statsCache.has(key)) return;
+    let cancelled = false;
+    supabase.functions.invoke('player-stats', { body: { playerId, season } }).then(({ data, error }) => {
+      if (cancelled) return;
+      if (error) setResult({ key, error: "Couldn't load stats from MLB. Try again in a bit." });
+      else {
+        statsCache.set(key, data as PlayerStats);
+        setResult({ key, stats: data as PlayerStats });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [key, playerId, season]);
+
+  if (cached) return { stats: cached };
+  if (result && result.key === key) return result;
+  return {};
+}
+
+/** A player's stats card: this season, recent games and past seasons, plus where he stands in the league. */
+export function PlayerPopup({
+  playerId,
+  draftAction,
+  onClose,
+}: {
+  playerId: number | null;
+  draftAction: DraftAction | null;
+  onClose: () => void;
+}) {
+  const theme = useTheme();
+  const wide = useLayout() === 'wide';
+  const { data } = useSeason();
+  const year = data?.season.year;
+  const { stats, error } = usePlayerStats(playerId, year);
+  const visible = playerId !== null;
+
+  const known = playerId !== null ? data?.players.get(playerId) : undefined;
+  const name = stats?.person.name ?? known?.full_name ?? '';
+  const canDraft = playerId !== null && !!draftAction?.canDraft(playerId);
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable
+        style={[styles.backdrop, wide ? styles.backdropWide : styles.backdropCompact]}
+        onPress={onClose}
+        accessibilityLabel="Close">
+        {/* Swallows taps so they don't reach the backdrop. */}
+        <Pressable
+          onPress={() => {}}
+          style={[styles.panel, wide ? styles.panelWide : styles.panelCompact, { backgroundColor: theme.background }]}>
+          {playerId !== null && (
+            <>
+              <Header
+                playerId={playerId}
+                name={name}
+                stats={stats}
+                data={data}
+                onClose={onClose}
+                draft={
+                  canDraft && (
+                    <Button
+                      label={draftAction!.label}
+                      compact
+                      onPress={() => {
+                        onClose();
+                        draftAction!.draft(playerId);
+                      }}
+                    />
+                  )
+                }
+              />
+              <ScrollView contentContainerStyle={styles.body}>
+                {error && <ThemedText themeColor="danger">{error}</ThemedText>}
+                {!stats && !error && <ActivityIndicator style={{ padding: Spacing.five }} />}
+                {stats && year && (
+                  <StatsBody stats={stats} year={year} opsPlus={data?.poolByPlayer.get(playerId)?.ops_plus ?? null} />
+                )}
+                <View style={styles.links}>
+                  <ExternalLink
+                    label="Baseball-Reference"
+                    url={`https://www.baseball-reference.com/search/search.fcgi?search=${encodeURIComponent(name)}`}
+                  />
+                  <ExternalLink label="MLB.com" url={`https://www.mlb.com/player/${playerId}`} />
+                </View>
+              </ScrollView>
+            </>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function Header({
+  playerId,
+  name,
+  stats,
+  data,
+  draft,
+  onClose,
+}: {
+  playerId: number;
+  name: string;
+  stats: PlayerStats | undefined;
+  data: SeasonData | null;
+  draft: ReactNode;
+  onClose: () => void;
+}) {
+  const theme = useTheme();
+  const person = stats?.person;
+  const known = data?.players.get(playerId);
+  const team = person?.team ?? (data && data.mlbTeams.get(data.poolByPlayer.get(playerId)?.mlb_team_id ?? 0)?.abbreviation);
+  const bio = [
+    person?.position ?? known?.primary_position,
+    team,
+    person?.age && `Age ${person.age}`,
+    person?.bats && `Bats ${person.bats}`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const status = data ? leagueStatus(data, playerId) : null;
+
+  return (
+    <View style={[styles.header, { borderBottomColor: theme.border }]}>
+      <Image
+        source={`https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/${playerId}/headshot/67/current`}
+        style={[styles.headshot, { backgroundColor: theme.backgroundElement }]}
+        contentFit="cover"
+        accessibilityIgnoresInvertColors
+      />
+      <View style={styles.headerText}>
+        <ThemedText type="default" style={styles.name} numberOfLines={1}>{name}</ThemedText>
+        {bio !== '' && <ThemedText type="small" themeColor="textSecondary">{bio}</ThemedText>}
+        {status && (
+          <View style={[styles.status, { backgroundColor: status.available ? theme.tint : theme.backgroundElement }]}>
+            <ThemedText type="smallBold" style={styles.statusText} themeColor={status.available ? 'text' : 'textSecondary'}>
+              {status.label}
+            </ThemedText>
+          </View>
+        )}
+      </View>
+      <View style={styles.headerSide}>
+        <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close">
+          <ThemedText type="default" themeColor="textSecondary" style={styles.close}>✕</ThemedText>
+        </Pressable>
+        {draft}
+      </View>
+    </View>
+  );
+}
+
+/** Whose team he's on, or whether he can be drafted. */
+function leagueStatus(data: SeasonData, playerId: number): { label: string; available: boolean } | null {
+  const spell = data.spells.find((s) => s.mlb_player_id === playerId && s.dropped_by_draft_id === null);
+  const team = spell && data.teams.find((t) => t.id === spell.fantasy_team_id);
+  if (team) {
+    const owner = ownerName(data, team);
+    return { label: `${teamName(team)}${owner ? ` · ${owner}` : ''}`, available: false };
+  }
+  const entry = data.poolByPlayer.get(playerId);
+  if (!entry) return null;
+  if (data.mlbTeams.get(entry.mlb_team_id)?.eliminated) return { label: 'Team eliminated', available: false };
+  if (!entry.on_postseason_roster) return { label: 'Not on the postseason roster', available: false };
+  return { label: 'Available', available: true };
+}
+
+interface Column {
+  label: string;
+  width: number;
+  value: (c: Counts, opsPlus: number | null) => string;
+}
+
+const COUNT = (key: keyof Counts, label: string, width = 30): Column => ({ label, width, value: (c) => String(c[key]) });
+const RATE = (key: 'avg' | 'obp' | 'slg' | 'ops', label: string): Column => ({
+  label,
+  width: 44,
+  value: (c) => formatRate(rates(c)[key]),
+});
+
+// TB first: it's what decides everything in Baggery, so it's in view even on a phone.
+const LINE_COLUMNS: Column[] = [
+  COUNT('tb', 'TB', 38),
+  COUNT('g', 'G'),
+  COUNT('pa', 'PA', 36),
+  COUNT('ab', 'AB', 36),
+  COUNT('r', 'R'),
+  COUNT('h', 'H', 34),
+  COUNT('doubles', '2B'),
+  COUNT('triples', '3B'),
+  COUNT('hr', 'HR'),
+  COUNT('rbi', 'RBI', 34),
+  COUNT('bb', 'BB'),
+  COUNT('so', 'SO', 34),
+  RATE('avg', 'AVG'),
+  RATE('obp', 'OBP'),
+  RATE('slg', 'SLG'),
+  RATE('ops', 'OPS'),
+  { label: 'OPS+', width: 42, value: (_, opsPlus) => (opsPlus === null ? '' : String(opsPlus)) },
+];
+
+const GAME_COLUMNS: Column[] = [
+  COUNT('tb', 'TB', 38),
+  COUNT('ab', 'AB'),
+  COUNT('r', 'R'),
+  COUNT('h', 'H'),
+  COUNT('doubles', '2B'),
+  COUNT('triples', '3B'),
+  COUNT('hr', 'HR'),
+  COUNT('rbi', 'RBI', 38),
+  COUNT('bb', 'BB'),
+  COUNT('so', 'SO'),
+];
+
+function StatsBody({ stats, year, opsPlus }: { stats: PlayerStats; year: number; opsPlus: number | null }) {
+  const [span, setSpan] = useState<(typeof WINDOWS)[number]>(15);
+  const [showYears, setShowYears] = useState(false);
+  const games = stats.games.slice(0, span);
+
+  const splits: { label: string; line: Counts; opsPlus?: number | null; key?: boolean }[] = [];
+  if (stats.season) splits.push({ label: String(year), line: stats.season, opsPlus, key: true });
+  for (const n of WINDOWS) {
+    if (stats.games.length >= n) splits.push({ label: `Last ${n}`, line: lastGames(stats.games, n) });
+  }
+  if (!splits.length) {
+    return <ThemedText themeColor="textSecondary">No MLB games in {year} yet.</ThemedText>;
+  }
+
+  return (
+    <>
+      <Section title={`${year} regular season`}>
+        <StatTable
+          labelWidth={72}
+          columns={LINE_COLUMNS}
+          rows={splits.map((s) => ({
+            key: s.label,
+            label: s.label,
+            strong: s.key,
+            cells: LINE_COLUMNS.map((c) => c.value(s.line, s.opsPlus ?? null)),
+          }))}
+        />
+      </Section>
+
+      {stats.games.length > 0 && (
+        <Section
+          title="Game log"
+          action={<WindowToggle value={span} onChange={setSpan} />}>
+          <StatTable
+            labelWidth={96}
+            columns={GAME_COLUMNS}
+            rows={games.map((g) => ({
+              key: g.date + g.opponent,
+              label: `${shortDate(g.date)} ${g.home ? 'vs' : '@'} ${g.opponent}`,
+              cells: GAME_COLUMNS.map((c) => c.value(g, null)),
+            }))}
+          />
+        </Section>
+      )}
+
+      {stats.years.length > 0 && (
+        <Section
+          title="Past seasons"
+          action={
+            <Pressable onPress={() => setShowYears(!showYears)} hitSlop={8} accessibilityRole="button">
+              <ThemedText type="smallBold" themeColor="accent">{showYears ? 'Hide' : `Show ${stats.years.length}`}</ThemedText>
+            </Pressable>
+          }>
+          {showYears && (
+            <StatTable
+              labelWidth={84}
+              columns={LINE_COLUMNS.slice(0, -1)}
+              rows={stats.years.map((y) => ({
+                key: `${y.season}`,
+                label: `${y.season} ${y.team}`,
+                cells: LINE_COLUMNS.slice(0, -1).map((c) => c.value(y, null)),
+              }))}
+            />
+          )}
+        </Section>
+      )}
+    </>
+  );
+}
+
+/** "2026-09-20" → "9/20" */
+function shortDate(date: string): string {
+  const [, m, d] = date.split('-');
+  return `${Number(m)}/${Number(d)}`;
+}
+
+function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHead}>
+        <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionTitle}>{title}</ThemedText>
+        {action}
+      </View>
+      {children}
+    </View>
+  );
+}
+
+function WindowToggle({ value, onChange }: { value: number; onChange: (n: (typeof WINDOWS)[number]) => void }) {
+  const theme = useTheme();
+  return (
+    <ThemedView type="backgroundElement" style={styles.toggle}>
+      {WINDOWS.map((n) => (
+        <Pressable
+          key={n}
+          onPress={() => onChange(n)}
+          accessibilityRole="button"
+          accessibilityState={{ selected: value === n }}
+          style={[styles.toggleItem, value === n && { backgroundColor: theme.background }]}>
+          <ThemedText type="smallBold" themeColor={value === n ? 'text' : 'textSecondary'} style={styles.toggleText}>
+            Last {n}
+          </ThemedText>
+        </Pressable>
+      ))}
+    </ThemedView>
+  );
+}
+
+/** A compact box-score table; the label column stays put while the numbers scroll on phones. */
+function StatTable({
+  columns,
+  rows,
+  labelWidth,
+}: {
+  columns: Column[];
+  rows: { key: string; label: string; cells: string[]; strong?: boolean }[];
+  labelWidth: number;
+}) {
+  const theme = useTheme();
+  const tbIndex = columns.findIndex((c) => c.label === 'TB');
+  const rowBorder = (i: number) => i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border };
+  return (
+    <ThemedView type="backgroundElement" style={styles.table}>
+      <View style={[styles.labelColumn, { width: labelWidth, borderRightColor: theme.border }]}>
+        <View style={[styles.tableRow, styles.tableHead, { borderBottomColor: theme.border }]} />
+        {rows.map((r, i) => (
+          <View key={r.key} style={[styles.tableRow, styles.labelCell, rowBorder(i)]}>
+            <ThemedText type={r.strong ? 'smallBold' : 'small'} numberOfLines={1} style={styles.cellText}>{r.label}</ThemedText>
+          </View>
+        ))}
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ flexGrow: 1 }}>
+        <View style={{ flexGrow: 1 }}>
+          <View style={[styles.tableRow, styles.tableHead, styles.cells, { borderBottomColor: theme.border }]}>
+            {columns.map((c, j) => (
+              <View key={c.label} style={[styles.cell, { minWidth: c.width }, j === tbIndex && { backgroundColor: theme.tint }]}>
+                <ThemedText type="smallBold" themeColor={j === tbIndex ? 'text' : 'textSecondary'} style={styles.cellText}>
+                  {c.label}
+                </ThemedText>
+              </View>
+            ))}
+          </View>
+          {rows.map((r, i) => (
+            <View key={r.key} style={[styles.tableRow, styles.cells, rowBorder(i)]}>
+              {r.cells.map((value, j) => (
+                <View key={columns[j].label} style={[styles.cell, { minWidth: columns[j].width }, j === tbIndex && { backgroundColor: theme.tint }]}>
+                  <ThemedText
+                    type={r.strong || j === tbIndex ? 'smallBold' : 'small'}
+                    style={[styles.cellText, styles.number]}>
+                    {value}
+                  </ThemedText>
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+    </ThemedView>
+  );
+}
+
+function ExternalLink({ label, url }: { label: string; url: string }) {
+  return (
+    <Pressable onPress={() => Linking.openURL(url)} accessibilityRole="link" hitSlop={6}>
+      <ThemedText type="smallBold" themeColor="accent">{label} ↗</ThemedText>
+    </Pressable>
+  );
+}
+
+const ROW = 30;
+
+const styles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center' },
+  backdropWide: { justifyContent: 'center', padding: Spacing.four },
+  backdropCompact: { justifyContent: 'flex-end' },
+  panel: { width: '100%', overflow: 'hidden' },
+  panelWide: { maxWidth: 760, maxHeight: '90%', borderRadius: Spacing.three },
+  panelCompact: { maxHeight: '92%', borderTopLeftRadius: Spacing.four, borderTopRightRadius: Spacing.four },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.three,
+    padding: Spacing.three,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  headshot: { width: 64, height: 64, borderRadius: 32 },
+  headerText: { flex: 1, gap: Spacing.half },
+  name: { fontSize: 20, lineHeight: 26, fontWeight: 700 },
+  status: { alignSelf: 'flex-start', paddingHorizontal: Spacing.two, paddingVertical: 1, borderRadius: Spacing.one, marginTop: Spacing.half },
+  statusText: { fontSize: 12, lineHeight: 18 },
+  headerSide: { alignItems: 'flex-end', gap: Spacing.two },
+  close: { fontSize: 18, lineHeight: 22, paddingHorizontal: Spacing.one },
+  body: { padding: Spacing.three, gap: Spacing.four, paddingBottom: Spacing.five },
+  section: { gap: Spacing.two },
+  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two, minHeight: 28 },
+  sectionTitle: { textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 13 },
+  toggle: { flexDirection: 'row', borderRadius: Spacing.two, padding: 2 },
+  toggleItem: { paddingHorizontal: Spacing.two, paddingVertical: 2, borderRadius: Spacing.one + 2 },
+  toggleText: { fontSize: 13 },
+  table: { flexDirection: 'row', borderRadius: Spacing.two, overflow: 'hidden' },
+  labelColumn: { borderRightWidth: StyleSheet.hairlineWidth },
+  tableRow: { height: ROW },
+  tableHead: { borderBottomWidth: StyleSheet.hairlineWidth },
+  labelCell: { justifyContent: 'center', paddingHorizontal: Spacing.two },
+  cells: { flexDirection: 'row', paddingRight: Spacing.two },
+  cell: { flexGrow: 1, flexBasis: 0, height: '100%', justifyContent: 'center', alignItems: 'flex-end', paddingHorizontal: Spacing.one },
+  cellText: { fontSize: 13, lineHeight: 18 },
+  number: { fontVariant: ['tabular-nums'] },
+  links: { flexDirection: 'row', gap: Spacing.four },
+});

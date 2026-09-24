@@ -181,3 +181,22 @@ describe('draft 1', () => {
     expect(autoPicks).toBe(4);
   });
 });
+
+describe('player stats', () => {
+  it("returns a hitter's season, game log and past seasons from the MLB API", async () => {
+    const { data, error } = await clients.get('Kyle')!.functions.invoke('player-stats', { body: { playerId: 592450, season: 2025 } });
+    expect(error).toBeNull();
+    expect(data.person).toMatchObject({ id: 592450, name: 'Aaron Judge' });
+    expect(data.season.pa).toBeGreaterThan(400);
+    expect(data.games.length).toBeGreaterThan(100);
+    expect(data.games[0].date > data.games.at(-1).date).toBe(true);
+    expect(data.games[0].opponent).toMatch(/^[A-Z]{2,3}$/);
+    expect(data.years[0].season).toBe(2024);
+  });
+
+  it('needs a signed-in user', async () => {
+    const anon = createClient(url, publishableKey, { auth: { persistSession: false } });
+    const { error } = await anon.functions.invoke('player-stats', { body: { playerId: 592450, season: 2025 } });
+    expect(error).not.toBeNull();
+  });
+});
