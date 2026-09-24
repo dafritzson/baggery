@@ -8,11 +8,9 @@ import { Screen } from '@/components/screen';
 import { Sheet } from '@/components/sheet';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
-import { signOut, useAuth } from '@/lib/auth';
 import { formatLockTime, playerLine } from '@/lib/format';
 import { type Draft, type SeasonData, type Team, currentRosters, useSeason } from '@/lib/season';
-import { appEnv, callFunction, supabase } from '@/lib/supabase';
+import { callFunction, supabase } from '@/lib/supabase';
 
 const DRAFT_NAMES: Record<number, string> = {
   1: 'Draft 1 · before the Wild Card',
@@ -22,22 +20,14 @@ const DRAFT_NAMES: Record<number, string> = {
 };
 
 export default function HomeScreen() {
-  const { data, loading, refetch } = useSeason();
-  const { session } = useAuth();
+  const { data, loading, refetch, requestedYear } = useSeason();
 
   return (
     <Screen onRefresh={refetch} refreshing={false}>
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <ThemedText type="subtitle" style={styles.title}>Baggery {data?.season.year}</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">{session?.user.email}</ThemedText>
-        </View>
-        {appEnv !== 'production' && <EnvBadge />}
-        <Button label="Sign out" variant="secondary" compact onPress={signOut} />
-      </View>
-
       {loading && <ThemedText themeColor="textSecondary">Loading…</ThemedText>}
-      {!loading && !data && <ThemedText>No season set up yet.</ThemedText>}
+      {!loading && !data && (
+        <ThemedText>{requestedYear ? `There's no ${requestedYear} season.` : 'No season set up yet.'}</ThemedText>
+      )}
       {data && (
         <>
           {!data.myTeam && <ClaimTeam data={data} onClaimed={refetch} />}
@@ -47,15 +37,6 @@ export default function HomeScreen() {
         </>
       )}
     </Screen>
-  );
-}
-
-function EnvBadge() {
-  const theme = useTheme();
-  return (
-    <View style={[styles.badge, { backgroundColor: theme.danger }]}>
-      <ThemedText type="smallBold" style={{ color: theme.accentText }}>{appEnv.toUpperCase()}</ThemedText>
-    </View>
   );
 }
 
@@ -115,12 +96,12 @@ function DraftsCard({ data }: { data: SeasonData }) {
           <ThemedText type="small" themeColor="textSecondary">{draftStatus(current)}</ThemedText>
           <Button
             label={current.status === 'live' ? 'Enter the draft room' : 'Open the draft room'}
-            onPress={() => router.push(`/draft/${current.id}`)}
+            onPress={() => router.push({ pathname: '/draft/[id]', params: { id: current.id, year: data.season.year } })}
           />
         </View>
       )}
       {done.map((d) => (
-        <Pressable key={d.id} onPress={() => router.push(`/draft/${d.id}`)}>
+        <Pressable key={d.id} onPress={() => router.push({ pathname: '/draft/[id]', params: { id: d.id, year: data.season.year } })}>
           <ThemedText type="small" themeColor="textSecondary">{DRAFT_NAMES[d.number]} · Complete ›</ThemedText>
         </Pressable>
       ))}
@@ -207,9 +188,6 @@ function CommissionerCard({ data }: { data: SeasonData }) {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  title: { fontSize: 28, lineHeight: 34 },
-  badge: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Spacing.one },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   draftRow: { gap: Spacing.two },
   team: { gap: Spacing.half, paddingVertical: Spacing.one },

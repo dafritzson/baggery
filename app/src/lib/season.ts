@@ -1,3 +1,4 @@
+import { useGlobalSearchParams } from 'expo-router';
 import { createContext, createElement, type ReactNode, use, useCallback, useEffect, useRef, useState } from 'react';
 
 import type { DraftAction } from '@core/draft.ts';
@@ -93,14 +94,18 @@ const LIVE_TABLES = [
   'season_player_pool',
 ] as const;
 
-async function fetchSeason(userId: string | undefined): Promise<SeasonData | null> {
-  const { data: season } = await supabase
+/** The season for `year` (the latest when unset), plus every year that has a season. */
+async function fetchSeason(
+  userId: string | undefined,
+  year: number | undefined,
+): Promise<{ data: SeasonData | null; years: number[] }> {
+  const { data: seasons } = await supabase
     .from('seasons')
     .select('id, year, status, commissioner_team_id')
-    .order('year', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!season) return null;
+    .order('year', { ascending: false });
+  const years = (seasons ?? []).map((s) => s.year as number);
+  const season = year ? seasons?.find((s) => s.year === year) : seasons?.[0];
+  if (!season) return { data: null, years };
 
   const [teams, drafts, spells, pool, seasonTeams] = await Promise.all([
     supabase.from('fantasy_teams').select('*').eq('season_id', season.id).order('manager_name'),
@@ -148,7 +153,7 @@ async function fetchSeason(userId: string | undefined): Promise<SeasonData | nul
 
   const teamRows = (teams.data ?? []) as Team[];
   const myTeam = teamRows.find((t) => t.user_id === userId) ?? null;
-  return {
+  const data: SeasonData = {
     season,
     teams: teamRows,
     drafts: (drafts.data ?? []) as Draft[],
@@ -161,17 +166,28 @@ async function fetchSeason(userId: string | undefined): Promise<SeasonData | nul
     myTeam,
     isCommissioner: !!myTeam && myTeam.id === season.commissioner_team_id,
   };
+  return { data, years };
 }
 
 interface SeasonState {
   data: SeasonData | null;
+  /** Every year with a season, newest first. */
+  years: number[];
+  /** The year from the URL (`?year=2025`), or undefined for the latest season. */
+  requestedYear: number | undefined;
   loading: boolean;
   refetch: () => Promise<void>;
 }
 
-const SeasonContext = createContext<SeasonState>({ data: null, loading: true, refetch: async () => {} });
+const SeasonContext = createContext<SeasonState>({
+  data: null,
+  years: [],
+  requestedYear: undefined,
+  loading: true,
+  refetch: async () => {},
+});
 
-/** Loads the current season once for the whole app and keeps it live. */
+/** Loads the season picked in the URL once for the whole app and keeps it live. */
 export function SeasonProvider({ children }: { children: ReactNode }) {
   return createElement(SeasonContext, { value: useLiveSeason() }, children);
 }
@@ -180,11 +196,14 @@ export function useSeason(): SeasonState {
   return use(SeasonContext);
 }
 
-/** The current season, kept live: any change to drafts or rosters triggers a refetch. */
+/** The selected season, kept live: any change to drafts or rosters triggers a refetch. */
 function useLiveSeason(): SeasonState {
   const { session } = useAuth();
   const userId = session?.user.id;
+  const { year: yearParam } = useGlobalSearchParams<{ year?: string }>();
+  const requestedYear = Number(yearParam) || undefined;
   const [data, setData] = useState<SeasonData | null>(null);
+  const [years, setYears] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestFetch = useRef(0);
@@ -192,11 +211,12 @@ function useLiveSeason(): SeasonState {
   const refetch = useCallback(async () => {
     // Reloads can overlap; only the newest one may land, so an older one can't overwrite it.
     const fetchId = ++latestFetch.current;
-    const next = await fetchSeason(userId);
+    const next = await fetchSeason(userId, requestedYear);
     if (fetchId !== latestFetch.current) return;
-    setData(next);
+    setData(next.data);
+    setYears(next.years);
     setLoading(false);
-  }, [userId]);
+  }, [userId, requestedYear]);
 
   useEffect(() => {
     const scheduleRefetch = (delay = 150) => {
@@ -216,7 +236,7 @@ function useLiveSeason(): SeasonState {
     };
   }, [refetch]);
 
-  return { data, loading, refetch };
+  return { data, years, requestedYear, loading, refetch };
 }
 
 /** Converts stored actions for one draft into the shared core's format. */

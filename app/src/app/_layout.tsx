@@ -1,6 +1,7 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { useColorScheme } from 'react-native';
 
+import { AppHeader, UnderAppHeader } from '@/components/app-header';
 import { ThemedView } from '@/components/themed-view';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { SeasonProvider } from '@/lib/season';
@@ -31,6 +32,14 @@ function RootStack() {
       <Stack.Screen name="privacy" options={{ title: 'Privacy · Baggery' }} />
     </Stack>
   );
+  if (!session) return stack;
   // Remount on sign-in/out so season data is loaded for the right user.
-  return session ? <SeasonProvider key={session.user.id}>{stack}</SeasonProvider> : stack;
+  return (
+    <SeasonProvider key={session.user.id}>
+      <ThemedView style={{ flex: 1 }}>
+        <AppHeader />
+        <UnderAppHeader value>{stack}</UnderAppHeader>
+      </ThemedView>
+    </SeasonProvider>
+  );
 }

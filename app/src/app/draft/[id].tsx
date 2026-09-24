@@ -21,22 +21,34 @@ type Tab = 'players' | 'board' | 'rosters';
 
 export default function DraftRoomScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data, loading, refetch } = useSeason();
+  const { data, loading, refetch, requestedYear } = useSeason();
   const draft = data?.drafts.find((d) => d.id === id);
+  // Back to the season being viewed, keeping the year in the URL.
+  const goHome = () => router.replace(requestedYear ? { pathname: '/', params: { year: requestedYear } } : '/');
 
   if (loading) return <Screen><ThemedText themeColor="textSecondary">Loading…</ThemedText></Screen>;
   if (!data || !draft) {
     return (
       <Screen>
         <ThemedText>Draft not found.</ThemedText>
-        <Button label="Home" variant="secondary" onPress={() => router.replace('/')} />
+        <Button label="Home" variant="secondary" onPress={goHome} />
       </Screen>
     );
   }
-  return <DraftRoom data={data} draft={draft} refetch={refetch} />;
+  return <DraftRoom data={data} draft={draft} refetch={refetch} goHome={goHome} />;
 }
 
-function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; refetch: () => void }) {
+function DraftRoom({
+  data,
+  draft,
+  refetch,
+  goHome,
+}: {
+  data: SeasonData;
+  draft: Draft;
+  refetch: () => void;
+  goHome: () => void;
+}) {
   const [tab, setTab] = useState<Tab>('players');
   const [selected, setSelected] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +73,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
     <Screen
       header={
         <View style={styles.topBar}>
-          <Pressable onPress={() => router.replace('/')} hitSlop={12}>
+          <Pressable onPress={goHome} hitSlop={12}>
             <ThemedText type="small" themeColor="textSecondary">‹ Home</ThemedText>
           </Pressable>
           <ThemedText type="smallBold">Draft {draft.number}</ThemedText>
