@@ -1,15 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
-import { ADJECTIVES, TEAM_NAMES, randomTeamName } from '../app/src/lib/team-name-list.ts';
+import { ADJECTIVES, randomTeamName, teamNames } from '../app/src/lib/team-name-list.ts';
 
 // Team names must be 1 to 30 characters (enforced in the database).
 const MAX = 30;
 
+// The puns are stored scrambled (see scripts/team-names.ts), so these tests never spell them out.
+const TEAM_NAMES = teamNames();
+
 describe('team name list', () => {
-  it('has 200 unique puns that fit the name limit', () => {
+  it('decodes to 200 unique plain-ASCII puns that fit the name limit', () => {
     expect(TEAM_NAMES).toHaveLength(200);
     expect(new Set(TEAM_NAMES.map((n) => n.toLowerCase())).size).toBe(TEAM_NAMES.length);
-    for (const name of TEAM_NAMES) expect(name.length, name).toBeLessThanOrEqual(MAX);
+    for (const name of TEAM_NAMES) {
+      expect(name.length).toBeLessThanOrEqual(MAX);
+      expect(name).toMatch(/^[\x20-\x7e]+$/);
+    }
   });
 
   it('has unique adjectives short enough for two of them plus "Bags"', () => {

@@ -4,3 +4,6 @@ node_modules/
 .env.*
 !.env.example
 .vercel/
+
+# Plain list of the pun team names (see scripts/team-names.ts). Kept out of the repo.
+team-names.txt

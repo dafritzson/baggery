@@ -2,49 +2,71 @@
 // imports, so the unit tests can check it. Every name must fit the 30-character limit on
 // team names (enforced in the database).
 
-/** Hand-written "bags" puns. */
-export const TEAM_NAMES = [
-  'Master Baggins', 'Tea Baggins', 'Douche Baggins', 'Bag to the Future', 'Bags Bunny',
-  'Baggage Claim', "It's in the Bag", 'Sandbaggers', 'Carpetbaggers', 'Bag of Tricks',
-  'Moneybags', 'Brown Bag Special', 'Bagel Bosses', 'Bagpipe Dreams', 'Scumbags of Summer',
-  'Bags of Glory', 'Bag Daddies', 'Grand Slam Bags', 'Bagsy Malone', 'Doggie Baggers',
-  'Baggy Pants Brigade', 'Dirtbag Dynasty', 'Sleazebags', 'Windbags', 'Gasbags',
-  'Ratbags', 'Fleabags', 'Nutbags', 'Bag Boys', 'Bag Ladies',
-  'Hot Bag Summer', 'Bagging Rights', 'Bragging Bags', 'Bags to Riches', 'Rags to Bags',
-  'Punching Bags', 'Bean Bag Bandits', 'Sleeping Bags', 'Body Bag Bombers', 'Airbag Deployment',
-  'Bag of Donuts', 'Paper or Plastic', 'Double Bagged', 'Triple Bagged', 'Bag It and Tag It',
-  'Bags Over Easy', 'Bag Check', 'Carry-On Bags', 'Bag Drop', 'Diaper Bag Dads',
-  'The Bag Men', 'Bagman Begins', 'The Dark Bagman', 'Bagatha Christie', 'Baguette About It',
-  'Oh My Bag', 'Bag Attack', 'Bags on Bags', 'Bag Swag', 'Swag Bags',
-  'Secure the Bag', 'Bag Secured', 'Chasing Bags', 'Bag Chasers', 'Fumble the Bag',
-  'Bag Alert', 'Bag Goblins', 'Bag Gremlins', 'Bags Ahoy', 'Bagzilla',
-  'Bagtastic Four', 'Bagnificent Seven', 'The Bagfather', 'Bag Street Boys', "Bagstreet's Back",
-  'Bags in Black', 'Honey I Shrunk the Bags', 'Bag Minds Think Alike', 'Bag to Basics', 'Bag in Time',
-  'Bag Day Afternoon', 'Bagpackers', 'Bagtender', 'Tote-ally Awesome', 'Tote Bag Terrors',
-  'Tote Recall', "Bags N' Harmony", 'Duffel Trouble', 'Duffel Up', 'Satchel Paige Turners',
-  'Satchel Slingers', 'Purse Snatchers', 'Clutch Purses', 'Man Purse Mafia', 'Fanny Pack Attack',
-  'Knapsack Attack', 'Rucksack Rascals', 'Mailbag Maulers', 'Grab Bag Gang', 'Mixed Bag',
-  'Bag of Bones', 'Bag of Hammers', 'Bag of Rocks', 'Dumber Than a Bag of Rocks', 'Hot Air Bags',
-  'Old Bags', 'Saggy Bags', 'Baggy Eyes', 'Bags Under My Eyes', 'Teabag Tuesday',
-  'Bagging Area', 'Unexpected Item in Bag Area', 'Please Bag Responsibly', 'Bag Holders', 'Left Holding the Bag',
-  'Bag Bros', 'Bagsquatch', 'Bag Vader', 'May the Bags Be With You', 'Game of Bags',
-  'Lord of the Bags', 'The Fellowship of the Bag', 'One Bag to Rule Them All', 'Bilbo Baggins Fan Club', 'Bag End Boys',
-  'Precious Bags', 'Bags Life', 'Thug Bags', 'Big Bag Theory', 'Bagging Bad',
-  'Better Call Bag', 'Breaking Bags', 'Bag Mirror', 'The Bag Lebowski', 'Bagnum P.I.',
-  'Bag Runners', 'Sleepy Bags', 'Bag of Chips', 'Chip Bag Champs', 'Snack Bag Attack',
-  'Bags of Sunflower Seeds', 'Seed Bag Spitters', 'Rosin Bags', 'Rosin Bag Rascals', 'Base Bags',
-  'Bags Loaded', 'Bags Juiced', 'Juiced Bags', 'Stolen Bags', 'Bag Thieves',
-  'Bag Swipers', 'Swipe the Bag', 'Take the Extra Bag', 'Four Bags', 'Four-Bag Fury',
-  'Tater Bags', 'Dinger Bags', 'Moonshot Bags', 'Bags Deep', 'Deep Bags',
-  'Walk-Off Bags', 'Bag Flip', 'Bat Flip Bags', 'Bags and Balls', 'Chin Music Bags',
-  'Bags for Days', "Bags o' Plenty", 'Bagtholomew', 'Sir Bags-a-Lot', 'Bags McGee',
-  'Baggy McBagface', 'Bag II Men', 'Bags Brothers', 'Baggage Handlers', 'Lost Baggage',
-  'Emotional Baggage', 'Excess Baggage', 'Checked Baggage', 'Baggage Fees', 'Bag Fee Bandits',
-  'Carry On My Wayward Bag', 'Bag Me Maybe', 'Ice Ice Bagby', 'Baggy Pop', "Guns N' Bags",
-  'Bag Jovi', 'Bagsteen', 'Notorious B.A.G.', 'The Bagtles', 'Bag Floyd',
-  'Bagsmith', 'AC/Bags', 'Bag Fight Club', 'First Rule of Bag Club', 'Bag Lightyear',
-  'To Bag or Not to Bag', 'Bags Over Brews', 'Bag Sweats', 'Bag Nasty', 'Hefty Bags',
-];
+/**
+ * Hand-written "bags" puns, stored scrambled (XOR with NAME_KEY, then base64) so they aren't
+ * readable in the source. To see or edit them, use scripts/team-names.ts.
+ */
+export const ENCODED_TEAM_NAMES =
+  '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';
+
+export const NAME_KEY = 'baggery';
+
+/** Unscrambles ENCODED_TEAM_NAMES into the list of names. The names are plain ASCII. */
+export function decodeTeamNames(encoded: string): string[] {
+  const bytes = atob(encoded);
+  let text = '';
+  for (let i = 0; i < bytes.length; i++) {
+    text += String.fromCharCode(bytes.charCodeAt(i) ^ NAME_KEY.charCodeAt(i % NAME_KEY.length));
+  }
+  return text.split('\n');
+}
+
+let decoded: string[] | null = null;
+
+/** The pun names, decoded on first use. */
+export function teamNames(): string[] {
+  decoded ??= decodeTeamNames(ENCODED_TEAM_NAMES);
+  return decoded;
+}
 
 /** For "<adjective> Bags" and "<adjective> <adjective> Bags". At most 12 characters each. */
 export const ADJECTIVES = [
@@ -66,7 +88,7 @@ export const ADJECTIVES = [
 export function randomTeamName(random: () => number = Math.random): string {
   const pick = <T>(items: T[]) => items[Math.floor(random() * items.length)];
   const style = Math.floor(random() * 3);
-  if (style === 0) return pick(TEAM_NAMES);
+  if (style === 0) return pick(teamNames());
   const first = pick(ADJECTIVES);
   if (style === 1) return `${first} Bags`;
   let second = pick(ADJECTIVES);
