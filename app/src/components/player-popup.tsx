@@ -51,7 +51,7 @@ function usePlayerStats(playerId: number | null, season: number | undefined): { 
   return {};
 }
 
-/** A player's stats card: this season, recent games and past seasons, plus where he stands in the league. */
+/** A player's stats card in a popup: a centered dialog on desktops, a bottom sheet on phones. */
 export function PlayerPopup({
   playerId,
   draftAction,
@@ -63,17 +63,8 @@ export function PlayerPopup({
 }) {
   const theme = useTheme();
   const wide = useLayout() === 'wide';
-  const { data } = useSeason();
-  const year = data?.season.year;
-  const { stats, error } = usePlayerStats(playerId, year);
-  const visible = playerId !== null;
-
-  const known = playerId !== null ? data?.players.get(playerId) : undefined;
-  const name = stats?.person.name ?? known?.full_name ?? '';
-  const canDraft = playerId !== null && !!draftAction?.canDraft(playerId);
-
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={playerId !== null} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable
         style={[styles.backdrop, wide ? styles.backdropWide : styles.backdropCompact]}
         onPress={onClose}
@@ -82,45 +73,69 @@ export function PlayerPopup({
         <Pressable
           onPress={() => {}}
           style={[styles.panel, wide ? styles.panelWide : styles.panelCompact, { backgroundColor: theme.background }]}>
-          {playerId !== null && (
-            <>
-              <Header
-                playerId={playerId}
-                name={name}
-                stats={stats}
-                data={data}
-                onClose={onClose}
-                draft={
-                  canDraft && (
-                    <DraftChip
-                      label={draftAction!.label}
-                      onPress={() => {
-                        onClose();
-                        draftAction!.draft(playerId);
-                      }}
-                    />
-                  )
-                }
-              />
-              <ScrollView contentContainerStyle={styles.body}>
-                {error && <ThemedText themeColor="danger">{error}</ThemedText>}
-                {!stats && !error && <ActivityIndicator style={{ padding: Spacing.five }} />}
-                {stats && year && (
-                  <StatsBody stats={stats} year={year} opsPlus={data?.poolByPlayer.get(playerId)?.ops_plus ?? null} />
-                )}
-                <View style={styles.links}>
-                  <ExternalLink
-                    label="Baseball-Reference"
-                    url={`https://www.baseball-reference.com/search/search.fcgi?search=${encodeURIComponent(name)}`}
-                  />
-                  <ExternalLink label="MLB.com" url={`https://www.mlb.com/player/${playerId}`} />
-                </View>
-              </ScrollView>
-            </>
-          )}
+          {playerId !== null && <PlayerDetails playerId={playerId} draftAction={draftAction} onClose={onClose} />}
         </Pressable>
       </Pressable>
     </Modal>
+  );
+}
+
+/**
+ * A player's stats: this season, recent games and past seasons, plus where he stands in the league.
+ * Fills its container: the popup, or the side panel on the Research tab.
+ */
+export function PlayerDetails({
+  playerId,
+  draftAction = null,
+  onClose,
+}: {
+  playerId: number;
+  draftAction?: DraftAction | null;
+  /** Shows a close button. */
+  onClose?: () => void;
+}) {
+  const { data } = useSeason();
+  const year = data?.season.year;
+  const { stats, error } = usePlayerStats(playerId, year);
+
+  const name = stats?.person.name ?? data?.players.get(playerId)?.full_name ?? '';
+  const canDraft = !!draftAction?.canDraft(playerId);
+
+  return (
+    <>
+      <Header
+        playerId={playerId}
+        name={name}
+        stats={stats}
+        data={data}
+        onClose={onClose}
+        draft={
+          canDraft && (
+            <DraftChip
+              label={draftAction!.label}
+              onPress={() => {
+                onClose?.();
+                draftAction!.draft(playerId);
+              }}
+            />
+          )
+        }
+      />
+      <ScrollView contentContainerStyle={styles.body}>
+        {error && <ThemedText themeColor="danger">{error}</ThemedText>}
+        {!stats && !error && <ActivityIndicator style={{ padding: Spacing.five }} />}
+        {stats && year && (
+          <StatsBody stats={stats} year={year} opsPlus={data?.poolByPlayer.get(playerId)?.ops_plus ?? null} />
+        )}
+        <View style={styles.links}>
+          <ExternalLink
+            label="Baseball-Reference"
+            url={`https://www.baseball-reference.com/search/search.fcgi?search=${encodeURIComponent(name)}`}
+          />
+          <ExternalLink label="MLB.com" url={`https://www.mlb.com/player/${playerId}`} />
+        </View>
+      </ScrollView>
+    </>
   );
 }
 
@@ -137,7 +152,7 @@ function Header({
   stats: PlayerStats | undefined;
   data: SeasonData | null;
   draft: ReactNode;
-  onClose: () => void;
+  onClose?: () => void;
 }) {
   const theme = useTheme();
   const person = stats?.person;
@@ -177,9 +192,11 @@ function Header({
           </View>
         )}
       </View>
-      <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close">
-        <ThemedText type="default" themeColor="textSecondary" style={styles.close}>✕</ThemedText>
-      </Pressable>
+      {onClose && (
+        <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close">
+          <ThemedText type="default" themeColor="textSecondary" style={styles.close}>✕</ThemedText>
+        </Pressable>
+      )}
     </View>
   );
 }
