@@ -144,7 +144,7 @@ function EnvBadge() {
 function AccountButton() {
   const theme = useTheme();
   const { session } = useAuth();
-  const { data } = useSeason();
+  const { data, requestedYear } = useSeason();
   const [imageFailed, setImageFailed] = useState(false);
   const user = session?.user;
   const meta = user?.user_metadata ?? {};
@@ -180,6 +180,12 @@ function AccountButton() {
           {[fullName, user?.email, data?.myTeam && `Team: ${teamName(data.myTeam)}`].filter(Boolean).join('\n')}
         </DropdownMenu.Label>
         <DropdownMenu.Separator className="menu-separator" />
+        <DropdownMenu.Item
+          key="settings"
+          className="menu-item"
+          onSelect={() => router.push(requestedYear ? { pathname: '/settings', params: { year: requestedYear } } : '/settings')}>
+          <DropdownMenu.ItemTitle>Settings</DropdownMenu.ItemTitle>
+        </DropdownMenu.Item>
         <DropdownMenu.Item
           key="sign-out"
           className="menu-item menu-item-danger"

@@ -119,7 +119,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
           side={
             <>
               {myTeam && <MyRoster data={data} teamId={myTeam.id} />}
-              <RecentPicks data={data} draft={draft} />
+              <RecentPicks data={data} draft={draft} config={config} />
               {autodraft && <Card>{autodraft}</Card>}
               {commissioner && <CommissionerCard data={data} draft={draft} run={run} actions={commissioner} />}
             </>
@@ -389,7 +389,7 @@ function Board({ data, draft, config }: { data: SeasonData; draft: Draft; config
                   key={teamId}
                   type="backgroundElement"
                   style={[styles.boardCell, styles.boardPick, isCurrent && { borderColor: theme.danger, borderWidth: 2 }]}>
-                  <ThemedText type="small" themeColor="textSecondary">{round + 1}.{col + 1}</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">{pickLabel(slot, n)}</ThemedText>
                   <ThemedText type="small" numberOfLines={2}>
                     {action ? (action.type === 'yield' ? 'Yielded' : playerName(data, action.addPlayerId)) : isCurrent ? 'On the clock' : ''}
                   </ThemedText>
@@ -419,23 +419,42 @@ function MyRoster({ data, teamId }: { data: SeasonData; teamId: string }) {
   );
 }
 
+/** "2.6": round 2, sixth pick of the round, for a snake slot (0-based). */
+function pickLabel(slot: number, teams: number): string {
+  return `${Math.floor(slot / teams) + 1}.${(slot % teams) + 1}`;
+}
+
 /** Sidebar: the latest picks in this draft, newest first. */
-function RecentPicks({ data, draft }: { data: SeasonData; draft: Draft }) {
-  const actions = data.actions.filter((a) => a.draft_id === draft.id);
-  const recent = actions.slice(-8).reverse();
+function RecentPicks({ data, draft, config }: { data: SeasonData; draft: Draft; config: DraftConfig }) {
+  const actions = coreActions(data.actions, draft.id);
+  const rows = data.actions.filter((a) => a.draft_id === draft.id);
+  // Replay the draft to find each action's snake slot (redraft yields skip slots).
+  const slots = actions.map((_, i) => nextTurn(config, actions.slice(0, i))?.slot ?? i);
+  const recent = rows.map((a, i) => ({ a, slot: slots[i] })).slice(-8).reverse();
   return (
     <Card title="Recent picks">
       {recent.length === 0 && <ThemedText type="small" themeColor="textSecondary">No picks yet</ThemedText>}
-      {recent.map((a) => (
-        <View key={a.action_number} style={styles.sideRow}>
-          <ThemedText type="small" themeColor="textSecondary" style={styles.pickNumber}>#{a.action_number + 1}</ThemedText>
-          <ThemedText type="small" numberOfLines={1} style={{ flex: 1 }}>
-            <ThemedText type="smallBold">{teamLabel(data, data.teams.find((t) => t.id === a.fantasy_team_id))}</ThemedText>{' '}
-            {a.type === 'yield' ? 'yielded' : playerName(data, a.add_player_id!)}
-            {a.is_auto ? ' (auto)' : ''}
-          </ThemedText>
-        </View>
-      ))}
+      {recent.map(({ a, slot }) => {
+        const team = data.teams.find((t) => t.id === a.fantasy_team_id);
+        const owner = team && ownerName(data, team);
+        return (
+          <View key={a.action_number} style={styles.pickRow}>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.pickNumber}>
+              {pickLabel(slot, draft.pick_order.length)}
+            </ThemedText>
+            <View style={{ flex: 1 }}>
+              <ThemedText type="small" numberOfLines={1}>
+                <ThemedText type="smallBold">{team ? teamName(team) : '—'}</ThemedText>{' '}
+                {a.type === 'yield' ? 'yielded' : playerName(data, a.add_player_id!)}
+                {a.is_auto ? ' (auto)' : ''}
+              </ThemedText>
+              {owner && (
+                <ThemedText type="small" themeColor="textSecondary" style={styles.pickOwner}>{owner}</ThemedText>
+              )}
+            </View>
+          </View>
+        );
+      })}
     </Card>
   );
 }
@@ -745,5 +764,7 @@ const styles = StyleSheet.create({
   dropRow: { borderWidth: 2, borderRadius: Spacing.two, padding: Spacing.two },
   buttonRow: { flexDirection: 'row', gap: Spacing.two },
   sideRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  pickNumber: { minWidth: 28, fontVariant: ['tabular-nums'] },
+  pickRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two },
+  pickNumber: { minWidth: 30, fontVariant: ['tabular-nums'] },
+  pickOwner: { fontSize: 12, lineHeight: 16, fontStyle: 'italic' },
 });

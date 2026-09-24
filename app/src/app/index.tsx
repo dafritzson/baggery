@@ -34,7 +34,7 @@ export default function HomeScreen() {
         <ThemedText>{requestedYear ? `There's no ${requestedYear} season.` : 'No season set up yet.'}</ThemedText>
       )}
       {data && !data.myTeam && <ClaimTeam data={data} onClaimed={refetch} />}
-      {data?.myTeam && !data.myTeam.name && <NameYourTeam data={data} team={data.myTeam} />}
+      {data?.myTeam && !data.myTeam.name && <NameYourTeam year={data.season.year} />}
       {data &&
         (wide ? (
           <Columns
@@ -102,20 +102,18 @@ function ClaimTeam({ data, onClaimed }: { data: SeasonData; onClaimed: () => voi
 }
 
 /** For managers who claimed a spot before teams had names. */
-function NameYourTeam({ data, team }: { data: SeasonData; team: Team }) {
-  const [open, setOpen] = useState(false);
+function NameYourTeam({ year }: { year: number }) {
   return (
     <Card title="Name your team">
       <ThemedText type="small" themeColor="textSecondary">
         Your team is showing a random name until you pick one.
       </ThemedText>
-      <Button label="Name your team" onPress={() => setOpen(true)} />
-      {open && <RenameTeam data={data} team={team} onClose={() => setOpen(false)} />}
+      <Button label="Name your team" onPress={() => router.push({ pathname: '/settings', params: { year } })} />
     </Card>
   );
 }
 
-/** Renaming a team: your own, or any team for the commissioner. */
+/** The commissioner renaming another manager's team (your own is in Settings). */
 function RenameTeam({ data, team, onClose }: { data: SeasonData; team: Team; onClose: () => void }) {
   async function rename(name: string) {
     const { error } = await supabase.rpc('rename_team', { p_team_id: team.id, p_name: name });
@@ -177,7 +175,7 @@ function TeamsCard({ data }: { data: SeasonData }) {
         const roster = rosters.get(team.id) ?? [];
         const owner = ownerName(data, team);
         const mine = team.id === data.myTeam?.id;
-        const canRename = mine || (data.isCommissioner && !!team.user_id);
+        const canRename = data.isCommissioner && !mine && !!team.user_id;
         return (
           <View key={team.id} style={styles.team}>
             <View style={styles.teamHeader}>
