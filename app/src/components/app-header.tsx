@@ -28,9 +28,9 @@ export function AppHeader() {
       <SafeAreaView edges={['top', 'left', 'right']}>
         <View style={styles.row}>
           <HomeButton />
-          <YearPicker />
           <View style={{ flex: 1 }} />
           {appEnv !== 'production' && <EnvBadge />}
+          <YearPicker />
           <AccountButton />
         </View>
       </SafeAreaView>
@@ -92,7 +92,7 @@ function YearPicker() {
           <ThemedText type="smallBold" themeColor="textSecondary">{year} ▾</ThemedText>
         </View>
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content className="menu-content menu-content-narrow" align="start" sideOffset={6} collisionPadding={8}>
+      <DropdownMenu.Content className="menu-content menu-content-narrow" align="end" sideOffset={6} collisionPadding={8}>
         <DropdownMenu.Label className="menu-label menu-label-heading">Season</DropdownMenu.Label>
         {years.map((y) => (
           <DropdownMenu.CheckboxItem
