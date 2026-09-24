@@ -8,7 +8,8 @@ architecture: [docs/PLAN.md](docs/PLAN.md).
 
 - `app/`: Expo app (web now, iOS later). Has its own [CLAUDE.md](app/CLAUDE.md) for Expo specifics.
 - `supabase/migrations/`: Postgres schema. Never edit an applied migration; add a new one.
-- `supabase/functions/`: Edge Functions (Deno).
+- `supabase/functions/`: Edge Functions (Deno). `draft` (all draft room actions, in one locked
+  transaction) and `sync-pool` (builds the draft pool from the MLB Stats API).
 - `supabase/functions/_shared/core/`: pure game logic (draft, scoring), shared by the
   functions and the app (`@core/...`). No dependencies; imports use `.ts` extensions.
 - `tests/`: Vitest unit tests for the core.
@@ -16,12 +17,23 @@ architecture: [docs/PLAN.md](docs/PLAN.md).
 ## Commands (repo root)
 
 ```bash
-npm test              # core unit tests
-npm run typecheck     # core + app
-npx supabase start    # local Supabase (needs Docker)
-npx supabase db reset # rebuild local DB from migrations
-cd app && npx expo start --web
+npm test                        # core unit tests
+npm run typecheck               # core + app
+npx supabase start              # local Supabase (needs Docker)
+npx supabase functions serve    # local Edge Functions (keep running)
+npm run test:int                # resets local DB, runs a full draft end to end
+npx tsx scripts/seed-local.ts   # after `supabase db reset`: 7 test managers + player pool
 ```
+
+Run the app locally against local Supabase (key from `npx supabase status`):
+
+```bash
+cd app && EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321 EXPO_PUBLIC_SUPABASE_KEY=<publishable key> \
+  EXPO_PUBLIC_APP_ENV=local npx expo start --web
+```
+
+Locally the sign-in screen has a dev sign-in: `<manager>@example.com`, password `password123`
+(e.g. `daniel@example.com`, the commissioner).
 
 ## Workflow
 
