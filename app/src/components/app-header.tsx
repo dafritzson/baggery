@@ -1,12 +1,10 @@
 import { Image } from 'expo-image';
 import { router, usePathname } from 'expo-router';
 import { createContext, useState } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
-import { Button } from '@/components/button';
-import { Sheet } from '@/components/sheet';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
@@ -43,37 +41,45 @@ function YearPicker() {
   const theme = useTheme();
   const pathname = usePathname();
   const { data, years, requestedYear } = useSeason();
-  const [open, setOpen] = useState(false);
   const year = data?.season.year ?? requestedYear;
-  const canPick = years.length > 1;
 
   function pick(y: number) {
-    setOpen(false);
+    if (y === year) return;
     // A draft belongs to one season, so switching years from a draft room goes home.
     if (pathname.startsWith('/draft')) router.replace({ pathname: '/', params: { year: y } });
     else router.setParams({ year: y });
   }
 
   if (!year) return null;
+  // With one season there's nothing to pick: plain text, no menu.
+  if (years.length <= 1) {
+    return (
+      <View style={styles.year}>
+        <ThemedText type="smallBold" themeColor="textSecondary">{year}</ThemedText>
+      </View>
+    );
+  }
   return (
-    <>
-      <Pressable
-        disabled={!canPick}
-        onPress={() => setOpen(true)}
-        hitSlop={8}
-        accessibilityRole="button"
-        accessibilityLabel={`Season ${year}${canPick ? ', change season' : ''}`}
-        style={[styles.year, canPick && { backgroundColor: theme.backgroundElement }]}>
-        <ThemedText type="smallBold" themeColor="textSecondary">
-          {year}{canPick ? ' ▾' : ''}
-        </ThemedText>
-      </Pressable>
-      <Sheet visible={open} title="Season" onClose={() => setOpen(false)}>
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger className="menu-trigger menu-trigger-chip" aria-label={`Season ${year}, change season`}>
+        <View style={[styles.year, { backgroundColor: theme.backgroundElement }]}>
+          <ThemedText type="smallBold" themeColor="textSecondary">{year} ▾</ThemedText>
+        </View>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content className="menu-content menu-content-narrow" align="start" sideOffset={6} collisionPadding={8}>
+        <DropdownMenu.Label className="menu-label menu-label-heading">Season</DropdownMenu.Label>
         {years.map((y) => (
-          <Button key={y} label={String(y)} variant={y === year ? 'primary' : 'secondary'} onPress={() => pick(y)} />
+          <DropdownMenu.CheckboxItem
+            key={String(y)}
+            className="menu-item"
+            value={y === year ? 'on' : 'off'}
+            onValueChange={() => pick(y)}>
+            <DropdownMenu.ItemTitle>{String(y)}</DropdownMenu.ItemTitle>
+            <DropdownMenu.ItemIndicator className="menu-check">✓</DropdownMenu.ItemIndicator>
+          </DropdownMenu.CheckboxItem>
         ))}
-      </Sheet>
-    </>
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
   );
 }
 
