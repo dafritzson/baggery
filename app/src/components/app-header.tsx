@@ -1,8 +1,9 @@
 import { Image } from 'expo-image';
 import { router, usePathname } from 'expo-router';
 import { createContext, useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { ThemedText } from '@/components/themed-text';
@@ -17,7 +18,7 @@ import { appEnv } from '@/lib/supabase';
 export const UnderAppHeader = createContext(false);
 
 /**
- * The header on every signed-in screen: app name, season year and account.
+ * The header on every signed-in screen: home (a home plate), season year and account.
  * Section tabs (draft, live scores, research) will go in a row below this one.
  */
 export function AppHeader() {
@@ -26,7 +27,7 @@ export function AppHeader() {
     <ThemedView style={[styles.bar, { borderBottomColor: theme.border }]}>
       <SafeAreaView edges={['top', 'left', 'right']}>
         <View style={styles.row}>
-          <ThemedText type="smallBold" style={styles.title}>Baggery</ThemedText>
+          <HomeButton />
           <YearPicker />
           <View style={{ flex: 1 }} />
           {appEnv !== 'production' && <EnvBadge />}
@@ -34,6 +35,31 @@ export function AppHeader() {
         </View>
       </SafeAreaView>
     </ThemedView>
+  );
+}
+
+/** Home plate icon; goes to the home page for the season being viewed. */
+function HomeButton() {
+  const theme = useTheme();
+  const { requestedYear } = useSeason();
+  return (
+    <Pressable
+      onPress={() => router.navigate(requestedYear ? { pathname: '/', params: { year: requestedYear } } : '/')}
+      hitSlop={8}
+      accessibilityRole="link"
+      accessibilityLabel="Home"
+      style={({ pressed }) => [styles.home, pressed && { opacity: 0.6 }]}>
+      <Svg width={26} height={26} viewBox="0 0 24 24">
+        {/* Flat edge toward the pitcher, point toward the catcher. */}
+        <Path
+          d="M4 4.5h16v8L12 20.5l-8-8z"
+          fill={theme.background}
+          stroke={theme.text}
+          strokeWidth={2}
+          strokeLinejoin="round"
+        />
+      </Svg>
+    </Pressable>
   );
 }
 
@@ -156,7 +182,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     minHeight: 52,
   },
-  title: { fontSize: 18, lineHeight: 24 },
+  home: { marginLeft: -Spacing.one, padding: Spacing.one },
   year: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Spacing.two },
   badge: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Spacing.one },
   badgeText: { fontSize: 12, lineHeight: 16 },
