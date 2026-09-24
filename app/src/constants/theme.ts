@@ -75,3 +75,5 @@ export const Spacing = {
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
 export const MaxContentWidth = 720;
+/** Content width for screens with a desktop layout (Screen width="wide"). */
+export const WideContentWidth = 1200;

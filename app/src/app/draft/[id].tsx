@@ -6,12 +6,14 @@ import { type DraftConfig, type Turn, nextTurn } from '@core/draft.ts';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { Columns } from '@/components/columns';
 import { type PlayerRow, PlayerTable } from '@/components/player-table';
 import { Screen } from '@/components/screen';
 import { Sheet } from '@/components/sheet';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { formatLockTime, playerLine, playerName } from '@/lib/format';
 import { type Draft, type SeasonData, coreActions, currentRosters, useSeason } from '@/lib/season';
@@ -39,6 +41,7 @@ export default function DraftRoomScreen() {
 }
 
 function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; refetch: () => void }) {
+  const wide = useLayout() === 'wide';
   const [tab, setTab] = useState<Tab>('players');
   const [selected, setSelected] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,36 +62,68 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
     return message;
   }
 
+  const clock = <OnTheClock data={data} draft={draft} turn={turn} myTurn={myTurn} actionCount={actions.length} />;
+  const errorText = error && <ThemedText themeColor="danger">{error}</ThemedText>;
+  const commissioner = data.isCommissioner && <CommissionerControls data={data} draft={draft} turn={turn} run={run} />;
+  const yieldButton = myTurn && draft.kind === 'redraft' && (
+    <Button label="I'm done: yield my remaining picks" variant="secondary" onPress={() => run({ action: 'yield' })} />
+  );
+  const autodraft = myTeam && draft.status !== 'complete' && (
+    <View style={styles.switchRow}>
+      <ThemedText type="small" style={{ flex: 1 }}>Autodraft for me (most regular-season TB)</ThemedText>
+      <AutodraftSwitch
+        value={myTeam.autodraft}
+        onChange={(v) => run({ action: 'set-autodraft', teamId: myTeam.id, autodraft: v })}
+      />
+    </View>
+  );
+  const tabs = (
+    <>
+      <Segmented value={tab} onChange={setTab} />
+      {tab === 'players' && <PlayersList data={data} canAct={canAct} onSelect={setSelected} />}
+      {tab === 'board' && <Board data={data} draft={draft} config={config} />}
+      {tab === 'rosters' && <Rosters data={data} draft={draft} />}
+    </>
+  );
+
   return (
     <Screen
+      width="wide"
       header={
         <View style={styles.topBar}>
           <ThemedText type="smallBold">Draft {draft.number}</ThemedText>
         </View>
       }>
-      <OnTheClock data={data} draft={draft} turn={turn} myTurn={myTurn} actionCount={actions.length} />
-      {error && <ThemedText themeColor="danger">{error}</ThemedText>}
-      {data.isCommissioner && <CommissionerControls data={data} draft={draft} turn={turn} run={run} />}
-
-      {myTurn && draft.kind === 'redraft' && (
-        <Button label="I'm done: yield my remaining picks" variant="secondary" onPress={() => run({ action: 'yield' })} />
+      {wide ? (
+        // Desktop: the draft itself in the main column; your team and the controls alongside.
+        <Columns
+          main={
+            <>
+              {clock}
+              {errorText}
+              {yieldButton}
+              {tabs}
+            </>
+          }
+          side={
+            <>
+              {myTeam && <MyRoster data={data} teamId={myTeam.id} />}
+              <RecentPicks data={data} draft={draft} />
+              {autodraft && <Card>{autodraft}</Card>}
+              {commissioner}
+            </>
+          }
+        />
+      ) : (
+        <>
+          {clock}
+          {errorText}
+          {commissioner}
+          {yieldButton}
+          {autodraft}
+          {tabs}
+        </>
       )}
-      {myTeam && draft.status !== 'complete' && (
-        <View style={styles.switchRow}>
-          <ThemedText type="small" style={{ flex: 1 }}>Autodraft for me (most regular-season TB)</ThemedText>
-          <AutodraftSwitch
-            value={myTeam.autodraft}
-            onChange={(v) => run({ action: 'set-autodraft', teamId: myTeam.id, autodraft: v })}
-          />
-        </View>
-      )}
-
-      <Segmented value={tab} onChange={setTab} />
-      {tab === 'players' && (
-        <PlayersList data={data} canAct={canAct} onSelect={setSelected} />
-      )}
-      {tab === 'board' && <Board data={data} draft={draft} config={config} />}
-      {tab === 'rosters' && <Rosters data={data} draft={draft} />}
 
       <PickSheet
         data={data}
@@ -321,6 +356,43 @@ function Board({ data, draft, config }: { data: SeasonData; draft: Draft; config
   );
 }
 
+/** Sidebar: your current players. */
+function MyRoster({ data, teamId }: { data: SeasonData; teamId: string }) {
+  const roster = currentRosters(data).get(teamId) ?? [];
+  return (
+    <Card title={`My roster · ${roster.length}/4`}>
+      {roster.length === 0 && <ThemedText type="small" themeColor="textSecondary">No players yet</ThemedText>}
+      {roster.map((id) => (
+        <View key={id} style={styles.sideRow}>
+          <ThemedText type="small" numberOfLines={1} style={{ flex: 1 }}>{playerLine(data, id)}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">{data.poolByPlayer.get(id)?.regular_season_tb ?? ''}</ThemedText>
+        </View>
+      ))}
+    </Card>
+  );
+}
+
+/** Sidebar: the latest picks in this draft, newest first. */
+function RecentPicks({ data, draft }: { data: SeasonData; draft: Draft }) {
+  const actions = data.actions.filter((a) => a.draft_id === draft.id);
+  const recent = actions.slice(-8).reverse();
+  return (
+    <Card title="Recent picks">
+      {recent.length === 0 && <ThemedText type="small" themeColor="textSecondary">No picks yet</ThemedText>}
+      {recent.map((a) => (
+        <View key={a.action_number} style={styles.sideRow}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.pickNumber}>#{a.action_number + 1}</ThemedText>
+          <ThemedText type="small" numberOfLines={1} style={{ flex: 1 }}>
+            <ThemedText type="smallBold">{data.teams.find((t) => t.id === a.fantasy_team_id)?.manager_name}</ThemedText>{' '}
+            {a.type === 'yield' ? 'yielded' : playerName(data, a.add_player_id!)}
+            {a.is_auto ? ' (auto)' : ''}
+          </ThemedText>
+        </View>
+      ))}
+    </Card>
+  );
+}
+
 function Rosters({ data, draft }: { data: SeasonData; draft: Draft }) {
   const rosters = currentRosters(data);
   const order = draft.pick_order.length ? draft.pick_order : data.teams.map((t) => t.id);
@@ -505,4 +577,6 @@ const styles = StyleSheet.create({
   boardPick: { minHeight: 64, borderRadius: Spacing.two, padding: Spacing.two, borderWidth: 2, borderColor: 'transparent' },
   dropRow: { borderWidth: 2, borderRadius: Spacing.two, padding: Spacing.two },
   buttonRow: { flexDirection: 'row', gap: Spacing.two },
+  sideRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  pickNumber: { minWidth: 28, fontVariant: ['tabular-nums'] },
 });

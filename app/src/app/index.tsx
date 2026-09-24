@@ -4,10 +4,12 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { Columns } from '@/components/columns';
 import { Screen } from '@/components/screen';
 import { Sheet } from '@/components/sheet';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { useLayout } from '@/hooks/use-layout';
 import { formatLockTime, playerLine } from '@/lib/format';
 import { type Draft, type SeasonData, type Team, currentRosters, useSeason } from '@/lib/season';
 import { callFunction, supabase } from '@/lib/supabase';
@@ -21,21 +23,34 @@ const DRAFT_NAMES: Record<number, string> = {
 
 export default function HomeScreen() {
   const { data, loading, refetch, requestedYear } = useSeason();
+  const wide = useLayout() === 'wide';
 
   return (
-    <Screen onRefresh={refetch} refreshing={false}>
+    <Screen width="wide" onRefresh={refetch} refreshing={false}>
       {loading && <ThemedText themeColor="textSecondary">Loading…</ThemedText>}
       {!loading && !data && (
         <ThemedText>{requestedYear ? `There's no ${requestedYear} season.` : 'No season set up yet.'}</ThemedText>
       )}
-      {data && (
-        <>
-          {!data.myTeam && <ClaimTeam data={data} onClaimed={refetch} />}
-          <DraftsCard data={data} />
-          <TeamsCard data={data} />
-          {data.isCommissioner && <CommissionerCard data={data} />}
-        </>
-      )}
+      {data && !data.myTeam && <ClaimTeam data={data} onClaimed={refetch} />}
+      {data &&
+        (wide ? (
+          <Columns
+            main={
+              <>
+                <DraftsCard data={data} />
+                {data.isCommissioner && <CommissionerCard data={data} />}
+              </>
+            }
+            side={<TeamsCard data={data} />}
+            sideWidth={380}
+          />
+        ) : (
+          <>
+            <DraftsCard data={data} />
+            <TeamsCard data={data} />
+            {data.isCommissioner && <CommissionerCard data={data} />}
+          </>
+        ))}
     </Screen>
   );
 }

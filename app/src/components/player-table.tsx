@@ -47,7 +47,9 @@ const COLUMNS: Column[] = [
   { key: 'rdtb', label: 'RDTB', width: 52, value: () => null, pending: true },
 ];
 
+/** Name column width on narrow screens; wider tables give the extra room to names. */
 const NAME_WIDTH = 156;
+const STATS_WIDTH = COLUMNS.reduce((sum, c) => sum + c.width, 0) + Spacing.two;
 const ROW_HEIGHT = 36;
 
 /** Compares with nulls last, whichever way the column is sorted. */
@@ -70,6 +72,8 @@ export function PlayerTable({
   onSelect: (playerId: number) => void;
 }) {
   const theme = useTheme();
+  const [tableWidth, setTableWidth] = useState(0);
+  const nameWidth = Math.max(NAME_WIDTH, tableWidth - STATS_WIDTH);
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'tb', desc: true });
   const [pressedId, setPressedId] = useState<number | null>(null);
 
@@ -104,8 +108,11 @@ export function PlayerTable({
   });
 
   return (
-    <ThemedView type="backgroundElement" style={styles.table}>
-      <View style={[styles.nameColumn, { borderRightColor: theme.border }]}>
+    <ThemedView
+      type="backgroundElement"
+      style={styles.table}
+      onLayout={(e) => setTableWidth(e.nativeEvent.layout.width)}>
+      <View style={[styles.nameColumn, { width: nameWidth, borderRightColor: theme.border }]}>
         <Pressable onPress={() => sortBy('name')} style={[styles.header, styles.nameCell, { borderBottomColor: theme.border }]}>
           <ThemedText type="smallBold" themeColor={sort.key === 'name' ? 'text' : 'textSecondary'} style={styles.headerText}>
             Name{arrow('name')}
@@ -158,7 +165,7 @@ export function PlayerTable({
 
 const styles = StyleSheet.create({
   table: { flexDirection: 'row', borderRadius: Spacing.three, overflow: 'hidden' },
-  nameColumn: { width: NAME_WIDTH, borderRightWidth: StyleSheet.hairlineWidth },
+  nameColumn: { borderRightWidth: StyleSheet.hairlineWidth },
   stats: { flexGrow: 1 },
   header: { height: ROW_HEIGHT, borderBottomWidth: StyleSheet.hairlineWidth },
   row: { height: ROW_HEIGHT },
