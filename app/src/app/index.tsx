@@ -35,7 +35,6 @@ export default function HomeScreen() {
         <ThemedText>{requestedYear ? `There's no ${requestedYear} season.` : 'No season set up yet.'}</ThemedText>
       )}
       {data && !data.myTeam && <ClaimTeam data={data} onClaimed={refetch} />}
-      {data?.myTeam && !data.myTeam.name && <NameYourTeam year={data.season.year} />}
       {data &&
         (wide ? (
           <Columns
@@ -98,18 +97,6 @@ function ClaimTeam({ data, onClaimed }: { data: SeasonData; onClaimed: () => voi
           onClose={() => setChoice(null)}
         />
       )}
-    </Card>
-  );
-}
-
-/** For managers who claimed a spot before teams had names. */
-function NameYourTeam({ year }: { year: number }) {
-  return (
-    <Card title="Name your team">
-      <ThemedText type="small" themeColor="textSecondary">
-        Your team is showing a random name until you pick one.
-      </ThemedText>
-      <Button label="Name your team" onPress={() => router.push({ pathname: '/settings', params: { year } })} />
     </Card>
   );
 }
