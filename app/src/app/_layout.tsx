@@ -2,7 +2,9 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { useColorScheme } from 'react-native';
 
 import { AppHeader, UnderAppHeader } from '@/components/app-header';
+import { BottomTabBar } from '@/components/section-nav';
 import { ThemedView } from '@/components/themed-view';
+import { useLayout } from '@/hooks/use-layout';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { SeasonProvider } from '@/lib/season';
 
@@ -19,6 +21,7 @@ export default function RootLayout() {
 
 function RootStack() {
   const { session, loading } = useAuth();
+  const layout = useLayout();
   if (loading) return <ThemedView style={{ flex: 1 }} />;
   const stack = (
     <Stack screenOptions={{ headerShown: false }}>
@@ -39,6 +42,7 @@ function RootStack() {
       <ThemedView style={{ flex: 1 }}>
         <AppHeader />
         <UnderAppHeader value>{stack}</UnderAppHeader>
+        {layout === 'compact' && <BottomTabBar />}
       </ThemedView>
     </SeasonProvider>
   );

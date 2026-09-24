@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { type ReactNode, useMemo, useState } from 'react';
+import { Platform, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { type DraftConfig, type Turn, nextTurn } from '@core/draft.ts';
 
@@ -62,9 +63,9 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
     return message;
   }
 
-  const clock = <OnTheClock data={data} draft={draft} turn={turn} myTurn={myTurn} actionCount={actions.length} />;
+  const status = clockStatus(data, draft, turn, myTurn, actions.length);
   const errorText = error && <ThemedText themeColor="danger">{error}</ThemedText>;
-  const commissioner = data.isCommissioner && <CommissionerControls data={data} draft={draft} turn={turn} run={run} />;
+  const commissioner = useCommissionerActions(data, draft, turn, run);
   const yieldButton = myTurn && draft.kind === 'redraft' && (
     <Button label="I'm done: yield my remaining picks" variant="secondary" onPress={() => run({ action: 'yield' })} />
   );
@@ -90,16 +91,25 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
     <Screen
       width="wide"
       header={
-        <View style={styles.topBar}>
-          <ThemedText type="smallBold">Draft {draft.number}</ThemedText>
-        </View>
+        wide ? (
+          <View style={styles.topBar}>
+            <ThemedText type="smallBold">Draft {draft.number}</ThemedText>
+          </View>
+        ) : (
+          <ClockBar
+            status={status}
+            myTurn={myTurn}
+            draftNumber={draft.number}
+            menu={<DraftMenu data={data} draft={draft} run={run} commissioner={commissioner} />}
+          />
+        )
       }>
       {wide ? (
         // Desktop: the draft itself in the main column; your team and the controls alongside.
         <Columns
           main={
             <>
-              {clock}
+              <OnTheClock status={status} myTurn={myTurn} />
               {errorText}
               {yieldButton}
               {tabs}
@@ -110,20 +120,22 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
               {myTeam && <MyRoster data={data} teamId={myTeam.id} />}
               <RecentPicks data={data} draft={draft} />
               {autodraft && <Card>{autodraft}</Card>}
-              {commissioner}
+              {commissioner && <CommissionerCard data={data} draft={draft} run={run} actions={commissioner} />}
             </>
           }
         />
       ) : (
+        // Phone: the clock bar is pinned above; autodraft and commissioner tools are in its ⋯ menu.
         <>
-          {clock}
           {errorText}
-          {commissioner}
+          {commissioner?.canStart && (
+            <Button label="Start the draft (randomizes the order)" onPress={() => commissioner.confirm('start')} />
+          )}
           {yieldButton}
-          {autodraft}
           {tabs}
         </>
       )}
+      {commissioner?.confirmSheet}
 
       <PickSheet
         data={data}
@@ -142,51 +154,82 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
   );
 }
 
-function OnTheClock({
-  data,
-  draft,
-  turn,
-  myTurn,
-  actionCount,
-}: {
-  data: SeasonData;
-  draft: Draft;
-  turn: Turn | null;
-  myTurn: boolean;
-  actionCount: number;
-}) {
-  const theme = useTheme();
+interface ClockStatus {
+  headline: string;
+  detail: string | null;
+  last: string | null;
+}
+
+/** What the clock card (desktop) and the clock bar (phone) say. */
+function clockStatus(data: SeasonData, draft: Draft, turn: Turn | null, myTurn: boolean, actionCount: number): ClockStatus {
   const team = turn ? data.teams.find((t) => t.id === turn.teamId) : undefined;
-  const last = data.actions.filter((a) => a.draft_id === draft.id).at(-1);
-  const lastTeam = last && data.teams.find((t) => t.id === last.fantasy_team_id);
+  const lastAction = data.actions.filter((a) => a.draft_id === draft.id).at(-1);
+  const lastTeam = lastAction && data.teams.find((t) => t.id === lastAction.fantasy_team_id);
+  const last =
+    lastAction && lastTeam
+      ? `${lastTeam.manager_name} ${
+          lastAction.type === 'yield'
+            ? 'yielded'
+            : `took ${playerLine(data, lastAction.add_player_id!)}${lastAction.drop_player_id ? `, dropped ${playerName(data, lastAction.drop_player_id)}` : ''}`
+        }${lastAction.is_auto ? ' (auto)' : ''}`
+      : null;
 
-  let headline: string;
-  let detail: string | null = null;
   if (draft.status === 'scheduled') {
-    headline = 'Waiting for the commissioner to start the draft';
-    detail = draft.locks_at ? `Picks lock ${formatLockTime(draft.locks_at)}` : null;
-  } else if (draft.status === 'complete' || !turn) {
-    headline = 'Draft complete';
-  } else {
-    headline = myTurn ? "You're on the clock!" : `${team?.manager_name} is on the clock`;
-    detail = `Round ${turn.round} · Pick ${(turn.slot % draft.pick_order.length) + 1} · #${actionCount + 1} overall`;
+    return {
+      headline: 'Waiting for the commissioner to start the draft',
+      detail: draft.locks_at ? `Picks lock ${formatLockTime(draft.locks_at)}` : null,
+      last,
+    };
   }
+  if (draft.status === 'complete' || !turn) return { headline: 'Draft complete', detail: null, last };
+  return {
+    headline: myTurn ? "You're on the clock!" : `${team?.manager_name} is on the clock`,
+    detail: `Round ${turn.round} · Pick ${(turn.slot % draft.pick_order.length) + 1} · #${actionCount + 1} overall`,
+    last,
+  };
+}
 
+/** Desktop: the big clock card at the top of the main column. */
+function OnTheClock({ status, myTurn }: { status: ClockStatus; myTurn: boolean }) {
+  const theme = useTheme();
   return (
     <ThemedView
       type={myTurn ? undefined : 'backgroundElement'}
       style={[styles.clock, myTurn && { backgroundColor: theme.highlight, borderColor: theme.danger, borderWidth: 2 }]}>
-      <ThemedText type="subtitle" style={styles.clockHeadline}>{headline}</ThemedText>
-      {detail && <ThemedText type="small" themeColor="textSecondary">{detail}</ThemedText>}
-      {last && lastTeam && (
-        <ThemedText type="small">
-          Last: {lastTeam.manager_name}{' '}
-          {last.type === 'yield'
-            ? 'yielded'
-            : `took ${playerLine(data, last.add_player_id!)}${last.drop_player_id ? `, dropped ${playerName(data, last.drop_player_id)}` : ''}`}
-          {last.is_auto ? ' (auto)' : ''}
+      <ThemedText type="subtitle" style={styles.clockHeadline}>{status.headline}</ThemedText>
+      {status.detail && <ThemedText type="small" themeColor="textSecondary">{status.detail}</ThemedText>}
+      {status.last && <ThemedText type="small">Last: {status.last}</ThemedText>}
+    </ThemedView>
+  );
+}
+
+/** Phone: a slim clock bar pinned under the app header, with the draft options menu. */
+function ClockBar({
+  status,
+  myTurn,
+  draftNumber,
+  menu,
+}: {
+  status: ClockStatus;
+  myTurn: boolean;
+  draftNumber: number;
+  menu: ReactNode;
+}) {
+  const theme = useTheme();
+  const detail = [status.detail, status.last && `Last: ${status.last}`].filter(Boolean).join(' · ');
+  return (
+    <ThemedView
+      type={myTurn ? undefined : 'backgroundElement'}
+      style={[styles.clockBar, myTurn && { backgroundColor: theme.highlight, borderColor: theme.danger }]}>
+      <View style={{ flex: 1 }}>
+        <ThemedText type="smallBold" numberOfLines={1}>
+          Draft {draftNumber} · {status.headline}
         </ThemedText>
-      )}
+        {detail !== '' && (
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>{detail}</ThemedText>
+        )}
+      </View>
+      {menu}
     </ThemedView>
   );
 }
@@ -474,22 +517,29 @@ function PickSheet({
   );
 }
 
-function CommissionerControls({
-  data,
-  draft,
-  turn,
-  run,
-}: {
-  data: SeasonData;
-  draft: Draft;
-  turn: Turn | null;
-  run: (body: object) => Promise<string | null>;
-}) {
+interface CommissionerActions {
+  canStart: boolean;
+  /** Manager on the clock, when autopick is available. */
+  autopickFor: string | null;
+  canUndo: boolean;
+  busy: boolean;
+  confirm: (action: 'start' | 'undo') => void;
+  autopick: () => void;
+  /** Confirmation for start and undo; render it once. */
+  confirmSheet: ReactNode;
+}
+
+/** Commissioner actions for this draft, or null for everyone else. Shared by the card and the phone menu. */
+function useCommissionerActions(
+  data: SeasonData,
+  draft: Draft,
+  turn: Turn | null,
+  run: (body: object) => Promise<string | null>,
+): CommissionerActions | null {
   const [confirming, setConfirming] = useState<'start' | 'undo' | null>(null);
   const [busy, setBusy] = useState(false);
-  const [showAutodraft, setShowAutodraft] = useState(false);
-  const onClock = turn && data.teams.find((t) => t.id === turn.teamId);
-  const hasActions = data.actions.some((a) => a.draft_id === draft.id);
+  if (!data.isCommissioner) return null;
+  const onClock = draft.status === 'live' && turn ? data.teams.find((t) => t.id === turn.teamId) : undefined;
 
   async function act(body: object) {
     setBusy(true);
@@ -498,49 +548,14 @@ function CommissionerControls({
     setConfirming(null);
   }
 
-  return (
-    <Card title="Commissioner">
-      {draft.status === 'scheduled' && (
-        <Button label="Start the draft (randomizes the order)" onPress={() => setConfirming('start')} />
-      )}
-      <View style={styles.buttonRow}>
-        {draft.status === 'live' && onClock && (
-          <View style={{ flex: 1 }}>
-            <Button
-              label="Autopick"
-              variant="secondary"
-              compact
-              loading={busy}
-              onPress={() => act({ action: 'autopick' })}
-            />
-          </View>
-        )}
-        {hasActions && (
-          <View style={{ flex: 1 }}>
-            <Button label="Undo last pick" variant="secondary" compact onPress={() => setConfirming('undo')} />
-          </View>
-        )}
-      </View>
-      {draft.status !== 'complete' && (
-        <Pressable onPress={() => setShowAutodraft(!showAutodraft)} hitSlop={8}>
-          <ThemedText type="small" themeColor="textSecondary">
-            {showAutodraft ? '▾' : '▸'} Autodraft settings ({data.teams.filter((t) => t.autodraft).length} on)
-          </ThemedText>
-        </Pressable>
-      )}
-      {draft.status !== 'complete' && showAutodraft && (
-        <>
-          {data.teams.map((t) => (
-            <View key={t.id} style={styles.switchRow}>
-              <ThemedText type="small" style={{ flex: 1 }}>{t.manager_name}</ThemedText>
-              <AutodraftSwitch
-                value={t.autodraft}
-                onChange={(v) => run({ action: 'set-autodraft', teamId: t.id, autodraft: v })}
-              />
-            </View>
-          ))}
-        </>
-      )}
+  return {
+    canStart: draft.status === 'scheduled',
+    autopickFor: onClock?.manager_name ?? null,
+    canUndo: data.actions.some((a) => a.draft_id === draft.id),
+    busy,
+    confirm: setConfirming,
+    autopick: () => act({ action: 'autopick' }),
+    confirmSheet: (
       <Sheet
         visible={confirming !== null}
         title={confirming === 'start' ? 'Start the draft?' : 'Undo the last pick?'}
@@ -558,7 +573,144 @@ function CommissionerControls({
         />
         <Button label="Cancel" variant="secondary" onPress={() => setConfirming(null)} />
       </Sheet>
+    ),
+  };
+}
+
+/** Every manager's autodraft switch (commissioner). */
+function AutodraftSettings({ data, run }: { data: SeasonData; run: (body: object) => Promise<string | null> }) {
+  return (
+    <>
+      {data.teams.map((t) => (
+        <View key={t.id} style={styles.switchRow}>
+          <ThemedText type="small" style={{ flex: 1 }}>{t.manager_name}</ThemedText>
+          <AutodraftSwitch
+            value={t.autodraft}
+            onChange={(v) => run({ action: 'set-autodraft', teamId: t.id, autodraft: v })}
+          />
+        </View>
+      ))}
+    </>
+  );
+}
+
+/** Desktop sidebar: commissioner tools. */
+function CommissionerCard({
+  data,
+  draft,
+  run,
+  actions,
+}: {
+  data: SeasonData;
+  draft: Draft;
+  run: (body: object) => Promise<string | null>;
+  actions: CommissionerActions;
+}) {
+  const [showAutodraft, setShowAutodraft] = useState(false);
+  return (
+    <Card title="Commissioner">
+      {actions.canStart && (
+        <Button label="Start the draft (randomizes the order)" onPress={() => actions.confirm('start')} />
+      )}
+      <View style={styles.buttonRow}>
+        {actions.autopickFor && (
+          <View style={{ flex: 1 }}>
+            <Button label="Autopick" variant="secondary" compact loading={actions.busy} onPress={actions.autopick} />
+          </View>
+        )}
+        {actions.canUndo && (
+          <View style={{ flex: 1 }}>
+            <Button label="Undo last pick" variant="secondary" compact onPress={() => actions.confirm('undo')} />
+          </View>
+        )}
+      </View>
+      {draft.status !== 'complete' && (
+        <Pressable onPress={() => setShowAutodraft(!showAutodraft)} hitSlop={8}>
+          <ThemedText type="small" themeColor="textSecondary">
+            {showAutodraft ? '▾' : '▸'} Autodraft settings ({data.teams.filter((t) => t.autodraft).length} on)
+          </ThemedText>
+        </Pressable>
+      )}
+      {draft.status !== 'complete' && showAutodraft && <AutodraftSettings data={data} run={run} />}
     </Card>
+  );
+}
+
+/** Phone: the ⋯ menu in the clock bar, with your autodraft switch and the commissioner tools. */
+function DraftMenu({
+  data,
+  draft,
+  run,
+  commissioner,
+}: {
+  data: SeasonData;
+  draft: Draft;
+  run: (body: object) => Promise<string | null>;
+  commissioner: CommissionerActions | null;
+}) {
+  const theme = useTheme();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const myTeam = data.myTeam;
+  const open = draft.status !== 'complete';
+  const showAutodraft = !!myTeam && open;
+  if (!showAutodraft && !commissioner) return null;
+
+  return (
+    <>
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger className="menu-trigger menu-trigger-chip" aria-label="Draft options">
+          <View style={[styles.moreButton, { backgroundColor: theme.backgroundSelected }]}>
+            <ThemedText type="smallBold">⋯</ThemedText>
+          </View>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content className="menu-content" align="end" sideOffset={6} collisionPadding={8}>
+          {showAutodraft && (
+            <DropdownMenu.CheckboxItem
+              key="autodraft"
+              className="menu-item"
+              value={myTeam.autodraft ? 'on' : 'off'}
+              onValueChange={(next) => run({ action: 'set-autodraft', teamId: myTeam.id, autodraft: next === 'on' })}>
+              <DropdownMenu.ItemTitle>Autodraft for me</DropdownMenu.ItemTitle>
+              <DropdownMenu.ItemIndicator className="menu-check">✓</DropdownMenu.ItemIndicator>
+            </DropdownMenu.CheckboxItem>
+          )}
+          {showAutodraft && commissioner && <DropdownMenu.Separator className="menu-separator" />}
+          {commissioner && (
+            <DropdownMenu.Group key="commissioner">
+              <DropdownMenu.Label className="menu-label menu-label-heading">Commissioner</DropdownMenu.Label>
+              {commissioner.canStart && (
+                <DropdownMenu.Item key="start" className="menu-item" onSelect={() => commissioner.confirm('start')}>
+                  <DropdownMenu.ItemTitle>Start the draft…</DropdownMenu.ItemTitle>
+                </DropdownMenu.Item>
+              )}
+              {commissioner.autopickFor && (
+                <DropdownMenu.Item key="autopick" className="menu-item" onSelect={commissioner.autopick}>
+                  <DropdownMenu.ItemTitle>{`Autopick for ${commissioner.autopickFor}`}</DropdownMenu.ItemTitle>
+                </DropdownMenu.Item>
+              )}
+              {commissioner.canUndo && (
+                <DropdownMenu.Item
+                  key="undo"
+                  className="menu-item menu-item-danger"
+                  destructive={Platform.OS !== 'web' || undefined}
+                  onSelect={() => commissioner.confirm('undo')}>
+                  <DropdownMenu.ItemTitle>Undo last pick…</DropdownMenu.ItemTitle>
+                </DropdownMenu.Item>
+              )}
+              {open && (
+                <DropdownMenu.Item key="settings" className="menu-item" onSelect={() => setSettingsOpen(true)}>
+                  <DropdownMenu.ItemTitle>Autodraft settings…</DropdownMenu.ItemTitle>
+                </DropdownMenu.Item>
+              )}
+            </DropdownMenu.Group>
+          )}
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+      <Sheet visible={settingsOpen} title="Autodraft settings" onClose={() => setSettingsOpen(false)}>
+        <AutodraftSettings data={data} run={run} />
+        <Button label="Done" variant="secondary" onPress={() => setSettingsOpen(false)} />
+      </Sheet>
+    </>
   );
 }
 
@@ -566,6 +718,17 @@ const styles = StyleSheet.create({
   topBar: { flexDirection: 'row', alignItems: 'center', minHeight: 32 },
   clock: { padding: Spacing.three, borderRadius: Spacing.three, gap: Spacing.one },
   clockHeadline: { fontSize: 24, lineHeight: 30 },
+  clockBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Spacing.three,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  moreButton: { width: 36, height: 32, borderRadius: Spacing.two, alignItems: 'center', justifyContent: 'center' },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 40 },
   segmented: { flexDirection: 'row', padding: Spacing.half, borderRadius: Spacing.three },
   segment: { flex: 1, alignItems: 'center', paddingVertical: Spacing.two, borderRadius: Spacing.two + 2 },
