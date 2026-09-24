@@ -15,11 +15,12 @@ interface Section {
   matches: (pathname: string) => boolean;
 }
 
-/**
- * The app's top-level sections. Shown as tabs in the header on desktops and as a bottom tab
- * bar on phones, once there's more than one (Live and Research are planned).
- */
-const SECTIONS: Section[] = [{ label: 'Draft', href: '/', matches: () => true }];
+/** The app's top-level sections: tabs in the header on desktops, a bottom tab bar on phones. */
+const SECTIONS: Section[] = [
+  { label: 'Draft', href: '/', matches: (p) => p === '/' || p.startsWith('/draft') },
+  { label: 'Live', href: '/live', matches: (p) => p.startsWith('/live') },
+  { label: 'Research', href: '/research', matches: (p) => p.startsWith('/research') },
+];
 
 function useSections() {
   const pathname = usePathname();
