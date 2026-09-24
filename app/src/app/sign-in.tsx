@@ -1,33 +1,33 @@
 import { Link } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/button';
+import { GoogleSignInButton } from '@/components/google-sign-in-button';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { signInWithGoogle } from '@/lib/auth';
+import { signInWithGoogleRedirect } from '@/lib/auth';
 import { appEnv, supabase } from '@/lib/supabase';
 
 export default function SignInScreen() {
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  async function onSignIn() {
-    setLoading(true);
-    setError(await signInWithGoogle());
-    setLoading(false);
-  }
-
+  const [fallbackError, setFallbackError] = useState<string | null>(null);
   return (
     <Screen>
       <View style={styles.hero}>
         <ThemedText type="title">Baggery</ThemedText>
         <ThemedText themeColor="textSecondary">Postseason fantasy baseball. Get some bags.</ThemedText>
       </View>
-      <Button label="Sign in with Google" onPress={onSignIn} loading={loading} />
-      {error && <ThemedText themeColor="danger">{error}</ThemedText>}
+      <GoogleSignInButton />
+      {Platform.OS === 'web' && (
+        <Pressable onPress={async () => setFallbackError(await signInWithGoogleRedirect())} hitSlop={8}>
+          <ThemedText type="small" themeColor="textSecondary">
+            Button not working? Try the other Google sign-in.
+          </ThemedText>
+        </Pressable>
+      )}
+      {fallbackError && <ThemedText themeColor="danger">{fallbackError}</ThemedText>}
       {appEnv === 'local' && <DevSignIn />}
       <Link href="/privacy">
         <ThemedText type="small" themeColor="textSecondary">Privacy</ThemedText>
