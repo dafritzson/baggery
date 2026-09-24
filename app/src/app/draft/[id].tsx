@@ -424,25 +424,24 @@ function pickLabel(slot: number, teams: number): string {
   return `${Math.floor(slot / teams) + 1}.${(slot % teams) + 1}`;
 }
 
-/** Sidebar: the latest picks in this draft as cards, newest first. */
+/** Sidebar: every pick in this draft, newest first, in a panel that scrolls back to the first pick. */
 function RecentPicks({ data, draft, config }: { data: SeasonData; draft: Draft; config: DraftConfig }) {
+  const theme = useTheme();
   const actions = coreActions(data.actions, draft.id);
   const rows = data.actions.filter((a) => a.draft_id === draft.id);
   // Replay the draft to find each action's snake slot (redraft yields skip slots).
   const slots = actions.map((_, i) => nextTurn(config, actions.slice(0, i))?.slot ?? i);
-  const recent = rows.map((a, i) => ({ a, slot: slots[i] })).slice(-5).reverse();
+  const picks = rows.map((a, i) => ({ a, slot: slots[i] })).reverse();
   return (
-    <View style={{ gap: Spacing.two }}>
-      <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionTitle}>Recent picks</ThemedText>
-      {recent.length === 0 && (
-        <Card>
-          <ThemedText type="small" themeColor="textSecondary">No picks yet</ThemedText>
-        </Card>
-      )}
-      {recent.length > 0 && (
-        // One block of square cards, touching, with a hairline between them.
-        <View>
-          {recent.map(({ a, slot }, i) => (
+    <ThemedView type="backgroundElement" style={styles.picksPanel}>
+      <ThemedText type="smallBold" themeColor="textSecondary" style={styles.picksTitle}>
+        Picks{picks.length ? ` · ${picks.length}` : ''}
+      </ThemedText>
+      {picks.length === 0 ? (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.picksEmpty}>No picks yet</ThemedText>
+      ) : (
+        <ScrollView style={[styles.picksList, { borderTopColor: theme.border }]} nestedScrollEnabled>
+          {picks.map(({ a, slot }, i) => (
             <PickCard
               key={a.action_number}
               data={data}
@@ -451,9 +450,9 @@ function RecentPicks({ data, draft, config }: { data: SeasonData; draft: Draft; 
               first={i === 0}
             />
           ))}
-        </View>
+        </ScrollView>
       )}
-    </View>
+    </ThemedView>
   );
 }
 
@@ -480,9 +479,7 @@ function PickCard({
     .join(' · ');
 
   return (
-    <ThemedView
-      type="backgroundElement"
-      style={[styles.pickCard, !first && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border }]}>
+    <ThemedView style={[styles.pickCard, !first && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border }]}>
       <View style={styles.pickCardTop}>
         <ThemedText type="smallBold" numberOfLines={1} style={styles.pickPlayer}>
           {playerId !== null ? playerName(data, playerId) : 'Yielded'}
@@ -494,7 +491,7 @@ function PickCard({
           </ThemedText>
         </View>
       </View>
-      {details !== '' && <ThemedText type="small" themeColor="textSecondary">{details}</ThemedText>}
+      {details !== '' && <ThemedText type="small" themeColor="textSecondary" style={styles.pickLine}>{details}</ThemedText>}
       <ThemedText type="small" numberOfLines={1} style={styles.pickTeam}>
         {team ? teamName(team) : '—'}
         {owner && <ThemedText type="small" themeColor="textSecondary" style={styles.pickOwner}> · {owner}</ThemedText>}
@@ -808,12 +805,17 @@ const styles = StyleSheet.create({
   dropRow: { borderWidth: 2, borderRadius: Spacing.two, padding: Spacing.two },
   buttonRow: { flexDirection: 'row', gap: Spacing.two },
   sideRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  sectionTitle: { textTransform: 'uppercase', letterSpacing: 0.5, paddingHorizontal: Spacing.one },
-  pickCard: { paddingVertical: Spacing.two + 2, paddingHorizontal: Spacing.three, gap: Spacing.half },
+  picksPanel: { borderRadius: Spacing.three, overflow: 'hidden' },
+  picksTitle: { textTransform: 'uppercase', letterSpacing: 0.5, padding: Spacing.three, paddingBottom: Spacing.two },
+  picksEmpty: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.three },
+  // About 6 picks tall; scroll for the rest.
+  picksList: { maxHeight: 340, borderTopWidth: StyleSheet.hairlineWidth },
+  pickCard: { paddingVertical: Spacing.two, paddingHorizontal: Spacing.three },
   pickCardTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  pickPlayer: { flex: 1, fontSize: 16, lineHeight: 22 },
-  pickBadge: { paddingHorizontal: Spacing.two, paddingVertical: 1 },
-  pickBadgeText: { fontSize: 12, lineHeight: 18, fontVariant: ['tabular-nums'] },
-  pickTeam: { marginTop: Spacing.half },
-  pickOwner: { fontStyle: 'italic' },
+  pickPlayer: { flex: 1, fontSize: 15, lineHeight: 19 },
+  pickLine: { fontSize: 13, lineHeight: 17 },
+  pickBadge: { paddingHorizontal: Spacing.one + 2 },
+  pickBadgeText: { fontSize: 11, lineHeight: 16, fontVariant: ['tabular-nums'] },
+  pickTeam: { fontSize: 13, lineHeight: 17 },
+  pickOwner: { fontSize: 13, lineHeight: 17, fontStyle: 'italic' },
 });
