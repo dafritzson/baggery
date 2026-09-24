@@ -119,6 +119,11 @@ describe('season setup', () => {
     expect((await daniel.rpc('rename_team', { p_team_id: teamIdByManager.get('Kyle'), p_name: 'Kyle Bags' })).error).toBeNull();
   });
 
+  it('never leaves a claimed team without a stored name', async () => {
+    const { error } = await admin.from('fantasy_teams').update({ name: null }).eq('id', teamIdByManager.get('Kyle'));
+    expect(error?.message).toMatch(/fantasy_teams_claimed_named/);
+  });
+
   it('only lets the commissioner sync the pool', async () => {
     expect((await call('Kyle', 'sync-pool', { seasonId: SEASON_ID })).error).toMatch(/commissioner/);
     const result = await call('Daniel', 'sync-pool', { seasonId: SEASON_ID, teamIds: TEAM_IDS });

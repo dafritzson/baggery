@@ -1,7 +1,8 @@
 import type { SeasonData, Team } from '@/lib/season';
 import { randomTeamName } from '@/lib/team-name-list';
 
-// Names for unclaimed, unnamed spots: random on each page load, but stable within it.
+// Names for unclaimed spots (claimed teams always have a stored name): random on each page
+// load, but stable within it.
 const unclaimedNames = new Map<string, string>();
 
 /** A random name (see team-name-list) that isn't in `avoid` (lowercase), if one turns up. */
@@ -17,7 +18,7 @@ export function suggestTeamName(data: SeasonData): string {
 }
 
 /**
- * The team's name, or a random name for a spot nobody has named. Naming fields
+ * The team's name, or a random name for an unclaimed spot. Naming fields
  * start from this, so they match what the page already shows for the team.
  */
 export function teamName(team: Team): string {
