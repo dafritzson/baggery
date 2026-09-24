@@ -23,7 +23,10 @@ export function suggestTeamName(data: SeasonData): string {
   return `${randomAdjective(taken)} Bagger`;
 }
 
-/** The team's name, or a random "<adjective> Bagger" for a spot nobody has named. */
+/**
+ * The team's name, or a random "<adjective> Bagger" for a spot nobody has named. Naming fields
+ * start from this, so they match what the page already shows for the team.
+ */
 export function teamName(team: Team): string {
   if (team.name) return team.name;
   let name = unclaimedNames.get(team.id);

@@ -91,7 +91,7 @@ function ClaimTeam({ data, onClaimed }: { data: SeasonData; onClaimed: () => voi
           title="Name your team"
           description="This spot becomes yours. You can rename your team any time."
           saveLabel="Claim this spot"
-          initialName={suggestTeamName(data)}
+          initialName={teamName(choice)}
           suggest={() => suggestTeamName(data)}
           onSave={(name) => claim(choice.id, name)}
           onClose={() => setChoice(null)}
@@ -127,7 +127,7 @@ function RenameTeam({ data, team, onClose }: { data: SeasonData; team: Team; onC
       visible
       title="Rename team"
       saveLabel="Save"
-      initialName={team.name ?? suggestTeamName(data)}
+      initialName={teamName(team)}
       suggest={() => suggestTeamName(data)}
       onSave={rename}
       onClose={onClose}
