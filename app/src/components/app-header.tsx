@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Defs, Ellipse, LinearGradient, Path, Stop } from 'react-native-svg';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
+import { HeaderTabs } from '@/components/section-nav';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing, WideContentWidth } from '@/constants/theme';
@@ -20,17 +21,19 @@ export const UnderAppHeader = createContext(false);
 
 /**
  * The header on every signed-in screen: home (a home plate), season year and account.
- * Section tabs (draft, live scores, research) will go in a row below this one.
+ * On desktops the section tabs sit here too; phones get them in a bottom bar (section-nav).
  */
 export function AppHeader() {
   const theme = useTheme();
   // Lines up with wide screens' content (Screen width="wide").
-  const maxWidth = useLayout() === 'wide' ? WideContentWidth : MaxContentWidth;
+  const layout = useLayout();
+  const maxWidth = layout === 'wide' ? WideContentWidth : MaxContentWidth;
   return (
     <ThemedView style={[styles.bar, { borderBottomColor: theme.border }]}>
       <SafeAreaView edges={['top', 'left', 'right']}>
         <View style={[styles.row, { maxWidth }]}>
           <HomeButton />
+          {layout === 'wide' && <HeaderTabs />}
           <View style={{ flex: 1 }} />
           {appEnv !== 'production' && <EnvBadge />}
           <YearPicker />

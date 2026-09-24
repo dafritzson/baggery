@@ -47,7 +47,7 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
     paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.two,
+    paddingVertical: Spacing.two,
   },
   scroll: { flexGrow: 1, alignItems: 'center' },
   content: {
