@@ -18,10 +18,10 @@ describe('team name list', () => {
     }
   });
 
-  it('has unique adjectives short enough for "<adjective> Bagger"', () => {
+  it('has unique adjectives short enough for "<adjective> Baggers"', () => {
     expect(new Set(ADJECTIVES).size).toBe(ADJECTIVES.length);
     const longest = Math.max(...ADJECTIVES.map((a) => a.length));
-    expect(longest + ' Bagger'.length).toBeLessThanOrEqual(MAX);
+    expect(longest + ' Baggers'.length).toBeLessThanOrEqual(MAX);
   });
 });
 
@@ -33,14 +33,14 @@ describe('randomTeamName', () => {
     expect(randomTeamName(script(0, 0))).toBe(TEAM_NAMES[0]);
   });
 
-  it('builds "<adjective> Bagger"', () => {
-    expect(randomTeamName(script(0.7, 0))).toBe(`${ADJECTIVES[0]} Bagger`);
+  it('builds "<adjective> Baggers"', () => {
+    expect(randomTeamName(script(0.7, 0))).toBe(`${ADJECTIVES[0]} Baggers`);
   });
 
   it('uses both styles and always fits the limit', () => {
     const names = Array.from({ length: 2000 }, () => randomTeamName());
     for (const name of names) expect(name.length).toBeLessThanOrEqual(MAX);
     expect(names.some((n) => TEAM_NAMES.includes(n))).toBe(true);
-    expect(names.some((n) => ADJECTIVES.some((a) => n === `${a} Bagger`))).toBe(true);
+    expect(names.some((n) => ADJECTIVES.some((a) => n === `${a} Baggers`))).toBe(true);
   });
 });
