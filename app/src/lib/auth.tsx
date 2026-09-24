@@ -1,6 +1,5 @@
 import type { Session } from '@supabase/supabase-js';
 import { createContext, type ReactNode, use, useEffect, useState } from 'react';
-import { Platform } from 'react-native';
 
 import { supabase } from '@/lib/supabase';
 
@@ -29,8 +28,11 @@ export function useAuth() {
   return use(AuthContext);
 }
 
-export async function signInWithGoogle(): Promise<string | null> {
-  if (Platform.OS !== 'web') return 'Sign-in on the native app is coming later. Use the website for now.';
+/** Public OAuth client id (safe to ship). The secret lives only in Supabase. */
+export const GOOGLE_CLIENT_ID = '405004622017-qahiveave1nfvtf43jimo711dh98vi4m.apps.googleusercontent.com';
+
+/** Fallback: the OAuth redirect through Supabase (Google's prompt shows the Supabase URL). */
+export async function signInWithGoogleRedirect(): Promise<string | null> {
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: { redirectTo: window.location.origin },
