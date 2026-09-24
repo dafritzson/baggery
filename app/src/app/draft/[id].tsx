@@ -70,7 +70,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
   );
   const autodraft = myTeam && draft.status !== 'complete' && (
     <View style={styles.switchRow}>
-      <ThemedText type="small" style={{ flex: 1 }}>Autodraft for me (most regular-season TB)</ThemedText>
+      <ThemedText type="small" style={{ flex: 1 }}>Autodraft for me</ThemedText>
       <AutodraftSwitch
         value={myTeam.autodraft}
         onChange={(v) => run({ action: 'set-autodraft', teamId: myTeam.id, autodraft: v })}
@@ -507,7 +507,7 @@ function CommissionerControls({
         {draft.status === 'live' && onClock && (
           <View style={{ flex: 1 }}>
             <Button
-              label={`Autopick for ${onClock.manager_name}`}
+              label="Autopick"
               variant="secondary"
               compact
               loading={busy}
