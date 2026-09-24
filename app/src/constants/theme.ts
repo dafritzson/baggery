@@ -20,6 +20,9 @@ export const Colors = {
     highlight: '#FDECEC',
     danger: '#C8102E',
     success: '#1A7F37',
+    /** Light accent-blue fill for list cards, and a stronger one for badges on them. */
+    tint: '#E9EFFB',
+    tintStrong: '#D2DDF3',
   },
   dark: {
     text: '#ffffff',
@@ -33,6 +36,8 @@ export const Colors = {
     highlight: '#3A1A1E',
     danger: '#FF6B6B',
     success: '#4ADE80',
+    tint: '#16213A',
+    tintStrong: '#223257',
   },
 } as const;
 

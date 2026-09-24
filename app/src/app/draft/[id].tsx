@@ -479,12 +479,17 @@ function PickCard({
     .join(' · ');
 
   return (
-    <ThemedView style={[styles.pickCard, !first && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border }]}>
+    <View
+      style={[
+        styles.pickCard,
+        { backgroundColor: theme.tint },
+        !first && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border },
+      ]}>
       <View style={styles.pickCardTop}>
         <ThemedText type="smallBold" numberOfLines={1} style={styles.pickPlayer}>
           {playerId !== null ? playerName(data, playerId) : 'Yielded'}
         </ThemedText>
-        <View style={[styles.pickBadge, { backgroundColor: theme.backgroundSelected }]}>
+        <View style={[styles.pickBadge, { backgroundColor: theme.tintStrong }]}>
           <ThemedText type="smallBold" themeColor="textSecondary" style={styles.pickBadgeText}>
             {label}
             {action.is_auto ? ' · auto' : ''}
@@ -496,7 +501,7 @@ function PickCard({
         {team ? teamName(team) : '—'}
         {owner && <ThemedText type="small" themeColor="textSecondary" style={styles.pickOwner}> · {owner}</ThemedText>}
       </ThemedText>
-    </ThemedView>
+    </View>
   );
 }
 
