@@ -32,7 +32,7 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
 - `seasons`: one per league per year, with its status.
 - `fantasy_teams`: numbered spots in a season (`slot`). A signed-in user claims an open spot and
   names the team; `user_id` and `name` are nullable, so open spots and historical teams work.
-  Unnamed spots show a random "<adjective> Bagger" in the app. `eliminated_after_round`.
+  Unnamed spots show a random name in the app (`app/src/lib/team-name-list.ts`). `eliminated_after_round`.
 - `mlb_teams`, `mlb_players`, `mlb_games`, `player_game_stats`: stats mirror of the MLB API.
 - `season_player_pool`: who is draftable in a season, plus regular-season TB (for autodraft), PA,
   SLG and OPS+ for the draft room table. `season_mlb_teams` holds each team's wins and Wild Card bye.
