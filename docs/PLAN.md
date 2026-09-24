@@ -16,13 +16,15 @@ Game rules: [RULES.md](RULES.md).
 
 ```
 branch → PR → CI (typecheck + tests) → auto-merge to main
-main   → deploy-staging (Supabase staging + Vercel staging URL)
-       → deploy-production (waits for approval from @dafritzson) → Supabase prod + Vercel prod
+main   → deploy staging → opens/updates the "Release to production" PR (main → production)
+merge release PR (owner only, merge commit) → production branch → deploy production
 ```
 
 - Supabase projects: staging `fysycochmsjicjephrid`, prod `xjbwsveifxhtdkpmnckr`.
-- Secrets live only in the GitHub `staging` / `production` environments, and both are
-  restricted to `main`. There are no repo-level secrets.
+- Secrets live only in the GitHub `staging` / `production` environments. `staging` is
+  restricted to `main`, `production` to the `production` branch. There are no repo-level secrets.
+- Only the repo owner can update `production` (ruleset), so merging the release PR is the
+  approval. It works from the GitHub mobile app.
 - Changes to `.github/` need review from the code owner (see `.github/CODEOWNERS`).
 
 ## Data model (summary)

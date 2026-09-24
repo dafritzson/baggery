@@ -1,16 +1,20 @@
 name: Deploy
 
-# Every push to main deploys to staging. Production waits for approval from a
-# required reviewer on the `production` environment.
+# main       → staging, then opens/updates the "Release to production" PR (main → production)
+# production → production. Only the repo owner can update the production branch, so merging
+#              the release PR (works from the GitHub mobile app) is the approval.
 on:
   push:
-    branches: [main]
+    branches: [main, production]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   staging:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # Per-job groups: a production deploy waiting for approval must not block staging.
     concurrency:
       group: deploy-staging
       cancel-in-progress: false
@@ -32,10 +36,47 @@ jobs:
           vercel-project-id: ${{ vars.VERCEL_PROJECT_ID }}
           vercel-alias: ${{ vars.VERCEL_STAGING_ALIAS }}
 
-  production:
+  release-pr:
     needs: staging
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # Only the newest production deploy waits for approval; older pending ones are superseded.
+    concurrency:
+      group: release-pr
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Open or update the release PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          changes=$(git log --no-merges --format='- %s' origin/production..origin/main)
+          if [ -z "$changes" ]; then
+            echo "Production is up to date."
+            exit 0
+          fi
+          body=$(printf '%s\n' \
+            "Merging this deploys everything below to **production** (https://baggery.vercel.app)." \
+            "It's already live on staging: https://baggery-staging.vercel.app" \
+            "" \
+            "Use **Create a merge commit** (the only option allowed here)." \
+            "" \
+            "## Changes" \
+            "$changes")
+          number=$(gh pr list --base production --head main --state open --json number --jq '.[0].number')
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --body "$body"
+          else
+            gh pr create --base production --head main --title "Release to production" --body "$body"
+          fi
+
+  production:
+    if: github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
     concurrency:
       group: deploy-production
       cancel-in-progress: false

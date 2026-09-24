@@ -33,7 +33,7 @@ jobs:
           deno-version: v2.x
       - name: Typecheck Edge Functions
         working-directory: supabase/functions
-        run: deno check --node-modules-dir=none */index.ts
+        run: deno check --node-modules-dir=none ./*/index.ts
       - name: Lint app
         run: npm run lint
         working-directory: app
@@ -72,7 +72,7 @@ jobs:
       - name: Serve Edge Functions
         run: |
           npx supabase functions serve > functions.log 2>&1 &
-          for i in $(seq 1 60); do grep -q "Serving functions" functions.log && break; sleep 2; done
+          for _ in $(seq 1 60); do grep -q "Serving functions" functions.log && break; sleep 2; done
       - run: npm run test:int
       - if: failure()
         run: cat functions.log

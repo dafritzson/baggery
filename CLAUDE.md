@@ -43,8 +43,9 @@ Changes reach users like this. Follow it for every change:
 2. Run `npm test`, `npm run typecheck`, and `cd app && npx expo lint` before pushing.
 3. Open a PR and enable auto-merge (`gh pr merge --auto --squash`). When CI passes it
    merges and deploys to **staging** automatically.
-4. Production deploys only after the repo owner approves the `production` environment
-   in GitHub Actions. Never try to bypass or weaken that gate.
+4. Each staging deploy opens or updates a "Release to production" PR (`main` → `production`).
+   Only the repo owner can merge it, and merging deploys production. Never merge it, push to
+   `production`, or try to bypass or weaken that gate.
 
 Rule changes: update `docs/RULES.md` in the same PR as the code, and add tests in
 `tests/` for any change to draft or scoring logic.
