@@ -6,6 +6,7 @@ import { BottomTabBar } from '@/components/section-nav';
 import { ThemedView } from '@/components/themed-view';
 import { useLayout } from '@/hooks/use-layout';
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { PlayerProvider } from '@/lib/player';
 import { SeasonProvider } from '@/lib/season';
 
 export default function RootLayout() {
@@ -40,11 +41,13 @@ function RootStack() {
   // Remount on sign-in/out so season data is loaded for the right user.
   return (
     <SeasonProvider key={session.user.id}>
-      <ThemedView style={{ flex: 1 }}>
-        <AppHeader />
-        <UnderAppHeader value>{stack}</UnderAppHeader>
-        {layout === 'compact' && <BottomTabBar />}
-      </ThemedView>
+      <PlayerProvider>
+        <ThemedView style={{ flex: 1 }}>
+          <AppHeader />
+          <UnderAppHeader value>{stack}</UnderAppHeader>
+          {layout === 'compact' && <BottomTabBar />}
+        </ThemedView>
+      </PlayerProvider>
     </SeasonProvider>
   );
 }

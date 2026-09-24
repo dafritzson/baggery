@@ -9,6 +9,7 @@ import { type DraftConfig, type Turn, nextTurn } from '@core/draft.ts';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { Columns } from '@/components/columns';
+import { PlayerName } from '@/components/player-name';
 import { type PlayerRow, PlayerTable } from '@/components/player-table';
 import { Screen } from '@/components/screen';
 import { Sheet } from '@/components/sheet';
@@ -18,6 +19,7 @@ import { Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { formatLockTime, mlbTeamAbbr, playerLine, playerName } from '@/lib/format';
+import { type DraftAction, useDraftAction, useOpenPlayer } from '@/lib/player';
 import { type Draft, type DraftActionRow, type SeasonData, coreActions, currentRosters, useSeason } from '@/lib/season';
 import { ownerName, teamLabel, teamName } from '@/lib/teams';
 import { callFunction } from '@/lib/supabase';
@@ -56,6 +58,18 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
   const myTeam = data.myTeam;
   const myTurn = !!turn && turn.teamId === myTeam?.id;
   const canAct = !!turn && (myTurn || data.isCommissioner);
+  const onBehalfOf = turn && !myTurn ? teamLabel(data, teamsById.get(turn.teamId)) : undefined;
+
+  // The player popup's Draft button opens the pick sheet, for anyone the drafter can still take.
+  const draftable = useMemo(() => new Set(availablePlayers(data).map((p) => p.id)), [data]);
+  const draftAction = useMemo(
+    (): DraftAction | null =>
+      canAct
+        ? { label: onBehalfOf ? `Draft for ${onBehalfOf}` : 'Draft', canDraft: (id) => draftable.has(id), draft: setSelected }
+        : null,
+    [canAct, onBehalfOf, draftable],
+  );
+  useDraftAction(draftAction);
 
   async function run(body: object) {
     setError(null);
@@ -83,7 +97,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
   const tabs = (
     <>
       <Segmented value={tab} onChange={setTab} />
-      {tab === 'players' && <PlayersList data={data} canAct={canAct} onSelect={setSelected} />}
+      {tab === 'players' && <PlayersList data={data} />}
       {tab === 'board' && <Board data={data} draft={draft} config={config} />}
       {tab === 'rosters' && <Rosters data={data} draft={draft} />}
     </>
@@ -143,7 +157,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
         data={data}
         draft={draft}
         playerId={selected}
-        onBehalfOf={turn && !myTurn ? teamLabel(data, teamsById.get(turn.teamId)) : undefined}
+        onBehalfOf={onBehalfOf}
         dropOptions={turn ? currentRosters(data).get(turn.teamId) ?? [] : []}
         onClose={() => setSelected(null)}
         onConfirm={async (dropPlayerId) => {
@@ -278,33 +292,35 @@ function Segmented({ value, onChange }: { value: Tab; onChange: (t: Tab) => void
   );
 }
 
-function PlayersList({ data, canAct, onSelect }: { data: SeasonData; canAct: boolean; onSelect: (id: number) => void }) {
+/** Players who can still be drafted: on a live postseason roster and on nobody's team. */
+function availablePlayers(data: SeasonData): (PlayerRow & { mlbTeamId: number })[] {
+  const taken = new Set(data.spells.map((s) => s.mlb_player_id));
+  return data.pool
+    .filter((p) => p.on_postseason_roster && !taken.has(p.mlb_player_id) && !data.mlbTeams.get(p.mlb_team_id)?.eliminated)
+    .map((p) => {
+      const team = data.mlbTeams.get(p.mlb_team_id);
+      return {
+        id: p.mlb_player_id,
+        mlbTeamId: p.mlb_team_id,
+        name: data.players.get(p.mlb_player_id)?.full_name ?? `Player ${p.mlb_player_id}`,
+        team: team?.abbreviation ?? '',
+        wins: team?.wins ?? null,
+        bye: team?.has_bye ?? false,
+        pa: p.plate_appearances,
+        slg: p.slg,
+        opsPlus: p.ops_plus,
+        tb: p.regular_season_tb,
+      };
+    });
+}
+
+function PlayersList({ data }: { data: SeasonData }) {
   const theme = useTheme();
+  const openPlayer = useOpenPlayer();
   const [query, setQuery] = useState('');
   const [teamFilter, setTeamFilter] = useState<number | null>(null);
 
-  const taken = useMemo(() => new Set(data.spells.map((s) => s.mlb_player_id)), [data.spells]);
-  const available = useMemo(
-    () =>
-      data.pool
-        .filter((p) => p.on_postseason_roster && !taken.has(p.mlb_player_id) && !data.mlbTeams.get(p.mlb_team_id)?.eliminated)
-        .map((p): PlayerRow & { mlbTeamId: number } => {
-          const team = data.mlbTeams.get(p.mlb_team_id);
-          return {
-            id: p.mlb_player_id,
-            mlbTeamId: p.mlb_team_id,
-            name: data.players.get(p.mlb_player_id)?.full_name ?? `Player ${p.mlb_player_id}`,
-            team: team?.abbreviation ?? '',
-            wins: team?.wins ?? null,
-            bye: team?.has_bye ?? false,
-            pa: p.plate_appearances,
-            slg: p.slg,
-            opsPlus: p.ops_plus,
-            tb: p.regular_season_tb,
-          };
-        }),
-    [data.pool, data.mlbTeams, data.players, taken],
-  );
+  const available = useMemo(() => availablePlayers(data), [data]);
   const q = query.trim().toLowerCase();
   const shown = available.filter(
     (p) => (teamFilter === null || p.mlbTeamId === teamFilter) && (!q || p.name.toLowerCase().includes(q)),
@@ -330,7 +346,7 @@ function PlayersList({ data, canAct, onSelect }: { data: SeasonData; canAct: boo
       {data.pool.length === 0 && (
         <ThemedText themeColor="textSecondary">The player pool is empty. The commissioner needs to sync it from MLB.</ThemedText>
       )}
-      {shown.length > 0 && <PlayerTable rows={shown} canSelect={canAct} onSelect={onSelect} />}
+      {shown.length > 0 && <PlayerTable rows={shown} onSelect={openPlayer} />}
       {shown.length === 0 && data.pool.length > 0 && (
         <ThemedText type="small" themeColor="textSecondary">No matching players.</ThemedText>
       )}
@@ -391,9 +407,13 @@ function Board({ data, draft, config }: { data: SeasonData; draft: Draft; config
                   type="backgroundElement"
                   style={[styles.boardCell, styles.boardPick, isCurrent && { borderColor: theme.danger, borderWidth: 2 }]}>
                   <ThemedText type="small" themeColor="textSecondary">{pickLabel(slot, n)}</ThemedText>
-                  <ThemedText type="small" numberOfLines={2}>
-                    {action ? (action.type === 'yield' ? 'Yielded' : playerName(data, action.addPlayerId)) : isCurrent ? 'On the clock' : ''}
-                  </ThemedText>
+                  {action?.type === 'pick' ? (
+                    <PlayerName playerId={action.addPlayerId} numberOfLines={2}>{playerName(data, action.addPlayerId)}</PlayerName>
+                  ) : (
+                    <ThemedText type="small" numberOfLines={2}>
+                      {action?.type === 'yield' ? 'Yielded' : isCurrent ? 'On the clock' : ''}
+                    </ThemedText>
+                  )}
                 </ThemedView>
               );
             })}
@@ -412,7 +432,9 @@ function MyRoster({ data, teamId }: { data: SeasonData; teamId: string }) {
       {roster.length === 0 && <ThemedText type="small" themeColor="textSecondary">No players yet</ThemedText>}
       {roster.map((id) => (
         <View key={id} style={styles.sideRow}>
-          <ThemedText type="small" numberOfLines={1} style={{ flex: 1 }}>{playerLine(data, id)}</ThemedText>
+          <View style={{ flex: 1, alignItems: 'flex-start' }}>
+            <PlayerName playerId={id} numberOfLines={1}>{playerLine(data, id)}</PlayerName>
+          </View>
           <ThemedText type="small" themeColor="textSecondary">{data.poolByPlayer.get(id)?.regular_season_tb ?? ''}</ThemedText>
         </View>
       ))}
@@ -477,7 +499,7 @@ function RecentPicks({ data, draft, config }: { data: SeasonData; draft: Draft; 
   );
 }
 
-/** One pick: the player up top, then who took them. Tapping will open the player's stats. */
+/** One pick: the player up top, then who took them. Tapping opens the player's stats. */
 function PickCard({
   data,
   action,
@@ -488,6 +510,7 @@ function PickCard({
   label: string;
 }) {
   const theme = useTheme();
+  const openPlayer = useOpenPlayer();
   const [hovered, setHovered] = useState(false);
   const team = data.teams.find((t) => t.id === action.fantasy_team_id);
   const owner = team && ownerName(data, team);
@@ -499,11 +522,13 @@ function PickCard({
     .join(' · ');
 
   return (
-    // A Pressable so a tap can open the player's stats later; for now it only shows hover.
     <Pressable
+      disabled={playerId === null}
+      onPress={() => playerId !== null && openPlayer(playerId)}
+      accessibilityRole="button"
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
-      style={[styles.pickCard, { backgroundColor: hovered ? theme.tintHover : theme.tint, boxShadow: theme.bevel }]}>
+      style={[styles.pickCard, { backgroundColor: hovered && playerId !== null ? theme.tintHover : theme.tint, boxShadow: theme.bevel }]}>
       <View style={styles.pickCardTop}>
         <ThemedText type="smallBold" numberOfLines={1} style={styles.pickPlayer}>
           {playerId !== null ? playerName(data, playerId) : 'Yielded'}
@@ -536,7 +561,9 @@ function Rosters({ data, draft }: { data: SeasonData; draft: Draft }) {
           <Card key={teamId} title={`${teamLabel(data, team)}${team?.id === data.myTeam?.id ? ' · you' : ''} · ${roster.length}/4`}>
             {roster.length === 0 && <ThemedText type="small" themeColor="textSecondary">No players yet</ThemedText>}
             {roster.map((id) => (
-              <ThemedText key={id} type="small">{playerLine(data, id)}</ThemedText>
+              <View key={id} style={{ alignItems: 'flex-start' }}>
+                <PlayerName playerId={id}>{playerLine(data, id)}</PlayerName>
+              </View>
             ))}
           </Card>
         );

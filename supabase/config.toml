@@ -427,3 +427,6 @@ verify_jwt = false
 
 [functions.sync-pool]
 verify_jwt = false
+
+[functions.player-stats]
+verify_jwt = false

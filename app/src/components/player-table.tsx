@@ -64,11 +64,9 @@ function compareNullable(a: number | null, b: number | null, desc: boolean): num
  */
 export function PlayerTable({
   rows,
-  canSelect,
   onSelect,
 }: {
   rows: PlayerRow[];
-  canSelect: boolean;
   onSelect: (playerId: number) => void;
 }) {
   const theme = useTheme();
@@ -101,7 +99,6 @@ export function PlayerTable({
     pressedId === id && { backgroundColor: theme.backgroundSelected },
   ];
   const rowPress = (id: number) => ({
-    disabled: !canSelect,
     onPress: () => onSelect(id),
     onPressIn: () => setPressedId(id),
     onPressOut: () => setPressedId(null),

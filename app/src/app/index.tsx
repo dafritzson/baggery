@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { PlayerName } from '@/components/player-name';
 import { Columns } from '@/components/columns';
 import { Screen } from '@/components/screen';
 import { TeamNameSheet } from '@/components/team-name-sheet';
@@ -197,7 +198,7 @@ function TeamsCard({ data }: { data: SeasonData }) {
               <ThemedText type="small" themeColor="textSecondary">No players yet</ThemedText>
             ) : (
               roster.map((id) => (
-                <ThemedText key={id} type="small">{playerLine(data, id)}</ThemedText>
+                <PlayerName key={id} playerId={id}>{playerLine(data, id)}</PlayerName>
               ))
             )}
           </View>
