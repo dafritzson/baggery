@@ -10,7 +10,6 @@ import {
   rates,
 } from '@core/player-stats.ts';
 
-import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -93,9 +92,8 @@ export function PlayerPopup({
                 onClose={onClose}
                 draft={
                   canDraft && (
-                    <Button
+                    <DraftChip
                       label={draftAction!.label}
-                      compact
                       onPress={() => {
                         onClose();
                         draftAction!.draft(playerId);
@@ -166,21 +164,36 @@ function Header({
       <View style={styles.headerText}>
         <ThemedText type="default" style={styles.name} numberOfLines={1}>{name}</ThemedText>
         {bio !== '' && <ThemedText type="small" themeColor="textSecondary">{bio}</ThemedText>}
-        {status && (
-          <View style={[styles.status, { backgroundColor: status.available ? theme.tint : theme.backgroundElement }]}>
-            <ThemedText type="smallBold" style={styles.statusText} themeColor={status.available ? 'text' : 'textSecondary'}>
-              {status.label}
-            </ThemedText>
+        {(status || draft) && (
+          <View style={styles.statusRow}>
+            {status && (
+              <View style={[styles.status, { backgroundColor: status.available ? theme.tint : theme.backgroundElement }]}>
+                <ThemedText type="smallBold" style={styles.statusText} themeColor={status.available ? 'text' : 'textSecondary'}>
+                  {status.label}
+                </ThemedText>
+              </View>
+            )}
+            {draft}
           </View>
         )}
       </View>
-      <View style={styles.headerSide}>
-        <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close">
-          <ThemedText type="default" themeColor="textSecondary" style={styles.close}>✕</ThemedText>
-        </Pressable>
-        {draft}
-      </View>
+      <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close">
+        <ThemedText type="default" themeColor="textSecondary" style={styles.close}>✕</ThemedText>
+      </Pressable>
     </View>
+  );
+}
+
+/** The Draft button, sized like the status tag it sits next to. */
+function DraftChip({ label, onPress }: { label: string; onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.status, { backgroundColor: theme.accent, opacity: pressed ? 0.8 : 1 }]}>
+      <ThemedText type="smallBold" numberOfLines={1} style={[styles.statusText, { color: theme.accentText }]}>{label}</ThemedText>
+    </Pressable>
   );
 }
 
@@ -434,9 +447,9 @@ const styles = StyleSheet.create({
   headshot: { width: 64, height: 64, borderRadius: 32 },
   headerText: { flex: 1, gap: Spacing.half },
   name: { fontSize: 20, lineHeight: 26, fontWeight: 700 },
-  status: { alignSelf: 'flex-start', paddingHorizontal: Spacing.two, paddingVertical: 1, borderRadius: Spacing.one, marginTop: Spacing.half },
+  statusRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.two, marginTop: Spacing.half },
+  status: { paddingHorizontal: Spacing.two, paddingVertical: 1, borderRadius: Spacing.one },
   statusText: { fontSize: 12, lineHeight: 18 },
-  headerSide: { alignItems: 'flex-end', gap: Spacing.two },
   close: { fontSize: 18, lineHeight: 22, paddingHorizontal: Spacing.one },
   body: { padding: Spacing.three, gap: Spacing.four, paddingBottom: Spacing.five },
   section: { gap: Spacing.two },
