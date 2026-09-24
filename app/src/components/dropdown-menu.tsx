@@ -64,11 +64,14 @@ export function DropdownMenuItem({
   destructive?: boolean;
 }) {
   const theme = useTheme();
+  const [hovered, setHovered] = useState(false);
   return (
     <Pressable
       accessibilityRole="menuitem"
       onPress={onPress}
-      style={({ pressed, hovered }) => [styles.item, (pressed || hovered) && { backgroundColor: theme.backgroundElement }]}>
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      style={({ pressed }) => [styles.item, (pressed || hovered) && { backgroundColor: theme.backgroundElement }]}>
       <ThemedText type="smallBold" themeColor={destructive ? 'danger' : 'text'}>{label}</ThemedText>
     </Pressable>
   );
