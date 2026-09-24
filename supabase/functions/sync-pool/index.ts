@@ -1,9 +1,19 @@
 // Rebuilds a season's draft pool from the MLB Stats API: every hitter on the active
-// roster of a postseason team, with regular-season TB for autodraft. Commissioner only.
+// roster of a postseason team, with regular-season stats (TB for autodraft; PA, SLG and
+// OPS+ for the draft room) and each team's wins and Wild Card bye. Commissioner only.
 //
 // POST { seasonId, teamIds?: number[] }  (teamIds overrides the clinched-teams lookup)
 
 import { requireCommissioner, requireUser } from '../_shared/auth.ts';
+import {
+  type BattingLine,
+  type StandingsTeam,
+  addBattingLines,
+  byeTeamIds,
+  emptyBattingLine,
+  opsPlus,
+  seasonSlg,
+} from '../_shared/core/stats.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
 
@@ -17,12 +27,61 @@ async function mlb(path: string): Promise<any> {
   return res.json();
 }
 
-async function clinchedTeamIds(year: number): Promise<number[]> {
+interface TeamStanding extends StandingsTeam {
+  wins: number;
+  clinched: boolean;
+}
+
+async function standings(year: number, leagueOf: Map<number, 'AL' | 'NL'>): Promise<TeamStanding[]> {
   const data = await mlb(`/standings?leagueId=103,104&season=${year}&standingsTypes=regularSeason`);
-  return data.records
-    .flatMap((r: { teamRecords: { clinched?: boolean; team: { id: number } }[] }) => r.teamRecords)
-    .filter((t: { clinched?: boolean }) => t.clinched)
-    .map((t: { team: { id: number } }) => t.team.id);
+  // deno-lint-ignore no-explicit-any
+  return data.records.flatMap((r: any) => r.teamRecords).flatMap((t: any): TeamStanding[] => {
+    const league = leagueOf.get(t.team.id);
+    if (!league) return [];
+    return [{
+      teamId: t.team.id,
+      league,
+      divisionRank: Number(t.divisionRank),
+      leagueRank: Number(t.leagueRank),
+      wins: t.wins,
+      clinched: !!t.clinched,
+    }];
+  });
+}
+
+// deno-lint-ignore no-explicit-any
+function battingLine(stat: any): BattingLine {
+  return {
+    pa: stat?.plateAppearances ?? 0,
+    ab: stat?.atBats ?? 0,
+    h: stat?.hits ?? 0,
+    bb: stat?.baseOnBalls ?? 0,
+    hbp: stat?.hitByPitch ?? 0,
+    sf: stat?.sacFlies ?? 0,
+    tb: stat?.totalBases ?? 0,
+  };
+}
+
+/** A traded player gets one split per team, and sometimes a combined one without a team. */
+// deno-lint-ignore no-explicit-any
+function seasonLine(splits: any[] = []): BattingLine {
+  const combined = splits.find((s) => !s.team);
+  return combined ? battingLine(combined.stat) : addBattingLines(splits.map((s) => battingLine(s.stat)));
+}
+
+/** League-wide batting totals, for OPS+. Best effort: OPS+ stays blank if this fails. */
+async function leagueLines(year: number, leagueOf: Map<number, 'AL' | 'NL'>): Promise<Map<'AL' | 'NL', BattingLine>> {
+  const byLeague = new Map<'AL' | 'NL', BattingLine[]>();
+  try {
+    const data = await mlb(`/teams/stats?season=${year}&group=hitting&stats=season&sportIds=1`);
+    for (const split of data.stats?.[0]?.splits ?? []) {
+      const league = leagueOf.get(split.team?.id);
+      if (league) byLeague.set(league, [...(byLeague.get(league) ?? []), battingLine(split.stat)]);
+    }
+  } catch (e) {
+    console.error('League stats unavailable, OPS+ left blank:', e);
+  }
+  return new Map([...byLeague].map(([league, lines]) => [league, addBattingLines(lines)]));
 }
 
 interface PoolPlayer {
@@ -31,7 +90,7 @@ interface PoolPlayer {
   position: string;
   birthDate: string | null;
   teamId: number;
-  regularSeasonTb: number;
+  season: BattingLine;
 }
 
 async function activeHitters(teamId: number, year: number): Promise<PoolPlayer[]> {
@@ -48,7 +107,7 @@ async function activeHitters(teamId: number, year: number): Promise<PoolPlayer[]
       position: r.position.abbreviation,
       birthDate: r.person.birthDate ?? null,
       teamId,
-      regularSeasonTb: r.person.stats?.[0]?.splits?.[0]?.stat?.totalBases ?? 0,
+      season: seasonLine(r.person.stats?.[0]?.splits),
     }));
 }
 
@@ -70,18 +129,28 @@ serve(async (req) => {
   if (!season) throw new UserError('Season not found.', 404);
   const year: number = season.year;
 
-  const playoffTeamIds = teamIds?.length ? teamIds : await clinchedTeamIds(year);
-  if (!playoffTeamIds.length) throw new UserError('No teams have clinched a postseason spot yet.');
-
   const teamsData = await mlb(`/teams?sportId=1&season=${year}`);
   // deno-lint-ignore no-explicit-any
-  const mlbTeams = teamsData.teams.map((t: any) => ({
+  const mlbTeams: { id: number; name: string; abbreviation: string; league: 'AL' | 'NL' | null }[] = teamsData.teams.map((t: any) => ({
     id: t.id,
     name: t.name,
     abbreviation: t.abbreviation,
     league: LEAGUES[t.league?.id] ?? null,
   }));
+  const leagueOf = new Map(mlbTeams.flatMap((t) => (t.league ? [[t.id, t.league] as const] : [])));
+
+  const table = await standings(year, leagueOf);
+  const standingOf = new Map(table.map((t) => [t.teamId, t]));
+  const byes = byeTeamIds(table);
+  const playoffTeamIds = teamIds?.length ? teamIds : table.filter((t) => t.clinched).map((t) => t.teamId);
+  if (!playoffTeamIds.length) throw new UserError('No teams have clinched a postseason spot yet.');
+
   const players = (await Promise.all(playoffTeamIds.map((id) => activeHitters(id, year)))).flat();
+  const leagues = await leagueLines(year, leagueOf);
+  const leagueTotals = (teamId: number) => {
+    const league = leagueOf.get(teamId);
+    return (league && leagues.get(league)) || emptyBattingLine();
+  };
   const wildCardStart = await firstPitch(year, 'F');
 
   await sql.begin(async (tx) => {
@@ -94,8 +163,15 @@ serve(async (req) => {
       await tx`delete from season_mlb_teams where season_id = ${seasonId} and not (mlb_team_id = any(${playoffTeamIds}))`;
     }
     await tx`
-      insert into season_mlb_teams ${tx(playoffTeamIds.map((id) => ({ season_id: seasonId, mlb_team_id: id })))}
-      on conflict do nothing`;
+      insert into season_mlb_teams ${tx(
+        playoffTeamIds.map((id) => ({
+          season_id: seasonId,
+          mlb_team_id: id,
+          wins: standingOf.get(id)?.wins ?? null,
+          has_bye: byes.has(id),
+        })),
+      )}
+      on conflict (season_id, mlb_team_id) do update set wins = excluded.wins, has_bye = excluded.has_bye`;
 
     if (players.length) {
       await tx`
@@ -113,12 +189,16 @@ serve(async (req) => {
             season_id: seasonId,
             mlb_player_id: p.id,
             mlb_team_id: p.teamId,
-            regular_season_tb: p.regularSeasonTb,
+            regular_season_tb: p.season.tb,
+            plate_appearances: p.season.pa,
+            slg: seasonSlg(p.season),
+            ops_plus: opsPlus(p.season, leagueTotals(p.teamId)),
             on_postseason_roster: true,
           })),
         )}
         on conflict (season_id, mlb_player_id) do update set mlb_team_id = excluded.mlb_team_id,
-          regular_season_tb = excluded.regular_season_tb, on_postseason_roster = true`;
+          regular_season_tb = excluded.regular_season_tb, plate_appearances = excluded.plate_appearances,
+          slg = excluded.slg, ops_plus = excluded.ops_plus, on_postseason_roster = true`;
     }
     if (season.status === 'setup') {
       await tx`delete from season_player_pool where season_id = ${seasonId} and not on_postseason_roster`;
