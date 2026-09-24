@@ -16,8 +16,8 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
-import { formatLockTime, playerLine, playerName } from '@/lib/format';
-import { type Draft, type SeasonData, coreActions, currentRosters, useSeason } from '@/lib/season';
+import { formatLockTime, mlbTeamAbbr, playerLine, playerName } from '@/lib/format';
+import { type Draft, type DraftActionRow, type SeasonData, coreActions, currentRosters, useSeason } from '@/lib/season';
 import { ownerName, teamLabel, teamName } from '@/lib/teams';
 import { callFunction } from '@/lib/supabase';
 
@@ -424,38 +424,59 @@ function pickLabel(slot: number, teams: number): string {
   return `${Math.floor(slot / teams) + 1}.${(slot % teams) + 1}`;
 }
 
-/** Sidebar: the latest picks in this draft, newest first. */
+/** Sidebar: the latest picks in this draft as cards, newest first. */
 function RecentPicks({ data, draft, config }: { data: SeasonData; draft: Draft; config: DraftConfig }) {
   const actions = coreActions(data.actions, draft.id);
   const rows = data.actions.filter((a) => a.draft_id === draft.id);
   // Replay the draft to find each action's snake slot (redraft yields skip slots).
   const slots = actions.map((_, i) => nextTurn(config, actions.slice(0, i))?.slot ?? i);
-  const recent = rows.map((a, i) => ({ a, slot: slots[i] })).slice(-8).reverse();
+  const recent = rows.map((a, i) => ({ a, slot: slots[i] })).slice(-5).reverse();
   return (
-    <Card title="Recent picks">
-      {recent.length === 0 && <ThemedText type="small" themeColor="textSecondary">No picks yet</ThemedText>}
-      {recent.map(({ a, slot }) => {
-        const team = data.teams.find((t) => t.id === a.fantasy_team_id);
-        const owner = team && ownerName(data, team);
-        return (
-          <View key={a.action_number} style={styles.pickRow}>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.pickNumber}>
-              {pickLabel(slot, draft.pick_order.length)}
-            </ThemedText>
-            <View style={{ flex: 1 }}>
-              <ThemedText type="small" numberOfLines={1}>
-                <ThemedText type="smallBold">{team ? teamName(team) : '—'}</ThemedText>{' '}
-                {a.type === 'yield' ? 'yielded' : playerName(data, a.add_player_id!)}
-                {a.is_auto ? ' (auto)' : ''}
-              </ThemedText>
-              {owner && (
-                <ThemedText type="small" themeColor="textSecondary" style={styles.pickOwner}>{owner}</ThemedText>
-              )}
-            </View>
-          </View>
-        );
-      })}
-    </Card>
+    <View style={{ gap: Spacing.two }}>
+      <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionTitle}>Recent picks</ThemedText>
+      {recent.length === 0 && (
+        <Card>
+          <ThemedText type="small" themeColor="textSecondary">No picks yet</ThemedText>
+        </Card>
+      )}
+      {recent.map(({ a, slot }) => (
+        <PickCard key={a.action_number} data={data} action={a} label={pickLabel(slot, draft.pick_order.length)} />
+      ))}
+    </View>
+  );
+}
+
+/** One pick: the player up top, then who took them. Tapping will open the player's stats. */
+function PickCard({ data, action, label }: { data: SeasonData; action: DraftActionRow; label: string }) {
+  const theme = useTheme();
+  const team = data.teams.find((t) => t.id === action.fantasy_team_id);
+  const owner = team && ownerName(data, team);
+  const playerId = action.type === 'pick' ? action.add_player_id! : null;
+  const player = playerId !== null ? data.players.get(playerId) : undefined;
+  const tb = playerId !== null ? data.poolByPlayer.get(playerId)?.regular_season_tb : undefined;
+  const details = [player?.primary_position, playerId !== null && mlbTeamAbbr(data, playerId), tb !== undefined && `${tb} TB`]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <ThemedView type="backgroundElement" style={styles.pickCard}>
+      <View style={styles.pickCardTop}>
+        <ThemedText type="smallBold" numberOfLines={1} style={styles.pickPlayer}>
+          {playerId !== null ? playerName(data, playerId) : 'Yielded'}
+        </ThemedText>
+        <View style={[styles.pickBadge, { backgroundColor: theme.backgroundSelected }]}>
+          <ThemedText type="smallBold" themeColor="textSecondary" style={styles.pickBadgeText}>
+            {label}
+            {action.is_auto ? ' · auto' : ''}
+          </ThemedText>
+        </View>
+      </View>
+      {details !== '' && <ThemedText type="small" themeColor="textSecondary">{details}</ThemedText>}
+      <ThemedText type="small" numberOfLines={1} style={styles.pickTeam}>
+        {team ? teamName(team) : '—'}
+        {owner && <ThemedText type="small" themeColor="textSecondary" style={styles.pickOwner}> · {owner}</ThemedText>}
+      </ThemedText>
+    </ThemedView>
   );
 }
 
@@ -764,7 +785,12 @@ const styles = StyleSheet.create({
   dropRow: { borderWidth: 2, borderRadius: Spacing.two, padding: Spacing.two },
   buttonRow: { flexDirection: 'row', gap: Spacing.two },
   sideRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  pickRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two },
-  pickNumber: { minWidth: 30, fontVariant: ['tabular-nums'] },
-  pickOwner: { fontSize: 12, lineHeight: 16, fontStyle: 'italic' },
+  sectionTitle: { textTransform: 'uppercase', letterSpacing: 0.5, paddingHorizontal: Spacing.one },
+  pickCard: { borderRadius: Spacing.three, paddingVertical: Spacing.two + 2, paddingHorizontal: Spacing.three, gap: Spacing.half },
+  pickCardTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  pickPlayer: { flex: 1, fontSize: 16, lineHeight: 22 },
+  pickBadge: { borderRadius: Spacing.two, paddingHorizontal: Spacing.two, paddingVertical: 1 },
+  pickBadgeText: { fontSize: 12, lineHeight: 18, fontVariant: ['tabular-nums'] },
+  pickTeam: { marginTop: Spacing.half },
+  pickOwner: { fontStyle: 'italic' },
 });
