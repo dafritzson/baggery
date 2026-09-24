@@ -49,7 +49,7 @@ const COLUMNS: Column[] = [
 
 /** Name column width on narrow screens; wider tables give the extra room to names. */
 const NAME_WIDTH = 156;
-const STATS_WIDTH = COLUMNS.reduce((sum, c) => sum + c.width, 0) + Spacing.two;
+export const STATS_WIDTH = COLUMNS.reduce((sum, c) => sum + c.width, 0) + Spacing.two;
 const ROW_HEIGHT = 36;
 
 /** Compares with nulls last, whichever way the column is sorted. */
@@ -65,9 +65,12 @@ function compareNullable(a: number | null, b: number | null, desc: boolean): num
 export function PlayerTable({
   rows,
   onSelect,
+  selectedId = null,
 }: {
   rows: PlayerRow[];
   onSelect: (playerId: number) => void;
+  /** Highlighted, e.g. the player shown beside the table. */
+  selectedId?: number | null;
 }) {
   const theme = useTheme();
   const [tableWidth, setTableWidth] = useState(0);
@@ -96,6 +99,7 @@ export function PlayerTable({
   const rowStyle = (id: number, i: number) => [
     styles.row,
     i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border },
+    selectedId === id && { backgroundColor: theme.tint },
     pressedId === id && { backgroundColor: theme.backgroundSelected },
   ];
   const rowPress = (id: number) => ({
