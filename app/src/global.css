@@ -18,6 +18,9 @@
   cursor: pointer;
   border-radius: 999px;
 }
+.menu-trigger-chip {
+  border-radius: 8px;
+}
 .menu-trigger:focus-visible {
   outline: 2px solid #0b3d91;
   outline-offset: 2px;
@@ -44,6 +47,9 @@
   line-height: 20px;
   z-index: 1000;
   transform-origin: var(--radix-dropdown-menu-content-transform-origin);
+}
+.menu-content-narrow {
+  min-width: 140px;
 }
 .menu-content[data-state='open'] {
   animation: menu-in 120ms ease-out;
@@ -76,7 +82,14 @@
   white-space: pre-line;
   overflow-wrap: anywhere;
 }
-.menu-label::first-line {
+.menu-label-heading {
+  padding-bottom: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.menu-label:not(.menu-label-heading)::first-line {
   color: var(--menu-text);
   font-weight: 600;
 }
@@ -106,4 +119,11 @@
 }
 .menu-item-danger[data-highlighted] {
   background: var(--menu-danger-highlight);
+}
+
+/* Checkmark on the selected item, pushed to the right edge. */
+.menu-check {
+  margin-left: auto;
+  padding-left: 16px;
+  color: var(--menu-text-secondary);
 }
