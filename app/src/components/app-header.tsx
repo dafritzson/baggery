@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
+import { DropdownMenu, DropdownMenuDivider, DropdownMenuItem } from '@/components/dropdown-menu';
 import { Sheet } from '@/components/sheet';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -89,7 +90,6 @@ function AccountButton() {
   const theme = useTheme();
   const { session } = useAuth();
   const { data } = useSeason();
-  const [open, setOpen] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const user = session?.user;
   const meta = user?.user_metadata ?? {};
@@ -106,25 +106,38 @@ function AccountButton() {
     : (user?.email?.[0] ?? '?').toUpperCase();
 
   return (
-    <>
-      <Pressable onPress={() => setOpen(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Account">
-        {avatarUrl && !imageFailed ? (
+    <DropdownMenu
+      label="Account"
+      trigger={
+        avatarUrl && !imageFailed ? (
           <Image source={avatarUrl} style={styles.avatar} onError={() => setImageFailed(true)} />
         ) : (
           <View style={[styles.avatar, { backgroundColor: theme.accent }]}>
             <ThemedText type="smallBold" style={{ color: theme.accentText }}>{initials}</ThemedText>
           </View>
-        )}
-      </Pressable>
-      <Sheet visible={open} title="Account" onClose={() => setOpen(false)}>
-        <ThemedText>{user?.email}</ThemedText>
-        {data?.myTeam && (
-          <ThemedText themeColor="textSecondary">Manager: {data.myTeam.manager_name}</ThemedText>
-        )}
-        <Button label="Sign out" variant="danger" onPress={signOut} />
-        <Button label="Cancel" variant="secondary" onPress={() => setOpen(false)} />
-      </Sheet>
-    </>
+        )
+      }>
+      {(close) => (
+        <>
+          <View style={styles.account}>
+            {fullName && <ThemedText type="smallBold" numberOfLines={1}>{fullName}</ThemedText>}
+            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>{user?.email}</ThemedText>
+            {data?.myTeam && (
+              <ThemedText type="small" themeColor="textSecondary">Manager: {data.myTeam.manager_name}</ThemedText>
+            )}
+          </View>
+          <DropdownMenuDivider />
+          <DropdownMenuItem
+            label="Sign out"
+            destructive
+            onPress={() => {
+              close();
+              signOut();
+            }}
+          />
+        </>
+      )}
+    </DropdownMenu>
   );
 }
 
@@ -144,5 +157,6 @@ const styles = StyleSheet.create({
   year: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Spacing.two },
   badge: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Spacing.one },
   badgeText: { fontSize: 12, lineHeight: 16 },
+  account: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, gap: Spacing.half },
   avatar: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
 });
