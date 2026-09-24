@@ -7,13 +7,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
-concurrency:
-  group: deploy
-  cancel-in-progress: false
-
 jobs:
   staging:
     runs-on: ubuntu-latest
+    # Per-job groups: a production deploy waiting for approval must not block staging.
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
     environment:
       name: staging
       url: ${{ steps.vercel.outputs.url }}
@@ -35,6 +35,10 @@ jobs:
   production:
     needs: staging
     runs-on: ubuntu-latest
+    # Only the newest production deploy waits for approval; older pending ones are superseded.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     environment:
       name: production
       url: ${{ steps.vercel.outputs.url }}
