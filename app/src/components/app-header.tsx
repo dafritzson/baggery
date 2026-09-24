@@ -1,8 +1,9 @@
 import { Image } from 'expo-image';
 import { router, usePathname } from 'expo-router';
 import { createContext, useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Defs, Ellipse, LinearGradient, Path, Stop } from 'react-native-svg';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { ThemedText } from '@/components/themed-text';
@@ -17,7 +18,7 @@ import { appEnv } from '@/lib/supabase';
 export const UnderAppHeader = createContext(false);
 
 /**
- * The header on every signed-in screen: app name, season year and account.
+ * The header on every signed-in screen: home (a home plate), season year and account.
  * Section tabs (draft, live scores, research) will go in a row below this one.
  */
 export function AppHeader() {
@@ -26,14 +27,55 @@ export function AppHeader() {
     <ThemedView style={[styles.bar, { borderBottomColor: theme.border }]}>
       <SafeAreaView edges={['top', 'left', 'right']}>
         <View style={styles.row}>
-          <ThemedText type="smallBold" style={styles.title}>Baggery</ThemedText>
-          <YearPicker />
+          <HomeButton />
           <View style={{ flex: 1 }} />
           {appEnv !== 'production' && <EnvBadge />}
+          <YearPicker />
           <AccountButton />
         </View>
       </SafeAreaView>
     </ThemedView>
+  );
+}
+
+/** Home plate icon; goes to the home page for the season being viewed. */
+function HomeButton() {
+  const { requestedYear } = useSeason();
+  return (
+    <Pressable
+      onPress={() => router.navigate(requestedYear ? { pathname: '/', params: { year: requestedYear } } : '/')}
+      hitSlop={8}
+      accessibilityRole="link"
+      accessibilityLabel="Home"
+      style={({ pressed }) => [styles.home, pressed && { opacity: 0.6 }]}>
+      <HomePlate />
+    </Pressable>
+  );
+}
+
+/**
+ * A home plate seen from slightly above and behind the catcher: flat edge toward the pitcher,
+ * point toward the viewer. The top is tilted (foreshortened), and the two edges that meet at
+ * the point show the plate's thickness. Fixed colors: a plate is white in any theme.
+ */
+function HomePlate() {
+  const outline = { stroke: '#3a3d42', strokeWidth: 0.75, strokeLinejoin: 'round' as const };
+  return (
+    <Svg width={32} height={28} viewBox="0 0 28 24.5">
+      <Defs>
+        <LinearGradient id="plate-top" x1="0" y1="0" x2="0.35" y2="1">
+          <Stop offset="0" stopColor="#ffffff" />
+          <Stop offset="1" stopColor="#dfe2e7" />
+        </LinearGradient>
+      </Defs>
+      {/* Shadow on the dirt. */}
+      <Ellipse cx={14} cy={21} rx={11.5} ry={2.2} fill="#000000" opacity={0.16} />
+      {/* Thickness under the two front edges; the right face is in shade. */}
+      <Path d="M4 10 L14 17 L14 19.5 L4 12.5 Z" fill="#b8bcc3" {...outline} />
+      <Path d="M24 10 L14 17 L14 19.5 L24 12.5 Z" fill="#9da2aa" {...outline} />
+      {/* Top face. */}
+      <Path d="M4 3 H24 V10 L14 17 L4 10 Z" fill="url(#plate-top)" {...outline} />
+    </Svg>
   );
 }
 
@@ -66,7 +108,7 @@ function YearPicker() {
           <ThemedText type="smallBold" themeColor="textSecondary">{year} ▾</ThemedText>
         </View>
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content className="menu-content menu-content-narrow" align="start" sideOffset={6} collisionPadding={8}>
+      <DropdownMenu.Content className="menu-content menu-content-narrow" align="end" sideOffset={6} collisionPadding={8}>
         <DropdownMenu.Label className="menu-label menu-label-heading">Season</DropdownMenu.Label>
         {years.map((y) => (
           <DropdownMenu.CheckboxItem
@@ -156,7 +198,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     minHeight: 52,
   },
-  title: { fontSize: 18, lineHeight: 24 },
+  home: { marginLeft: -Spacing.one, padding: Spacing.one },
   year: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Spacing.two },
   badge: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Spacing.one },
   badgeText: { fontSize: 12, lineHeight: 16 },

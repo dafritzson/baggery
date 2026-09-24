@@ -35,20 +35,10 @@ export default function DraftRoomScreen() {
       </Screen>
     );
   }
-  return <DraftRoom data={data} draft={draft} refetch={refetch} goHome={goHome} />;
+  return <DraftRoom data={data} draft={draft} refetch={refetch} />;
 }
 
-function DraftRoom({
-  data,
-  draft,
-  refetch,
-  goHome,
-}: {
-  data: SeasonData;
-  draft: Draft;
-  refetch: () => void;
-  goHome: () => void;
-}) {
+function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; refetch: () => void }) {
   const [tab, setTab] = useState<Tab>('players');
   const [selected, setSelected] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -73,9 +63,6 @@ function DraftRoom({
     <Screen
       header={
         <View style={styles.topBar}>
-          <Pressable onPress={goHome} hitSlop={12}>
-            <ThemedText type="small" themeColor="textSecondary">‹ Home</ThemedText>
-          </Pressable>
           <ThemedText type="smallBold">Draft {draft.number}</ThemedText>
         </View>
       }>
@@ -504,7 +491,7 @@ function CommissionerControls({
 }
 
 const styles = StyleSheet.create({
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 32 },
+  topBar: { flexDirection: 'row', alignItems: 'center', minHeight: 32 },
   clock: { padding: Spacing.three, borderRadius: Spacing.three, gap: Spacing.one },
   clockHeadline: { fontSize: 24, lineHeight: 30 },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 40 },
