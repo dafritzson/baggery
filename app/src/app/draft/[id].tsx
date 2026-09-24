@@ -107,11 +107,8 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
     <Screen
       width="wide"
       header={
-        wide ? (
-          <View style={styles.topBar}>
-            <ThemedText type="smallBold">Draft {draft.number}</ThemedText>
-          </View>
-        ) : (
+        // Phone: the clock bar is pinned above the scrolling content. Desktop has the clock card instead.
+        !wide && (
           <ClockBar
             status={status}
             myTurn={myTurn}
@@ -830,7 +827,6 @@ function DraftMenu({
 }
 
 const styles = StyleSheet.create({
-  topBar: { flexDirection: 'row', alignItems: 'center', minHeight: 32 },
   clock: { padding: Spacing.three, borderRadius: Spacing.three, gap: Spacing.one },
   clockHeadline: { fontSize: 24, lineHeight: 30 },
   clockBar: {
