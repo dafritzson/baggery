@@ -187,9 +187,13 @@ function useLiveSeason(): SeasonState {
   const [data, setData] = useState<SeasonData | null>(null);
   const [loading, setLoading] = useState(true);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestFetch = useRef(0);
 
   const refetch = useCallback(async () => {
+    // Reloads can overlap; only the newest one may land, so an older one can't overwrite it.
+    const fetchId = ++latestFetch.current;
     const next = await fetchSeason(userId);
+    if (fetchId !== latestFetch.current) return;
     setData(next);
     setLoading(false);
   }, [userId]);
