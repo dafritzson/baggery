@@ -1,0 +1,53 @@
+name: Deploy
+
+# Every push to main deploys to staging. Production waits for approval from a
+# required reviewer on the `production` environment.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: ${{ steps.vercel.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/deploy
+        id: vercel
+        with:
+          target: staging
+          supabase-access-token: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          supabase-project-ref: ${{ secrets.SUPABASE_PROJECT_REF }}
+          supabase-db-password: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          supabase-publishable-key: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ vars.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ vars.VERCEL_PROJECT_ID }}
+          vercel-alias: ${{ vars.VERCEL_STAGING_ALIAS }}
+
+  production:
+    needs: staging
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.vercel.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/deploy
+        id: vercel
+        with:
+          target: production
+          supabase-access-token: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          supabase-project-ref: ${{ secrets.SUPABASE_PROJECT_REF }}
+          supabase-db-password: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          supabase-publishable-key: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ vars.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ vars.VERCEL_PROJECT_ID }}

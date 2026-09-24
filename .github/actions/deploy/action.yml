@@ -1,0 +1,93 @@
+name: Deploy environment
+description: Applies Supabase migrations and functions, then builds and deploys the web app to Vercel.
+
+inputs:
+  target:
+    description: staging or production
+    required: true
+  supabase-access-token:
+    required: true
+  supabase-project-ref:
+    required: true
+  supabase-db-password:
+    required: true
+  supabase-publishable-key:
+    required: true
+  vercel-token:
+    required: true
+  vercel-org-id:
+    required: true
+  vercel-project-id:
+    required: true
+  vercel-alias:
+    description: Stable domain to point at this deploy (staging only).
+    required: false
+
+outputs:
+  url:
+    value: ${{ steps.deploy.outputs.url }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+        cache-dependency-path: |
+          package-lock.json
+          app/package-lock.json
+
+    - shell: bash
+      run: npm ci && (cd app && npm ci)
+
+    - name: Supabase migrations and functions
+      shell: bash
+      env:
+        SUPABASE_ACCESS_TOKEN: ${{ inputs.supabase-access-token }}
+        SUPABASE_DB_PASSWORD: ${{ inputs.supabase-db-password }}
+        PROJECT_REF: ${{ inputs.supabase-project-ref }}
+      run: |
+        npx supabase link --project-ref "$PROJECT_REF"
+        npx supabase db push
+        if find supabase/functions -mindepth 1 -maxdepth 1 -type d ! -name '_*' | grep -q .; then
+          npx supabase functions deploy --project-ref "$PROJECT_REF"
+        fi
+
+    - name: Build web app
+      shell: bash
+      working-directory: app
+      env:
+        EXPO_PUBLIC_SUPABASE_URL: https://${{ inputs.supabase-project-ref }}.supabase.co
+        EXPO_PUBLIC_SUPABASE_KEY: ${{ inputs.supabase-publishable-key }}
+        EXPO_PUBLIC_APP_ENV: ${{ inputs.target }}
+      run: |
+        npx expo export --platform web
+        # Vercel Build Output API: static files plus an SPA fallback to index.html.
+        mkdir -p .vercel/output
+        cp -r dist .vercel/output/static
+        cat > .vercel/output/config.json <<'EOF'
+        { "version": 3, "routes": [{ "handle": "filesystem" }, { "src": "/(.*)", "dest": "/index.html" }] }
+        EOF
+
+    - name: Deploy to Vercel
+      id: deploy
+      shell: bash
+      working-directory: app
+      env:
+        VERCEL_TOKEN: ${{ inputs.vercel-token }}
+        VERCEL_ORG_ID: ${{ inputs.vercel-org-id }}
+        VERCEL_PROJECT_ID: ${{ inputs.vercel-project-id }}
+        TARGET: ${{ inputs.target }}
+        ALIAS: ${{ inputs.vercel-alias }}
+      run: |
+        if [ "$TARGET" = production ]; then
+          url=$(npx vercel@latest deploy --prebuilt --prod --token "$VERCEL_TOKEN")
+        else
+          url=$(npx vercel@latest deploy --prebuilt --token "$VERCEL_TOKEN")
+          if [ -n "$ALIAS" ]; then
+            npx vercel@latest alias set "$url" "$ALIAS" --token "$VERCEL_TOKEN"
+            url="https://$ALIAS"
+          fi
+        fi
+        echo "url=$url" >> "$GITHUB_OUTPUT"
