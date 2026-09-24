@@ -18,10 +18,10 @@ describe('team name list', () => {
     }
   });
 
-  it('has unique adjectives short enough for two of them plus "Bags"', () => {
+  it('has unique adjectives short enough for "<adjective> Bagger"', () => {
     expect(new Set(ADJECTIVES).size).toBe(ADJECTIVES.length);
     const longest = Math.max(...ADJECTIVES.map((a) => a.length));
-    expect(longest * 2 + ' '.length * 2 + 'Bags'.length).toBeLessThanOrEqual(MAX);
+    expect(longest + ' Bagger'.length).toBeLessThanOrEqual(MAX);
   });
 });
 
@@ -33,20 +33,14 @@ describe('randomTeamName', () => {
     expect(randomTeamName(script(0, 0))).toBe(TEAM_NAMES[0]);
   });
 
-  it('builds "<adjective> Bags"', () => {
-    expect(randomTeamName(script(0.5, 0))).toBe(`${ADJECTIVES[0]} Bags`);
+  it('builds "<adjective> Bagger"', () => {
+    expect(randomTeamName(script(0.7, 0))).toBe(`${ADJECTIVES[0]} Bagger`);
   });
 
-  it('builds "<adjective> <adjective> Bags" with two different adjectives', () => {
-    // The second pick repeats the first, so it picks again.
-    expect(randomTeamName(script(0.9, 0, 0, 0.99))).toBe(`${ADJECTIVES[0]} ${ADJECTIVES.at(-1)} Bags`);
-  });
-
-  it('uses all three styles and always fits the limit', () => {
-    const names = Array.from({ length: 3000 }, () => randomTeamName());
-    for (const name of names) expect(name.length, name).toBeLessThanOrEqual(MAX);
+  it('uses both styles and always fits the limit', () => {
+    const names = Array.from({ length: 2000 }, () => randomTeamName());
+    for (const name of names) expect(name.length).toBeLessThanOrEqual(MAX);
     expect(names.some((n) => TEAM_NAMES.includes(n))).toBe(true);
-    expect(names.some((n) => n.split(' ').length === 2 && n.endsWith(' Bags') && ADJECTIVES.includes(n.split(' ')[0]))).toBe(true);
-    expect(names.some((n) => n.split(' ').length === 3 && n.endsWith(' Bags') && ADJECTIVES.includes(n.split(' ')[1]))).toBe(true);
+    expect(names.some((n) => ADJECTIVES.some((a) => n === `${a} Bagger`))).toBe(true);
   });
 });

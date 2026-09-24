@@ -68,7 +68,7 @@ export function teamNames(): string[] {
   return decoded;
 }
 
-/** For "<adjective> Bags" and "<adjective> <adjective> Bags". At most 12 characters each. */
+/** For "<adjective> Bagger". */
 export const ADJECTIVES = [
   'Notorious', 'Blue', 'Mighty', 'Rowdy', 'Golden', 'Sneaky', 'Electric', 'Dusty', 'Clutch', 'Lucky',
   'Fearless', 'Crafty', 'Scrappy', 'Grand', 'Salty', 'Swift', 'Loud', 'Hungry', 'Rally', 'Bold',
@@ -81,17 +81,8 @@ export const ADJECTIVES = [
   'Questionable', 'Smelly', 'Dank', 'Shifty', 'Brazen',
 ];
 
-/**
- * A random name, equally likely to be one of the puns, "<adjective> Bags", or
- * "<adjective> <adjective> Bags" (two different adjectives).
- */
+/** A random name, equally likely to be one of the puns or "<adjective> Bagger". */
 export function randomTeamName(random: () => number = Math.random): string {
   const pick = <T>(items: T[]) => items[Math.floor(random() * items.length)];
-  const style = Math.floor(random() * 3);
-  if (style === 0) return pick(teamNames());
-  const first = pick(ADJECTIVES);
-  if (style === 1) return `${first} Bags`;
-  let second = pick(ADJECTIVES);
-  while (second === first) second = pick(ADJECTIVES);
-  return `${first} ${second} Bags`;
+  return random() < 0.5 ? pick(teamNames()) : `${pick(ADJECTIVES)} Bagger`;
 }
