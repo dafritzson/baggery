@@ -1,11 +1,11 @@
 import { Image } from 'expo-image';
 import { router, usePathname } from 'expo-router';
 import { createContext, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { Button } from '@/components/button';
-import { DropdownMenu, DropdownMenuDivider, DropdownMenuItem } from '@/components/dropdown-menu';
 import { Sheet } from '@/components/sheet';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -105,39 +105,36 @@ function AccountButton() {
         .join('')
     : (user?.email?.[0] ?? '?').toUpperCase();
 
+  const avatar =
+    avatarUrl && !imageFailed ? (
+      <Image source={avatarUrl} style={styles.avatar} onError={() => setImageFailed(true)} />
+    ) : (
+      <View style={[styles.avatar, { backgroundColor: theme.accent }]}>
+        <ThemedText type="smallBold" style={{ color: theme.accentText }}>{initials}</ThemedText>
+      </View>
+    );
+
+  // Zeego: native menus on iOS/Android, Radix on web (styled by the .menu-* classes in global.css).
   return (
-    <DropdownMenu
-      label="Account"
-      trigger={
-        avatarUrl && !imageFailed ? (
-          <Image source={avatarUrl} style={styles.avatar} onError={() => setImageFailed(true)} />
-        ) : (
-          <View style={[styles.avatar, { backgroundColor: theme.accent }]}>
-            <ThemedText type="smallBold" style={{ color: theme.accentText }}>{initials}</ThemedText>
-          </View>
-        )
-      }>
-      {(close) => (
-        <>
-          <View style={styles.account}>
-            {fullName && <ThemedText type="smallBold" numberOfLines={1}>{fullName}</ThemedText>}
-            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>{user?.email}</ThemedText>
-            {data?.myTeam && (
-              <ThemedText type="small" themeColor="textSecondary">Manager: {data.myTeam.manager_name}</ThemedText>
-            )}
-          </View>
-          <DropdownMenuDivider />
-          <DropdownMenuItem
-            label="Sign out"
-            destructive
-            onPress={() => {
-              close();
-              signOut();
-            }}
-          />
-        </>
-      )}
-    </DropdownMenu>
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger className="menu-trigger" aria-label="Account">
+        {avatar}
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content className="menu-content" align="end" sideOffset={6} collisionPadding={8}>
+        <DropdownMenu.Label className="menu-label">
+          {[fullName, user?.email, data?.myTeam && `Manager: ${data.myTeam.manager_name}`].filter(Boolean).join('\n')}
+        </DropdownMenu.Label>
+        <DropdownMenu.Separator className="menu-separator" />
+        <DropdownMenu.Item
+          key="sign-out"
+          className="menu-item menu-item-danger"
+          // iOS-only prop; on web Zeego would pass it to the DOM (it's styled by .menu-item-danger there).
+          destructive={Platform.OS !== 'web' || undefined}
+          onSelect={signOut}>
+          <DropdownMenu.ItemTitle>Sign out</DropdownMenu.ItemTitle>
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
   );
 }
 
@@ -157,6 +154,5 @@ const styles = StyleSheet.create({
   year: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Spacing.two },
   badge: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Spacing.one },
   badgeText: { fontSize: 12, lineHeight: 16 },
-  account: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, gap: Spacing.half },
   avatar: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
 });
