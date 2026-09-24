@@ -3,16 +3,20 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { sql } from './db.ts';
 import { UserError } from './http.ts';
 
-/** The signed-in user's id, from the request's Authorization header. */
+/**
+ * The signed-in user's id, from the request's Authorization header. getClaims verifies the
+ * token's signature and expiry locally against the project's cached signing keys, which
+ * saves a round trip to the Auth server on every request.
+ */
 export async function requireUser(req: Request): Promise<string> {
   const authorization = req.headers.get('Authorization');
   if (!authorization) throw new UserError('Not signed in.', 401);
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
     global: { headers: { Authorization: authorization } },
   });
-  const { data, error } = await supabase.auth.getUser(authorization.replace(/^Bearer /, ''));
-  if (error || !data.user) throw new UserError('Not signed in.', 401);
-  return data.user.id;
+  const { data, error } = await supabase.auth.getClaims(authorization.replace(/^Bearer /, ''));
+  if (error || !data?.claims.sub) throw new UserError('Not signed in.', 401);
+  return data.claims.sub;
 }
 
 export async function isCommissioner(seasonId: string, userId: string): Promise<boolean> {

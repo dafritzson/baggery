@@ -158,19 +158,21 @@ function OnTheClock({
 }
 
 /**
- * Flips as soon as it's tapped instead of waiting for the save and the season reload.
- * Shows the tapped value until the saved value changes, and goes back if the save fails.
+ * Flips as soon as it's tapped and stays disabled until the server confirms the save, so taps
+ * can't pile up. It goes back if the save fails. After the save, it keeps showing the saved
+ * value until the season reload catches up.
  */
 function AutodraftSwitch({ value, onChange }: { value: boolean; onChange: (v: boolean) => Promise<string | null> }) {
-  const [pending, setPending] = useState<{ value: boolean; from: boolean } | null>(null);
-  // The saved value moved on (our save landed, or someone else changed it): show it.
-  if (pending && pending.from !== value) setPending(null);
+  const [local, setLocal] = useState<{ value: boolean; saving: boolean } | null>(null);
+  if (local && !local.saving && value === local.value) setLocal(null);
   return (
     <Switch
-      value={pending ? pending.value : value}
+      value={local ? local.value : value}
+      disabled={local?.saving}
       onValueChange={async (v) => {
-        setPending({ value: v, from: value });
-        if (await onChange(v)) setPending(null);
+        setLocal({ value: v, saving: true });
+        const error = await onChange(v);
+        setLocal(error ? null : { value: v, saving: false });
       }}
     />
   );
