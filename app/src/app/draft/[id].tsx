@@ -77,11 +77,9 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
       {myTeam && draft.status !== 'complete' && (
         <View style={styles.switchRow}>
           <ThemedText type="small" style={{ flex: 1 }}>Autodraft for me (most regular-season TB)</ThemedText>
-          <Switch
+          <AutodraftSwitch
             value={myTeam.autodraft}
-            onValueChange={(v) => {
-              run({ action: 'set-autodraft', teamId: myTeam.id, autodraft: v });
-            }}
+            onChange={(v) => run({ action: 'set-autodraft', teamId: myTeam.id, autodraft: v })}
           />
         </View>
       )}
@@ -156,6 +154,25 @@ function OnTheClock({
         </ThemedText>
       )}
     </ThemedView>
+  );
+}
+
+/**
+ * Flips as soon as it's tapped instead of waiting for the save and the season reload.
+ * Shows the tapped value until the saved value changes, and goes back if the save fails.
+ */
+function AutodraftSwitch({ value, onChange }: { value: boolean; onChange: (v: boolean) => Promise<string | null> }) {
+  const [pending, setPending] = useState<{ value: boolean; from: boolean } | null>(null);
+  // The saved value moved on (our save landed, or someone else changed it): show it.
+  if (pending && pending.from !== value) setPending(null);
+  return (
+    <Switch
+      value={pending ? pending.value : value}
+      onValueChange={async (v) => {
+        setPending({ value: v, from: value });
+        if (await onChange(v)) setPending(null);
+      }}
+    />
   );
 }
 
@@ -443,11 +460,9 @@ function CommissionerControls({
           {data.teams.map((t) => (
             <View key={t.id} style={styles.switchRow}>
               <ThemedText type="small" style={{ flex: 1 }}>{t.manager_name}</ThemedText>
-              <Switch
+              <AutodraftSwitch
                 value={t.autodraft}
-                onValueChange={(v) => {
-                  run({ action: 'set-autodraft', teamId: t.id, autodraft: v });
-                }}
+                onChange={(v) => run({ action: 'set-autodraft', teamId: t.id, autodraft: v })}
               />
             </View>
           ))}
