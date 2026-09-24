@@ -8,7 +8,7 @@ import { TeamNameField } from '@/components/team-name-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { useSeason } from '@/lib/season';
 import { supabase } from '@/lib/supabase';
-import { suggestTeamName } from '@/lib/teams';
+import { suggestTeamName, teamName } from '@/lib/teams';
 
 /** Your settings for the season being viewed. More sections will join the team name. */
 export default function SettingsScreen() {
@@ -36,7 +36,7 @@ export default function SettingsScreen() {
             <TeamNameField
               key={team.id}
               saveLabel="Save"
-              initialName={team.name ?? suggestTeamName(data)}
+              initialName={teamName(team)}
               suggest={() => suggestTeamName(data)}
               onSave={rename}
             />
