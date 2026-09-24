@@ -32,7 +32,8 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
 - `fantasy_teams`: a manager's team in a season. `user_id` is nullable so historical or
   not-yet-signed-up managers work; `eliminated_after_round`.
 - `mlb_teams`, `mlb_players`, `mlb_games`, `player_game_stats`: stats mirror of the MLB API.
-- `season_player_pool`: who is draftable in a season, plus regular-season TB for autodraft.
+- `season_player_pool`: who is draftable in a season, plus regular-season TB (for autodraft), PA,
+  SLG and OPS+ for the draft room table. `season_mlb_teams` holds each team's wins and Wild Card bye.
 - `drafts`, `draft_actions`: every pick or yield, numbered. `unique(draft_id, action_number)`
   prevents double picks.
 - `roster_spells`: (team, player, from, to) intervals. `unique(season_id, mlb_player_id)`

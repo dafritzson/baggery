@@ -54,6 +54,10 @@ export interface PoolEntry {
   mlb_player_id: number;
   mlb_team_id: number;
   regular_season_tb: number;
+  plate_appearances: number;
+  /** Null with no at-bats. */
+  slg: number | null;
+  ops_plus: number | null;
   on_postseason_roster: boolean;
 }
 
@@ -62,6 +66,8 @@ export interface MlbTeam {
   name: string;
   abbreviation: string;
   eliminated: boolean;
+  wins: number | null;
+  has_bye: boolean;
 }
 
 export interface SeasonData {
@@ -102,11 +108,13 @@ async function fetchSeason(userId: string | undefined): Promise<SeasonData | nul
     supabase.from('roster_spells').select('*').eq('season_id', season.id),
     supabase
       .from('season_player_pool')
-      .select('mlb_player_id, mlb_team_id, regular_season_tb, on_postseason_roster, player:mlb_players(id, full_name, primary_position)')
+      .select(
+        'mlb_player_id, mlb_team_id, regular_season_tb, plate_appearances, slg, ops_plus, on_postseason_roster, player:mlb_players(id, full_name, primary_position)',
+      )
       .eq('season_id', season.id),
     supabase
       .from('season_mlb_teams')
-      .select('eliminated, team:mlb_teams(id, name, abbreviation)')
+      .select('eliminated, wins, has_bye, team:mlb_teams(id, name, abbreviation)')
       .eq('season_id', season.id),
   ]);
   const draftIds = (drafts.data ?? []).map((d) => d.id);
@@ -125,13 +133,17 @@ async function fetchSeason(userId: string | undefined): Promise<SeasonData | nul
       mlb_player_id: row.mlb_player_id,
       mlb_team_id: row.mlb_team_id,
       regular_season_tb: row.regular_season_tb,
+      plate_appearances: row.plate_appearances,
+      // Postgres numeric arrives as a string.
+      slg: row.slg === null ? null : Number(row.slg),
+      ops_plus: row.ops_plus,
       on_postseason_roster: row.on_postseason_roster,
     });
   }
   const mlbTeams = new Map<number, MlbTeam>();
   for (const row of seasonTeams.data ?? []) {
-    const team = row.team as unknown as Omit<MlbTeam, 'eliminated'>;
-    mlbTeams.set(team.id, { ...team, eliminated: row.eliminated });
+    const team = row.team as unknown as Pick<MlbTeam, 'id' | 'name' | 'abbreviation'>;
+    mlbTeams.set(team.id, { ...team, eliminated: row.eliminated, wins: row.wins, has_bye: row.has_bye });
   }
 
   const teamRows = (teams.data ?? []) as Team[];

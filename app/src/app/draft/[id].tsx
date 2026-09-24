@@ -6,13 +6,14 @@ import { type DraftConfig, type Turn, nextTurn } from '@core/draft.ts';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { type PlayerRow, PlayerTable } from '@/components/player-table';
 import { Screen } from '@/components/screen';
 import { Sheet } from '@/components/sheet';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { formatLockTime, mlbTeamAbbr, playerLine, playerName } from '@/lib/format';
+import { formatLockTime, playerLine, playerName } from '@/lib/format';
 import { type Draft, type SeasonData, coreActions, currentRosters, useSeason } from '@/lib/season';
 import { callFunction } from '@/lib/supabase';
 
@@ -189,14 +190,26 @@ function PlayersList({ data, canAct, onSelect }: { data: SeasonData; canAct: boo
     () =>
       data.pool
         .filter((p) => p.on_postseason_roster && !taken.has(p.mlb_player_id) && !data.mlbTeams.get(p.mlb_team_id)?.eliminated)
-        .sort((a, b) => b.regular_season_tb - a.regular_season_tb),
-    [data.pool, data.mlbTeams, taken],
+        .map((p): PlayerRow & { mlbTeamId: number } => {
+          const team = data.mlbTeams.get(p.mlb_team_id);
+          return {
+            id: p.mlb_player_id,
+            mlbTeamId: p.mlb_team_id,
+            name: data.players.get(p.mlb_player_id)?.full_name ?? `Player ${p.mlb_player_id}`,
+            team: team?.abbreviation ?? '',
+            wins: team?.wins ?? null,
+            bye: team?.has_bye ?? false,
+            pa: p.plate_appearances,
+            slg: p.slg,
+            opsPlus: p.ops_plus,
+            tb: p.regular_season_tb,
+          };
+        }),
+    [data.pool, data.mlbTeams, data.players, taken],
   );
   const q = query.trim().toLowerCase();
   const shown = available.filter(
-    (p) =>
-      (teamFilter === null || p.mlb_team_id === teamFilter) &&
-      (!q || data.players.get(p.mlb_player_id)?.full_name.toLowerCase().includes(q)),
+    (p) => (teamFilter === null || p.mlbTeamId === teamFilter) && (!q || p.name.toLowerCase().includes(q)),
   );
   const mlbTeams = [...data.mlbTeams.values()].filter((t) => !t.eliminated).sort((a, b) => a.abbreviation.localeCompare(b.abbreviation));
 
@@ -219,37 +232,10 @@ function PlayersList({ data, canAct, onSelect }: { data: SeasonData; canAct: boo
       {data.pool.length === 0 && (
         <ThemedText themeColor="textSecondary">The player pool is empty. The commissioner needs to sync it from MLB.</ThemedText>
       )}
-      <ThemedView type="backgroundElement" style={styles.list}>
-        {shown.map((p, i) => {
-          const player = data.players.get(p.mlb_player_id)!;
-          return (
-            <Pressable
-              key={p.mlb_player_id}
-              disabled={!canAct}
-              onPress={() => onSelect(p.mlb_player_id)}
-              style={({ pressed }) => [
-                styles.playerRow,
-                i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border },
-                pressed && { backgroundColor: theme.backgroundSelected },
-              ]}>
-              <View style={{ flex: 1 }}>
-                <ThemedText type="smallBold">{player.full_name}</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">
-                  {player.primary_position} · {mlbTeamAbbr(data, p.mlb_player_id)}
-                </ThemedText>
-              </View>
-              <View style={styles.tb}>
-                <ThemedText type="smallBold">{p.regular_season_tb}</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">TB</ThemedText>
-              </View>
-              {canAct && <ThemedText themeColor="accent" type="smallBold">Draft</ThemedText>}
-            </Pressable>
-          );
-        })}
-        {shown.length === 0 && data.pool.length > 0 && (
-          <ThemedText type="small" themeColor="textSecondary" style={styles.playerRow}>No matching players.</ThemedText>
-        )}
-      </ThemedView>
+      {shown.length > 0 && <PlayerTable rows={shown} canSelect={canAct} onSelect={onSelect} />}
+      {shown.length === 0 && data.pool.length > 0 && (
+        <ThemedText type="small" themeColor="textSecondary">No matching players.</ThemedText>
+      )}
     </View>
   );
 }
@@ -498,16 +484,6 @@ const styles = StyleSheet.create({
   search: { minHeight: 44, borderRadius: Spacing.two, borderWidth: 1, paddingHorizontal: Spacing.three, fontSize: 16 },
   chips: { gap: Spacing.one },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Spacing.four },
-  list: { borderRadius: Spacing.three, overflow: 'hidden' },
-  playerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two + 2,
-    minHeight: 56,
-  },
-  tb: { alignItems: 'flex-end', minWidth: 40 },
   boardRow: { flexDirection: 'row', gap: Spacing.one, marginBottom: Spacing.one },
   boardCell: { width: 108, paddingHorizontal: Spacing.one },
   boardPick: { minHeight: 64, borderRadius: Spacing.two, padding: Spacing.two, borderWidth: 2, borderColor: 'transparent' },

@@ -67,11 +67,11 @@ export function teamRoundTotals(
   return [...totals.values()];
 }
 
-export function slg(t: StatLine): number {
+export function slg(t: Pick<StatLine, 'ab' | 'tb'>): number {
   return t.ab === 0 ? 0 : t.tb / t.ab;
 }
 
-export function obp(t: StatLine): number {
+export function obp(t: Pick<StatLine, 'ab' | 'h' | 'bb' | 'hbp' | 'sf'>): number {
   const pa = t.ab + t.bb + t.hbp + t.sf;
   return pa === 0 ? 0 : (t.h + t.bb + t.hbp) / pa;
 }
