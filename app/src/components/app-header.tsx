@@ -3,7 +3,7 @@ import { router, usePathname } from 'expo-router';
 import { createContext, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Defs, Ellipse, LinearGradient, Path, Stop } from 'react-native-svg';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { ThemedText } from '@/components/themed-text';
@@ -40,7 +40,6 @@ export function AppHeader() {
 
 /** Home plate icon; goes to the home page for the season being viewed. */
 function HomeButton() {
-  const theme = useTheme();
   const { requestedYear } = useSeason();
   return (
     <Pressable
@@ -49,17 +48,34 @@ function HomeButton() {
       accessibilityRole="link"
       accessibilityLabel="Home"
       style={({ pressed }) => [styles.home, pressed && { opacity: 0.6 }]}>
-      <Svg width={26} height={26} viewBox="0 0 24 24">
-        {/* Flat edge toward the pitcher, point toward the catcher. */}
-        <Path
-          d="M4 4.5h16v8L12 20.5l-8-8z"
-          fill={theme.background}
-          stroke={theme.text}
-          strokeWidth={2}
-          strokeLinejoin="round"
-        />
-      </Svg>
+      <HomePlate />
     </Pressable>
+  );
+}
+
+/**
+ * A home plate seen from slightly above and behind the catcher: flat edge toward the pitcher,
+ * point toward the viewer. The top is tilted (foreshortened), and the two edges that meet at
+ * the point show the plate's thickness. Fixed colors: a plate is white in any theme.
+ */
+function HomePlate() {
+  const outline = { stroke: '#3a3d42', strokeWidth: 0.75, strokeLinejoin: 'round' as const };
+  return (
+    <Svg width={32} height={28} viewBox="0 0 28 24.5">
+      <Defs>
+        <LinearGradient id="plate-top" x1="0" y1="0" x2="0.35" y2="1">
+          <Stop offset="0" stopColor="#ffffff" />
+          <Stop offset="1" stopColor="#dfe2e7" />
+        </LinearGradient>
+      </Defs>
+      {/* Shadow on the dirt. */}
+      <Ellipse cx={14} cy={21} rx={11.5} ry={2.2} fill="#000000" opacity={0.16} />
+      {/* Thickness under the two front edges; the right face is in shade. */}
+      <Path d="M4 10 L14 17 L14 19.5 L4 12.5 Z" fill="#b8bcc3" {...outline} />
+      <Path d="M24 10 L14 17 L14 19.5 L24 12.5 Z" fill="#9da2aa" {...outline} />
+      {/* Top face. */}
+      <Path d="M4 3 H24 V10 L14 17 L4 10 Z" fill="url(#plate-top)" {...outline} />
+    </Svg>
   );
 }
 
