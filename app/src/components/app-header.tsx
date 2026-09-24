@@ -8,7 +8,8 @@ import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Spacing, WideContentWidth } from '@/constants/theme';
+import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { signOut, useAuth } from '@/lib/auth';
 import { useSeason } from '@/lib/season';
@@ -23,10 +24,12 @@ export const UnderAppHeader = createContext(false);
  */
 export function AppHeader() {
   const theme = useTheme();
+  // Lines up with wide screens' content (Screen width="wide").
+  const maxWidth = useLayout() === 'wide' ? WideContentWidth : MaxContentWidth;
   return (
     <ThemedView style={[styles.bar, { borderBottomColor: theme.border }]}>
       <SafeAreaView edges={['top', 'left', 'right']}>
-        <View style={styles.row}>
+        <View style={[styles.row, { maxWidth }]}>
           <HomeButton />
           <View style={{ flex: 1 }} />
           {appEnv !== 'production' && <EnvBadge />}
@@ -190,7 +193,6 @@ const styles = StyleSheet.create({
   bar: { borderBottomWidth: StyleSheet.hairlineWidth },
   row: {
     width: '100%',
-    maxWidth: MaxContentWidth,
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
