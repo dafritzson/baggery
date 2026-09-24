@@ -28,9 +28,11 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
 ## Data model (summary)
 
 - `leagues`, `league_members`: supports more than one friend group.
-- `seasons`: one per league per year. Holds the commissioner and status.
-- `fantasy_teams`: a manager's team in a season. `user_id` is nullable so historical or
-  not-yet-signed-up managers work; `eliminated_after_round`.
+- `league_members`: who belongs to a league, and who is its commissioner (a role on the account).
+- `seasons`: one per league per year, with its status.
+- `fantasy_teams`: numbered spots in a season (`slot`). A signed-in user claims an open spot and
+  names the team; `user_id` and `name` are nullable, so open spots and historical teams work.
+  Unnamed spots show a random "<adjective> Bagger" in the app. `eliminated_after_round`.
 - `mlb_teams`, `mlb_players`, `mlb_games`, `player_game_stats`: stats mirror of the MLB API.
 - `season_player_pool`: who is draftable in a season, plus regular-season TB (for autodraft), PA,
   SLG and OPS+ for the draft room table. `season_mlb_teams` holds each team's wins and Wild Card bye.

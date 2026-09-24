@@ -8,7 +8,9 @@ import { supabase } from '@/lib/supabase';
 
 export interface Team {
   id: string;
-  manager_name: string;
+  /** Spot number in the season, from 1. */
+  slot: number;
+  /** Set by whoever claims the spot; unnamed spots get a random name (see lib/teams). */
   name: string | null;
   user_id: string | null;
   autodraft: boolean;
@@ -72,7 +74,7 @@ export interface MlbTeam {
 }
 
 export interface SeasonData {
-  season: { id: string; year: number; status: string; commissioner_team_id: string | null };
+  season: { id: string; year: number; status: string; league_id: string };
   teams: Team[];
   drafts: Draft[];
   actions: DraftActionRow[];
@@ -83,6 +85,10 @@ export interface SeasonData {
   /** Pool entry for a player, which also gives their MLB team. */
   poolByPlayer: Map<number, PoolEntry>;
   myTeam: Team | null;
+  /** First names of everyone with a profile, by user id. */
+  owners: Map<string, string>;
+  /** User ids of the league's commissioners. */
+  commissionerIds: Set<string>;
   isCommissioner: boolean;
 }
 
@@ -101,14 +107,14 @@ async function fetchSeason(
 ): Promise<{ data: SeasonData | null; years: number[] }> {
   const { data: seasons } = await supabase
     .from('seasons')
-    .select('id, year, status, commissioner_team_id')
+    .select('id, year, status, league_id')
     .order('year', { ascending: false });
   const years = (seasons ?? []).map((s) => s.year as number);
   const season = year ? seasons?.find((s) => s.year === year) : seasons?.[0];
   if (!season) return { data: null, years };
 
-  const [teams, drafts, spells, pool, seasonTeams] = await Promise.all([
-    supabase.from('fantasy_teams').select('*').eq('season_id', season.id).order('manager_name'),
+  const [teams, drafts, spells, pool, seasonTeams, members, profiles] = await Promise.all([
+    supabase.from('fantasy_teams').select('*').eq('season_id', season.id).order('slot'),
     supabase.from('drafts').select('*').eq('season_id', season.id).order('number'),
     supabase.from('roster_spells').select('*').eq('season_id', season.id),
     supabase
@@ -121,6 +127,8 @@ async function fetchSeason(
       .from('season_mlb_teams')
       .select('eliminated, wins, has_bye, team:mlb_teams(id, name, abbreviation)')
       .eq('season_id', season.id),
+    supabase.from('league_members').select('user_id, role').eq('league_id', season.league_id),
+    supabase.from('profiles').select('id, display_name'),
   ]);
   const draftIds = (drafts.data ?? []).map((d) => d.id);
   const { data: actions } = await supabase
@@ -153,6 +161,8 @@ async function fetchSeason(
 
   const teamRows = (teams.data ?? []) as Team[];
   const myTeam = teamRows.find((t) => t.user_id === userId) ?? null;
+  const commissionerIds = new Set((members.data ?? []).filter((m) => m.role === 'commissioner').map((m) => m.user_id as string));
+  const owners = new Map((profiles.data ?? []).map((p) => [p.id as string, (p.display_name as string).split(' ')[0]]));
   const data: SeasonData = {
     season,
     teams: teamRows,
@@ -164,7 +174,9 @@ async function fetchSeason(
     mlbTeams,
     poolByPlayer: new Map(poolRows.map((p) => [p.mlb_player_id, p])),
     myTeam,
-    isCommissioner: !!myTeam && myTeam.id === season.commissioner_team_id,
+    owners,
+    commissionerIds,
+    isCommissioner: !!userId && commissionerIds.has(userId),
   };
   return { data, years };
 }
@@ -262,9 +274,4 @@ export function currentRosters(data: SeasonData): Map<string, number[]> {
     if (s.dropped_by_draft_id === null) rosters.get(s.fantasy_team_id)?.push(s.mlb_player_id);
   }
   return rosters;
-}
-
-export function teamLabel(team: Team | undefined): string {
-  if (!team) return '—';
-  return team.name ? `${team.name} (${team.manager_name})` : team.manager_name;
 }

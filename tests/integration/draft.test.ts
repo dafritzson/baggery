@@ -12,7 +12,8 @@ const publishableKey: string = status.PUBLISHABLE_KEY;
 const admin = createClient(url, status.SECRET_KEY, { auth: { persistSession: false } });
 
 const SEASON_ID = '7ba99e70-0000-4000-8000-000000002026';
-const MANAGERS = ['Alex', 'Curtis', 'Daniel', 'Darren', 'James', 'Kyle', 'Mookie'];
+// Daniel claims first, so he becomes the commissioner of the new league.
+const MANAGERS = ['Daniel', 'Alex', 'Curtis', 'Darren', 'James', 'Kyle', 'Mookie'];
 // 2026 playoff-ish field, passed explicitly so the test doesn't depend on who has clinched today.
 const TEAM_IDS = [139, 147, 111, 114, 117, 145, 144, 158, 119, 143, 112, 135];
 
@@ -60,11 +61,13 @@ async function bestAvailable(): Promise<number> {
 
 beforeAll(async () => {
   for (const m of MANAGERS) clients.set(m, await signIn(m));
-  const { data: teams } = await admin.from('fantasy_teams').select('id, manager_name').eq('season_id', SEASON_ID);
-  for (const t of teams!) {
-    teamIdByManager.set(t.manager_name, t.id);
-    managerByTeamId.set(t.id, t.manager_name);
-  }
+  // Manager i claims spot i + 1.
+  const { data: spots } = await admin.from('fantasy_teams').select('id').eq('season_id', SEASON_ID).order('slot');
+  expect(spots).toHaveLength(MANAGERS.length);
+  MANAGERS.forEach((m, i) => {
+    teamIdByManager.set(m, spots![i].id);
+    managerByTeamId.set(spots![i].id, m);
+  });
   const { data: draft } = await admin.from('drafts').select('id').eq('season_id', SEASON_ID).eq('number', 1).single();
   draftId = draft!.id;
 });
@@ -75,13 +78,45 @@ describe('season setup', () => {
     expect(data!.map((p) => p.display_name)).toContain('Kyle');
   });
 
-  it('lets each manager claim exactly one team', async () => {
-    for (const m of MANAGERS) {
-      const { error } = await clients.get(m)!.rpc('claim_team', { p_team_id: teamIdByManager.get(m) });
+  it('makes the first manager to claim a spot the commissioner', async () => {
+    const { error } = await clients.get('Daniel')!.rpc('claim_team', { p_team_id: teamIdByManager.get('Daniel'), p_name: 'Daniel Bags' });
+    expect(error).toBeNull();
+    const { data } = await admin.from('league_members').select('role, user_id');
+    expect(data).toHaveLength(1);
+    expect(data![0].role).toBe('commissioner');
+  });
+
+  it('rejects a team name that is taken (ignoring case), empty or too long', async () => {
+    const kyle = clients.get('Kyle')!;
+    const spot = teamIdByManager.get('Kyle');
+    expect((await kyle.rpc('claim_team', { p_team_id: spot, p_name: '  daniel   BAGS ' })).error?.message).toMatch(/taken/);
+    expect((await kyle.rpc('claim_team', { p_team_id: spot, p_name: '   ' })).error?.message).toMatch(/Enter a team name/);
+    expect((await kyle.rpc('claim_team', { p_team_id: spot, p_name: 'x'.repeat(31) })).error?.message).toMatch(/30 characters/);
+  });
+
+  it('lets each manager claim exactly one spot and name it', async () => {
+    for (const m of MANAGERS.slice(1)) {
+      const { error } = await clients.get(m)!.rpc('claim_team', { p_team_id: teamIdByManager.get(m), p_name: `  ${m}   Bags ` });
       expect(error).toBeNull();
     }
-    const { error } = await clients.get('Kyle')!.rpc('claim_team', { p_team_id: teamIdByManager.get('Alex') });
+    const { data: kyle } = await admin.from('fantasy_teams').select('name').eq('id', teamIdByManager.get('Kyle')).single();
+    expect(kyle!.name).toBe('Kyle Bags');
+    const { error } = await clients.get('Kyle')!.rpc('claim_team', { p_team_id: teamIdByManager.get('Alex'), p_name: 'Two Teams' });
     expect(error?.message).toMatch(/already/);
+    const { data: members } = await admin.from('league_members').select('role');
+    expect(members!.filter((m) => m.role === 'commissioner')).toHaveLength(1);
+    expect(members).toHaveLength(MANAGERS.length);
+  });
+
+  it('lets managers rename their own team, and only the commissioner rename others', async () => {
+    const kyle = clients.get('Kyle')!;
+    expect((await kyle.rpc('rename_team', { p_team_id: teamIdByManager.get('Kyle'), p_name: 'Big Bags' })).error).toBeNull();
+    expect((await kyle.rpc('rename_team', { p_team_id: teamIdByManager.get('Alex'), p_name: 'Hacked' })).error?.message).toMatch(
+      /your own team/,
+    );
+    expect((await kyle.rpc('rename_team', { p_team_id: teamIdByManager.get('Kyle'), p_name: 'Alex Bags' })).error?.message).toMatch(/taken/);
+    const daniel = clients.get('Daniel')!;
+    expect((await daniel.rpc('rename_team', { p_team_id: teamIdByManager.get('Kyle'), p_name: 'Kyle Bags' })).error).toBeNull();
   });
 
   it('only lets the commissioner sync the pool', async () => {

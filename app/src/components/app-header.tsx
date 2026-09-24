@@ -14,6 +14,7 @@ import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { signOut, useAuth } from '@/lib/auth';
 import { useSeason } from '@/lib/season';
+import { teamName } from '@/lib/teams';
 import { appEnv } from '@/lib/supabase';
 
 /** True under the app header, which already handles the top safe area. */
@@ -143,7 +144,7 @@ function EnvBadge() {
 function AccountButton() {
   const theme = useTheme();
   const { session } = useAuth();
-  const { data } = useSeason();
+  const { data, requestedYear } = useSeason();
   const [imageFailed, setImageFailed] = useState(false);
   const user = session?.user;
   const meta = user?.user_metadata ?? {};
@@ -176,9 +177,15 @@ function AccountButton() {
       </DropdownMenu.Trigger>
       <DropdownMenu.Content className="menu-content" align="end" sideOffset={6} collisionPadding={8}>
         <DropdownMenu.Label className="menu-label">
-          {[fullName, user?.email, data?.myTeam && `Manager: ${data.myTeam.manager_name}`].filter(Boolean).join('\n')}
+          {[fullName, user?.email, data?.myTeam && `Team: ${teamName(data.myTeam)}`].filter(Boolean).join('\n')}
         </DropdownMenu.Label>
         <DropdownMenu.Separator className="menu-separator" />
+        <DropdownMenu.Item
+          key="settings"
+          className="menu-item"
+          onSelect={() => router.push(requestedYear ? { pathname: '/settings', params: { year: requestedYear } } : '/settings')}>
+          <DropdownMenu.ItemTitle>Settings</DropdownMenu.ItemTitle>
+        </DropdownMenu.Item>
         <DropdownMenu.Item
           key="sign-out"
           className="menu-item menu-item-danger"

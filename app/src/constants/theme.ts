@@ -20,6 +20,12 @@ export const Colors = {
     highlight: '#FDECEC',
     danger: '#C8102E',
     success: '#1A7F37',
+    /** Light accent-blue fill for list cards, and a stronger one for badges on them. */
+    tint: '#E9EFFB',
+    tintHover: '#DDE7F9',
+    tintStrong: '#D2DDF3',
+    /** Raised-tile look for tinted cards: a light top edge and a shaded bottom edge. */
+    bevel: 'inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -2px 0 rgba(11, 61, 145, 0.10)',
   },
   dark: {
     text: '#ffffff',
@@ -33,6 +39,10 @@ export const Colors = {
     highlight: '#3A1A1E',
     danger: '#FF6B6B',
     success: '#4ADE80',
+    tint: '#16213A',
+    tintHover: '#1D2A49',
+    tintStrong: '#223257',
+    bevel: 'inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -2px 0 rgba(0, 0, 0, 0.45)',
   },
 } as const;
 

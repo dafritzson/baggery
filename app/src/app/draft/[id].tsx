@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
@@ -16,8 +17,9 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
-import { formatLockTime, playerLine, playerName } from '@/lib/format';
-import { type Draft, type SeasonData, coreActions, currentRosters, useSeason } from '@/lib/season';
+import { formatLockTime, mlbTeamAbbr, playerLine, playerName } from '@/lib/format';
+import { type Draft, type DraftActionRow, type SeasonData, coreActions, currentRosters, useSeason } from '@/lib/season';
+import { ownerName, teamLabel, teamName } from '@/lib/teams';
 import { callFunction } from '@/lib/supabase';
 
 type Tab = 'players' | 'board' | 'rosters';
@@ -118,7 +120,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
           side={
             <>
               {myTeam && <MyRoster data={data} teamId={myTeam.id} />}
-              <RecentPicks data={data} draft={draft} />
+              <RecentPicks data={data} draft={draft} config={config} />
               {autodraft && <Card>{autodraft}</Card>}
               {commissioner && <CommissionerCard data={data} draft={draft} run={run} actions={commissioner} />}
             </>
@@ -141,7 +143,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
         data={data}
         draft={draft}
         playerId={selected}
-        onBehalfOf={turn && !myTurn ? teamsById.get(turn.teamId)?.manager_name : undefined}
+        onBehalfOf={turn && !myTurn ? teamLabel(data, teamsById.get(turn.teamId)) : undefined}
         dropOptions={turn ? currentRosters(data).get(turn.teamId) ?? [] : []}
         onClose={() => setSelected(null)}
         onConfirm={async (dropPlayerId) => {
@@ -167,7 +169,7 @@ function clockStatus(data: SeasonData, draft: Draft, turn: Turn | null, myTurn: 
   const lastTeam = lastAction && data.teams.find((t) => t.id === lastAction.fantasy_team_id);
   const last =
     lastAction && lastTeam
-      ? `${lastTeam.manager_name} ${
+      ? `${teamName(lastTeam)} ${
           lastAction.type === 'yield'
             ? 'yielded'
             : `took ${playerLine(data, lastAction.add_player_id!)}${lastAction.drop_player_id ? `, dropped ${playerName(data, lastAction.drop_player_id)}` : ''}`
@@ -183,7 +185,7 @@ function clockStatus(data: SeasonData, draft: Draft, turn: Turn | null, myTurn: 
   }
   if (draft.status === 'complete' || !turn) return { headline: 'Draft complete', detail: null, last };
   return {
-    headline: myTurn ? "You're on the clock!" : `${team?.manager_name} is on the clock`,
+    headline: myTurn ? "You're on the clock!" : `${teamLabel(data, team)} is on the clock`,
     detail: `Round ${turn.round} · Pick ${(turn.slot % draft.pick_order.length) + 1} · #${actionCount + 1} overall`,
     last,
   };
@@ -365,13 +367,16 @@ function Board({ data, draft, config }: { data: SeasonData; draft: Draft; config
     <ScrollView horizontal>
       <View>
         <View style={styles.boardRow}>
-          {draft.pick_order.map((teamId) => (
-            <View key={teamId} style={styles.boardCell}>
-              <ThemedText type="smallBold" numberOfLines={1}>
-                {data.teams.find((t) => t.id === teamId)?.manager_name}
-              </ThemedText>
-            </View>
-          ))}
+          {draft.pick_order.map((teamId) => {
+            const team = data.teams.find((t) => t.id === teamId);
+            const owner = team && ownerName(data, team);
+            return (
+              <View key={teamId} style={styles.boardCell}>
+                <ThemedText type="smallBold" numberOfLines={1}>{team ? teamName(team) : '—'}</ThemedText>
+                {owner && <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>{owner}</ThemedText>}
+              </View>
+            );
+          })}
         </View>
         {Array.from({ length: draft.rounds }, (_, round) => (
           <View key={round} style={styles.boardRow}>
@@ -385,7 +390,7 @@ function Board({ data, draft, config }: { data: SeasonData; draft: Draft; config
                   key={teamId}
                   type="backgroundElement"
                   style={[styles.boardCell, styles.boardPick, isCurrent && { borderColor: theme.danger, borderWidth: 2 }]}>
-                  <ThemedText type="small" themeColor="textSecondary">{round + 1}.{col + 1}</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">{pickLabel(slot, n)}</ThemedText>
                   <ThemedText type="small" numberOfLines={2}>
                     {action ? (action.type === 'yield' ? 'Yielded' : playerName(data, action.addPlayerId)) : isCurrent ? 'On the clock' : ''}
                   </ThemedText>
@@ -415,24 +420,107 @@ function MyRoster({ data, teamId }: { data: SeasonData; teamId: string }) {
   );
 }
 
-/** Sidebar: the latest picks in this draft, newest first. */
-function RecentPicks({ data, draft }: { data: SeasonData; draft: Draft }) {
-  const actions = data.actions.filter((a) => a.draft_id === draft.id);
-  const recent = actions.slice(-8).reverse();
+/** "2.6": round 2, sixth pick of the round, for a snake slot (0-based). */
+function pickLabel(slot: number, teams: number): string {
+  return `${Math.floor(slot / teams) + 1}.${(slot % teams) + 1}`;
+}
+
+/** Sidebar: every pick in this draft, newest first, in a panel that scrolls back to the first pick. */
+function RecentPicks({ data, draft, config }: { data: SeasonData; draft: Draft; config: DraftConfig }) {
+  const theme = useTheme();
+  const [atEnd, setAtEnd] = useState(false);
+  const [contentHeight, setContentHeight] = useState(0);
+  const [viewHeight, setViewHeight] = useState(0);
+  const actions = coreActions(data.actions, draft.id);
+  const rows = data.actions.filter((a) => a.draft_id === draft.id);
+  // Replay the draft to find each action's snake slot (redraft yields skip slots).
+  const slots = actions.map((_, i) => nextTurn(config, actions.slice(0, i))?.slot ?? i);
+  const picks = rows.map((a, i) => ({ a, slot: slots[i] })).reverse();
   return (
-    <Card title="Recent picks">
-      {recent.length === 0 && <ThemedText type="small" themeColor="textSecondary">No picks yet</ThemedText>}
-      {recent.map((a) => (
-        <View key={a.action_number} style={styles.sideRow}>
-          <ThemedText type="small" themeColor="textSecondary" style={styles.pickNumber}>#{a.action_number + 1}</ThemedText>
-          <ThemedText type="small" numberOfLines={1} style={{ flex: 1 }}>
-            <ThemedText type="smallBold">{data.teams.find((t) => t.id === a.fantasy_team_id)?.manager_name}</ThemedText>{' '}
-            {a.type === 'yield' ? 'yielded' : playerName(data, a.add_player_id!)}
-            {a.is_auto ? ' (auto)' : ''}
+    <ThemedView type="backgroundElement" style={styles.picksPanel}>
+      <ThemedText type="smallBold" themeColor="textSecondary" style={styles.picksTitle}>
+        Picks{picks.length ? ` · ${picks.length}` : ''}
+      </ThemedText>
+      {picks.length === 0 ? (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.picksEmpty}>No picks yet</ThemedText>
+      ) : (
+        <View>
+          <ScrollView
+            style={[styles.picksList, { borderTopColor: theme.border }]}
+            nestedScrollEnabled
+            scrollEventThrottle={32}
+            onScroll={(e) => {
+              const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+              setAtEnd(contentOffset.y + layoutMeasurement.height >= contentSize.height - 4);
+            }}
+            onContentSizeChange={(_, h) => setContentHeight(h)}
+            onLayout={(e) => setViewHeight(e.nativeEvent.layout.height)}>
+            {picks.map(({ a, slot }) => (
+              <PickCard
+                key={a.action_number}
+                data={data}
+                action={a}
+                label={pickLabel(slot, draft.pick_order.length)}
+              />
+            ))}
+          </ScrollView>
+          {/* Fades the last visible card into the panel while there are older picks below. */}
+          {contentHeight > viewHeight + 4 && !atEnd && (
+            <LinearGradient
+              colors={[`${theme.backgroundElement}00`, theme.backgroundElement]}
+              style={styles.picksFade}
+            />
+          )}
+        </View>
+      )}
+    </ThemedView>
+  );
+}
+
+/** One pick: the player up top, then who took them. Tapping will open the player's stats. */
+function PickCard({
+  data,
+  action,
+  label,
+}: {
+  data: SeasonData;
+  action: DraftActionRow;
+  label: string;
+}) {
+  const theme = useTheme();
+  const [hovered, setHovered] = useState(false);
+  const team = data.teams.find((t) => t.id === action.fantasy_team_id);
+  const owner = team && ownerName(data, team);
+  const playerId = action.type === 'pick' ? action.add_player_id! : null;
+  const player = playerId !== null ? data.players.get(playerId) : undefined;
+  const tb = playerId !== null ? data.poolByPlayer.get(playerId)?.regular_season_tb : undefined;
+  const details = [player?.primary_position, playerId !== null && mlbTeamAbbr(data, playerId), tb !== undefined && `${tb} TB`]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    // A Pressable so a tap can open the player's stats later; for now it only shows hover.
+    <Pressable
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      style={[styles.pickCard, { backgroundColor: hovered ? theme.tintHover : theme.tint, boxShadow: theme.bevel }]}>
+      <View style={styles.pickCardTop}>
+        <ThemedText type="smallBold" numberOfLines={1} style={styles.pickPlayer}>
+          {playerId !== null ? playerName(data, playerId) : 'Yielded'}
+        </ThemedText>
+        <View style={[styles.pickBadge, { backgroundColor: theme.tintStrong }]}>
+          <ThemedText type="smallBold" themeColor="textSecondary" style={styles.pickBadgeText}>
+            {label}
+            {action.is_auto ? ' · auto' : ''}
           </ThemedText>
         </View>
-      ))}
-    </Card>
+      </View>
+      {details !== '' && <ThemedText type="small" themeColor="textSecondary" style={styles.pickLine}>{details}</ThemedText>}
+      <ThemedText type="small" numberOfLines={1} style={styles.pickTeam}>
+        {team ? teamName(team) : '—'}
+        {owner && <ThemedText type="small" themeColor="textSecondary" style={styles.pickOwner}> · {owner}</ThemedText>}
+      </ThemedText>
+    </Pressable>
   );
 }
 
@@ -445,7 +533,7 @@ function Rosters({ data, draft }: { data: SeasonData; draft: Draft }) {
         const team = data.teams.find((t) => t.id === teamId);
         const roster = rosters.get(teamId) ?? [];
         return (
-          <Card key={teamId} title={`${team?.manager_name}${team?.id === data.myTeam?.id ? ' (you)' : ''} · ${roster.length}/4`}>
+          <Card key={teamId} title={`${teamLabel(data, team)}${team?.id === data.myTeam?.id ? ' · you' : ''} · ${roster.length}/4`}>
             {roster.length === 0 && <ThemedText type="small" themeColor="textSecondary">No players yet</ThemedText>}
             {roster.map((id) => (
               <ThemedText key={id} type="small">{playerLine(data, id)}</ThemedText>
@@ -550,7 +638,7 @@ function useCommissionerActions(
 
   return {
     canStart: draft.status === 'scheduled',
-    autopickFor: onClock?.manager_name ?? null,
+    autopickFor: onClock ? teamName(onClock) : null,
     canUndo: data.actions.some((a) => a.draft_id === draft.id),
     busy,
     confirm: setConfirming,
@@ -583,7 +671,7 @@ function AutodraftSettings({ data, run }: { data: SeasonData; run: (body: object
     <>
       {data.teams.map((t) => (
         <View key={t.id} style={styles.switchRow}>
-          <ThemedText type="small" style={{ flex: 1 }}>{t.manager_name}</ThemedText>
+          <ThemedText type="small" style={{ flex: 1 }}>{teamLabel(data, t)}</ThemedText>
           <AutodraftSwitch
             value={t.autodraft}
             onChange={(v) => run({ action: 'set-autodraft', teamId: t.id, autodraft: v })}
@@ -741,5 +829,18 @@ const styles = StyleSheet.create({
   dropRow: { borderWidth: 2, borderRadius: Spacing.two, padding: Spacing.two },
   buttonRow: { flexDirection: 'row', gap: Spacing.two },
   sideRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  pickNumber: { minWidth: 28, fontVariant: ['tabular-nums'] },
+  picksPanel: { borderRadius: Spacing.three, overflow: 'hidden' },
+  picksTitle: { textTransform: 'uppercase', letterSpacing: 0.5, padding: Spacing.three, paddingBottom: Spacing.two },
+  picksEmpty: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.three },
+  // About 6 picks tall; scroll for the rest.
+  picksList: { maxHeight: 340, borderTopWidth: StyleSheet.hairlineWidth },
+  picksFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 48, pointerEvents: 'none' },
+  pickCard: { paddingVertical: Spacing.two, paddingHorizontal: Spacing.three },
+  pickCardTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  pickPlayer: { flex: 1, fontSize: 15, lineHeight: 19 },
+  pickLine: { fontSize: 13, lineHeight: 17 },
+  pickBadge: { paddingHorizontal: Spacing.one + 2 },
+  pickBadgeText: { fontSize: 11, lineHeight: 16, fontVariant: ['tabular-nums'] },
+  pickTeam: { fontSize: 13, lineHeight: 17 },
+  pickOwner: { fontSize: 13, lineHeight: 17, fontStyle: 'italic' },
 });
