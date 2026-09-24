@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
@@ -427,6 +428,9 @@ function pickLabel(slot: number, teams: number): string {
 /** Sidebar: every pick in this draft, newest first, in a panel that scrolls back to the first pick. */
 function RecentPicks({ data, draft, config }: { data: SeasonData; draft: Draft; config: DraftConfig }) {
   const theme = useTheme();
+  const [atEnd, setAtEnd] = useState(false);
+  const [contentHeight, setContentHeight] = useState(0);
+  const [viewHeight, setViewHeight] = useState(0);
   const actions = coreActions(data.actions, draft.id);
   const rows = data.actions.filter((a) => a.draft_id === draft.id);
   // Replay the draft to find each action's snake slot (redraft yields skip slots).
@@ -440,16 +444,34 @@ function RecentPicks({ data, draft, config }: { data: SeasonData; draft: Draft; 
       {picks.length === 0 ? (
         <ThemedText type="small" themeColor="textSecondary" style={styles.picksEmpty}>No picks yet</ThemedText>
       ) : (
-        <ScrollView style={[styles.picksList, { borderTopColor: theme.border }]} nestedScrollEnabled>
-          {picks.map(({ a, slot }) => (
-            <PickCard
-              key={a.action_number}
-              data={data}
-              action={a}
-              label={pickLabel(slot, draft.pick_order.length)}
+        <View>
+          <ScrollView
+            style={[styles.picksList, { borderTopColor: theme.border }]}
+            nestedScrollEnabled
+            scrollEventThrottle={32}
+            onScroll={(e) => {
+              const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+              setAtEnd(contentOffset.y + layoutMeasurement.height >= contentSize.height - 4);
+            }}
+            onContentSizeChange={(_, h) => setContentHeight(h)}
+            onLayout={(e) => setViewHeight(e.nativeEvent.layout.height)}>
+            {picks.map(({ a, slot }) => (
+              <PickCard
+                key={a.action_number}
+                data={data}
+                action={a}
+                label={pickLabel(slot, draft.pick_order.length)}
+              />
+            ))}
+          </ScrollView>
+          {/* Fades the last visible card into the panel while there are older picks below. */}
+          {contentHeight > viewHeight + 4 && !atEnd && (
+            <LinearGradient
+              colors={[`${theme.backgroundElement}00`, theme.backgroundElement]}
+              style={styles.picksFade}
             />
-          ))}
-        </ScrollView>
+          )}
+        </View>
       )}
     </ThemedView>
   );
@@ -812,6 +834,7 @@ const styles = StyleSheet.create({
   picksEmpty: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.three },
   // About 6 picks tall; scroll for the rest.
   picksList: { maxHeight: 340, borderTopWidth: StyleSheet.hairlineWidth },
+  picksFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 48, pointerEvents: 'none' },
   pickCard: { paddingVertical: Spacing.two, paddingHorizontal: Spacing.three },
   pickCardTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   pickPlayer: { flex: 1, fontSize: 15, lineHeight: 19 },
