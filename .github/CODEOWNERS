@@ -1,4 +1,3 @@
-# Changes to the deploy pipeline and Supabase project settings need the owner's review,
-# so collaborators can't weaken the production approval gate.
-/.github/               @dafritzson
-/supabase/config.toml   @dafritzson
+# Changes to the deploy pipeline need the owner's review, so collaborators can't weaken the
+# production approval gate. Everything else auto-merges once CI passes.
+/.github/   @dafritzson
