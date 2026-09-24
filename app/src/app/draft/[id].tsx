@@ -439,15 +439,36 @@ function RecentPicks({ data, draft, config }: { data: SeasonData; draft: Draft; 
           <ThemedText type="small" themeColor="textSecondary">No picks yet</ThemedText>
         </Card>
       )}
-      {recent.map(({ a, slot }) => (
-        <PickCard key={a.action_number} data={data} action={a} label={pickLabel(slot, draft.pick_order.length)} />
-      ))}
+      {recent.length > 0 && (
+        // One block of square cards, touching, with a hairline between them.
+        <View>
+          {recent.map(({ a, slot }, i) => (
+            <PickCard
+              key={a.action_number}
+              data={data}
+              action={a}
+              label={pickLabel(slot, draft.pick_order.length)}
+              first={i === 0}
+            />
+          ))}
+        </View>
+      )}
     </View>
   );
 }
 
 /** One pick: the player up top, then who took them. Tapping will open the player's stats. */
-function PickCard({ data, action, label }: { data: SeasonData; action: DraftActionRow; label: string }) {
+function PickCard({
+  data,
+  action,
+  label,
+  first,
+}: {
+  data: SeasonData;
+  action: DraftActionRow;
+  label: string;
+  first: boolean;
+}) {
   const theme = useTheme();
   const team = data.teams.find((t) => t.id === action.fantasy_team_id);
   const owner = team && ownerName(data, team);
@@ -459,7 +480,9 @@ function PickCard({ data, action, label }: { data: SeasonData; action: DraftActi
     .join(' · ');
 
   return (
-    <ThemedView type="backgroundElement" style={styles.pickCard}>
+    <ThemedView
+      type="backgroundElement"
+      style={[styles.pickCard, !first && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border }]}>
       <View style={styles.pickCardTop}>
         <ThemedText type="smallBold" numberOfLines={1} style={styles.pickPlayer}>
           {playerId !== null ? playerName(data, playerId) : 'Yielded'}
@@ -786,10 +809,10 @@ const styles = StyleSheet.create({
   buttonRow: { flexDirection: 'row', gap: Spacing.two },
   sideRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   sectionTitle: { textTransform: 'uppercase', letterSpacing: 0.5, paddingHorizontal: Spacing.one },
-  pickCard: { borderRadius: Spacing.three, paddingVertical: Spacing.two + 2, paddingHorizontal: Spacing.three, gap: Spacing.half },
+  pickCard: { paddingVertical: Spacing.two + 2, paddingHorizontal: Spacing.three, gap: Spacing.half },
   pickCardTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   pickPlayer: { flex: 1, fontSize: 16, lineHeight: 22 },
-  pickBadge: { borderRadius: Spacing.two, paddingHorizontal: Spacing.two, paddingVertical: 1 },
+  pickBadge: { paddingHorizontal: Spacing.two, paddingVertical: 1 },
   pickBadgeText: { fontSize: 12, lineHeight: 18, fontVariant: ['tabular-nums'] },
   pickTeam: { marginTop: Spacing.half },
   pickOwner: { fontStyle: 'italic' },
