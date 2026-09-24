@@ -441,13 +441,12 @@ function RecentPicks({ data, draft, config }: { data: SeasonData; draft: Draft; 
         <ThemedText type="small" themeColor="textSecondary" style={styles.picksEmpty}>No picks yet</ThemedText>
       ) : (
         <ScrollView style={[styles.picksList, { borderTopColor: theme.border }]} nestedScrollEnabled>
-          {picks.map(({ a, slot }, i) => (
+          {picks.map(({ a, slot }) => (
             <PickCard
               key={a.action_number}
               data={data}
               action={a}
               label={pickLabel(slot, draft.pick_order.length)}
-              first={i === 0}
             />
           ))}
         </ScrollView>
@@ -461,14 +460,13 @@ function PickCard({
   data,
   action,
   label,
-  first,
 }: {
   data: SeasonData;
   action: DraftActionRow;
   label: string;
-  first: boolean;
 }) {
   const theme = useTheme();
+  const [hovered, setHovered] = useState(false);
   const team = data.teams.find((t) => t.id === action.fantasy_team_id);
   const owner = team && ownerName(data, team);
   const playerId = action.type === 'pick' ? action.add_player_id! : null;
@@ -479,12 +477,11 @@ function PickCard({
     .join(' · ');
 
   return (
-    <View
-      style={[
-        styles.pickCard,
-        { backgroundColor: theme.tint },
-        !first && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border },
-      ]}>
+    // A Pressable so a tap can open the player's stats later; for now it only shows hover.
+    <Pressable
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      style={[styles.pickCard, { backgroundColor: hovered ? theme.tintHover : theme.tint, boxShadow: theme.bevel }]}>
       <View style={styles.pickCardTop}>
         <ThemedText type="smallBold" numberOfLines={1} style={styles.pickPlayer}>
           {playerId !== null ? playerName(data, playerId) : 'Yielded'}
@@ -501,7 +498,7 @@ function PickCard({
         {team ? teamName(team) : '—'}
         {owner && <ThemedText type="small" themeColor="textSecondary" style={styles.pickOwner}> · {owner}</ThemedText>}
       </ThemedText>
-    </View>
+    </Pressable>
   );
 }
 
