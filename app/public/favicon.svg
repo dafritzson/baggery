@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28">
+  <!-- The home plate from the app header (components/app-header.tsx), centered in a square. -->
+  <defs>
+    <linearGradient id="plate-top" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#ffffff" />
+      <stop offset="1" stop-color="#dfe2e7" />
+    </linearGradient>
+  </defs>
+  <g transform="translate(0 1.75)" stroke="#3a3d42" stroke-width="0.75" stroke-linejoin="round">
+    <ellipse cx="14" cy="21" rx="11.5" ry="2.2" fill="#000000" opacity="0.16" stroke="none" />
+    <path d="M4 10 L14 17 L14 19.5 L4 12.5 Z" fill="#b8bcc3" />
+    <path d="M24 10 L14 17 L14 19.5 L24 12.5 Z" fill="#9da2aa" />
+    <path d="M4 3 H24 V10 L14 17 L4 10 Z" fill="url(#plate-top)" />
+  </g>
+</svg>
