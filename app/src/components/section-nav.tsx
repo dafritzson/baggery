@@ -1,12 +1,15 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { type Href, router, usePathname } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
+import { liquidBackdrop } from '@/lib/liquid-lens';
 import { useSeason } from '@/lib/season';
 
 interface Section {
@@ -84,13 +87,38 @@ export function HeaderTabs() {
 export const BOTTOM_TAB_BAR_SPACE = 96;
 
 /**
- * Phone: a floating bar of section buttons (icon and label) over the bottom of the screen.
- * Content scrolls behind it, blurred through the bar's frosted glass.
+ * Phone: a floating "liquid glass" pill of section buttons (icon and label) over the bottom of the
+ * screen. Content scrolls behind it: clear, saturated glass with a bright rim and a sheen, and in
+ * Chromium a lens that bends what's behind the edges. The selected tab is a glass bubble that
+ * springs over to whichever tab you pick.
  */
 export function BottomTabBar() {
   const theme = useTheme();
   const dark = useColorScheme() === 'dark';
   const { sections, active, go } = useSections();
+  // Where each tab sits in the bar, for the bubble to slide to.
+  const [frames, setFrames] = useState<Record<string, { x: number; width: number }>>({});
+  const [bubbleX] = useState(() => new Animated.Value(0));
+  const [bubbleWidth] = useState(() => new Animated.Value(0));
+  const placed = useRef(false);
+  const target = active && frames[active.label];
+
+  useEffect(() => {
+    if (!target) return;
+    if (!placed.current) {
+      // First time: put it straight there rather than sliding in from the left.
+      bubbleX.setValue(target.x);
+      bubbleWidth.setValue(target.width);
+      placed.current = true;
+      return;
+    }
+    const spring = { speed: 14, bounciness: 7, useNativeDriver: false };
+    Animated.parallel([
+      Animated.spring(bubbleX, { toValue: target.x, ...spring }),
+      Animated.spring(bubbleWidth, { toValue: target.width, ...spring }),
+    ]).start();
+  }, [target, bubbleX, bubbleWidth]);
+
   if (!sections.length) return null;
   return (
     <SafeAreaView edges={['bottom', 'left', 'right']} style={styles.bottomBar} pointerEvents="box-none">
@@ -98,15 +126,30 @@ export function BottomTabBar() {
         accessibilityRole="tablist"
         style={[
           styles.bottomPill,
-          {
-            backgroundColor: dark ? 'rgba(28, 29, 32, 0.62)' : 'rgba(255, 255, 255, 0.62)',
-            borderColor: dark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
-            boxShadow: dark
-              ? '0 8px 24px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08)'
-              : '0 8px 24px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.8)',
-          },
+          { backgroundColor: dark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(255, 255, 255, 0.18)', boxShadow: dark ? GLASS_RIM_DARK : GLASS_RIM },
           glass,
         ]}>
+        {/* Light across the top of the glass. */}
+        <LinearGradient
+          colors={dark ? ['rgba(255, 255, 255, 0.14)', 'rgba(255, 255, 255, 0)'] : ['rgba(255, 255, 255, 0.55)', 'rgba(255, 255, 255, 0)']}
+          locations={[0, 0.6]}
+          style={[StyleSheet.absoluteFill, styles.round]}
+          pointerEvents="none"
+        />
+        {target && (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.bubble,
+              {
+                left: bubbleX,
+                width: bubbleWidth,
+                backgroundColor: dark ? 'rgba(255, 255, 255, 0.13)' : 'rgba(255, 255, 255, 0.55)',
+                boxShadow: dark ? BUBBLE_RIM_DARK : BUBBLE_RIM,
+              },
+            ]}
+          />
+        )}
         {sections.map((s) => {
           const selected = s === active;
           const color = selected ? theme.accent : theme.textSecondary;
@@ -117,7 +160,11 @@ export function BottomTabBar() {
               accessibilityState={{ selected }}
               accessibilityLabel={s.label}
               onPress={() => go(s)}
-              style={[styles.bottomTab, selected && { backgroundColor: dark ? 'rgba(91, 141, 239, 0.18)' : 'rgba(11, 61, 145, 0.10)' }]}>
+              onLayout={(e) => {
+                const { x, width } = e.nativeEvent.layout;
+                setFrames((f) => (f[s.label]?.x === x && f[s.label]?.width === width ? f : { ...f, [s.label]: { x, width } }));
+              }}
+              style={styles.bottomTab}>
               <SymbolView name={s.icon} size={22} tintColor={color} />
               <ThemedText type="smallBold" style={[styles.bottomLabel, { color }]}>{s.label}</ThemedText>
             </Pressable>
@@ -128,8 +175,18 @@ export function BottomTabBar() {
   );
 }
 
-// Frosted glass on web (react-native-web passes backdrop-filter through, with the -webkit- prefix).
-const glass = Platform.OS === 'web' ? ({ backdropFilter: 'blur(20px) saturate(180%)' } as object) : null;
+// A bright rim (brighter at the top, where the light hits) and a soft drop shadow.
+const GLASS_RIM =
+  'inset 0 1px 0.5px rgba(255, 255, 255, 0.95), inset 0 -1px 0.5px rgba(255, 255, 255, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.55), 0 10px 30px rgba(16, 24, 40, 0.18)';
+const GLASS_RIM_DARK =
+  'inset 0 1px 0.5px rgba(255, 255, 255, 0.35), inset 0 -1px 0.5px rgba(255, 255, 255, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 10px 30px rgba(0, 0, 0, 0.55)';
+const BUBBLE_RIM = 'inset 0 1px 0 rgba(255, 255, 255, 1), inset 0 0 0 1px rgba(255, 255, 255, 0.8), 0 2px 8px rgba(16, 24, 40, 0.12)';
+const BUBBLE_RIM_DARK = 'inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.12)';
+
+// Web: clear glass that blurs a little and brings out the colors behind it. In Chromium the lens
+// bends what's behind the rim, so the blur stays light enough to see it (react-native-web passes
+// backdrop-filter through, with the -webkit- prefix).
+const glass = Platform.OS === 'web' ? ({ backdropFilter: liquidBackdrop('blur(3px) saturate(220%) brightness(1.06)', 'blur(8px) saturate(220%) brightness(1.06)') } as object) : null;
 
 const styles = StyleSheet.create({
   headerTabs: { flexDirection: 'row', alignSelf: 'stretch', gap: Spacing.three, marginLeft: Spacing.three },
@@ -138,17 +195,18 @@ const styles = StyleSheet.create({
   bottomPill: {
     flexDirection: 'row',
     gap: Spacing.one,
-    padding: Spacing.one,
-    borderRadius: Radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
+    padding: 5,
+    borderRadius: 999,
   },
+  round: { borderRadius: 999 },
+  bubble: { position: 'absolute', top: 5, bottom: 5, borderRadius: 999 },
   bottomTab: {
     alignItems: 'center',
     gap: Spacing.half,
     minWidth: 76,
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
-    borderRadius: Radius.md,
+    borderRadius: 999,
   },
   bottomLabel: { fontSize: 11, lineHeight: 14 },
 });
