@@ -139,7 +139,10 @@ export function PlayerTable({
    * scrollbars are always in view. Size the box with `style` (a max height, or flex in a parent).
    */
   contained?: boolean;
-  /** At the right end of the Name header, e.g. the column picker. */
+  /**
+   * At the left end of the Name header, e.g. the column picker; on the left so it stays put however
+   * wide the name column gets.
+   */
   headerAction?: ReactNode;
   style?: ViewStyle;
 }) {
@@ -228,12 +231,12 @@ export function PlayerTable({
       onLayout={(e) => setTableWidth(e.nativeEvent.layout.width)}>
       <View style={[styles.nameColumn, nameColumnWidth, { borderRightColor: theme.border }, box && [sticky({ left: 0 }, 2), fill]]}>
         <View style={[styles.header, styles.nameHeader, { borderBottomColor: theme.border }, box && [sticky({ top: 0 }, 3), fill]]}>
-          <Pressable onPress={() => sortBy('name')} style={[styles.nameCell, styles.nameSort]}>
+          {headerAction}
+          <Pressable onPress={() => sortBy('name')} style={[styles.nameCell, styles.nameSort, !!headerAction && styles.nameSortAfterAction]}>
             <ThemedText type="smallBold" themeColor={sort.key === 'name' ? 'text' : 'textSecondary'} style={styles.headerText}>
               Name{arrow('name')}
             </ThemedText>
           </Pressable>
-          {headerAction}
         </View>
         {sorted.map((r, i) => (
           <Pressable key={r.id} {...rowPress(r.id)} style={[rowStyle(r.id, i), styles.nameCell, styles.nameRow]}>
@@ -262,8 +265,9 @@ const styles = StyleSheet.create({
   header: { height: ROW_HEIGHT, borderBottomWidth: StyleSheet.hairlineWidth },
   row: { height: ROW_HEIGHT },
   headerText: { fontSize: 13 },
-  nameHeader: { flexDirection: 'row', alignItems: 'center', paddingRight: Spacing.one },
+  nameHeader: { flexDirection: 'row', alignItems: 'center', paddingLeft: Spacing.one },
   nameSort: { flex: 1, alignSelf: 'stretch' },
+  nameSortAfterAction: { paddingLeft: Spacing.one },
   nameCell: { justifyContent: 'center', paddingHorizontal: Spacing.two + 2 },
   nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: Spacing.one },
   name: { flexShrink: 1 },
