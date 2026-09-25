@@ -26,3 +26,9 @@ export function playerLine(data: SeasonData, playerId: number): string {
 export function playerName(data: SeasonData, playerId: number): string {
   return data.players.get(playerId)?.full_name ?? `Player ${playerId}`;
 }
+
+/** "2026-09-20" → "9/20" */
+export function shortDate(date: string): string {
+  const [, m, d] = date.split('-');
+  return `${Number(m)}/${Number(d)}`;
+}

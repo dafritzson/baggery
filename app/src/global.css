@@ -51,6 +51,10 @@
 .menu-content-narrow {
   min-width: 140px;
 }
+/* Above react-native-web's Modal (z-index 9999), for menus inside the player popup. */
+.menu-content-over-modal {
+  z-index: 10000;
+}
 .menu-content[data-state='open'] {
   animation: menu-in 120ms ease-out;
 }
