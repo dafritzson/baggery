@@ -63,15 +63,20 @@ export default function GamesScreen() {
         <>
           <DayChips days={days} day={day} today={today} onChange={setPicked} />
           {wide ? (
-            // Two columns that fill the width; cards alternate between them in start order.
-            <View style={styles.gridWide}>
-              {[0, 1].map((col) => (
-                <View key={col} style={styles.column}>
-                  {games.filter((_, i) => i % 2 === col).map((g) => (
-                    <GameCard key={g.gamePk} data={data} scores={scores} game={g} />
-                  ))}
-                </View>
-              ))}
+            // Rows of two that fill the width; both cards in a row are as tall as the taller one.
+            <View style={styles.column}>
+              {games
+                .filter((_, i) => i % 2 === 0)
+                .map((g, row) => (
+                  <View key={g.gamePk} style={styles.row}>
+                    {games.slice(row * 2, row * 2 + 2).map((game) => (
+                      <View key={game.gamePk} style={styles.cell}>
+                        <GameCard data={data} scores={scores} game={game} fill />
+                      </View>
+                    ))}
+                    {row * 2 + 1 >= games.length && <View style={styles.cell} />}
+                  </View>
+                ))}
             </View>
           ) : (
             <View style={styles.column}>
@@ -229,13 +234,14 @@ function lineScore(line: BattingLine | undefined): string {
   return [`${line.h}-${line.ab}`, ...times(line.hr, 'HR'), ...times(line.triples, '3B'), ...times(line.doubles, '2B'), ...times(line.bb, 'BB')].join(' ');
 }
 
-function GameCard({ data, scores, game }: { data: SeasonData; scores: Scores; game: GameInfo }) {
-  if (game.status === 'Final') return <FinalCard data={data} scores={scores} game={game} />;
-  return <OpenCard data={data} scores={scores} game={game} />;
+/** `fill` stretches the card to the height of its row (desktop). */
+function GameCard({ data, scores, game, fill }: { data: SeasonData; scores: Scores; game: GameInfo; fill?: boolean }) {
+  if (game.status === 'Final') return <FinalCard data={data} scores={scores} game={game} fill={fill} />;
+  return <OpenCard data={data} scores={scores} game={game} fill={fill} />;
 }
 
 /** A finished game: the final score on one line, then how the baggers did. */
-function FinalCard({ data, scores, game }: { data: SeasonData; scores: Scores; game: GameInfo }) {
+function FinalCard({ data, scores, game, fill }: { data: SeasonData; scores: Scores; game: GameInfo; fill?: boolean }) {
   const theme = useTheme();
   const side = (which: 'away' | 'home') => {
     const teamId = which === 'away' ? game.awayTeamId : game.homeTeamId;
@@ -251,7 +257,7 @@ function FinalCard({ data, scores, game }: { data: SeasonData; scores: Scores; g
     );
   };
   return (
-    <Card>
+    <Card style={fill && styles.fill}>
       <View style={styles.cardHead}>
         <ThemedText type="small" themeColor="textSecondary">{seriesLabel(game)}</ThemedText>
         <ThemedText type="smallBold" themeColor="textSecondary">{statusLine(game)}</ThemedText>
@@ -270,14 +276,14 @@ function FinalCard({ data, scores, game }: { data: SeasonData; scores: Scores; g
  * A live game gets a spinning rainbow ring (global.css) so it stands out from the rest. Web only
  * for now; an iOS app would draw it natively.
  */
-function LiveGlow({ live, children }: { live: boolean; children: ReactNode }) {
+function LiveGlow({ live, fill, children }: { live: boolean; fill?: boolean; children: ReactNode }) {
   if (!live) return children;
   // dataSet isn't in React Native's types; react-native-web turns it into data-* attributes.
-  return <View {...({ dataSet: { liveGlow: '' } } as object)}>{children}</View>;
+  return <View style={fill && styles.fill} {...({ dataSet: { liveGlow: '' } } as object)}>{children}</View>;
 }
 
 /** A game that's on or still to come: who's up, the score, and the baggers so far. */
-function OpenCard({ data, scores, game }: { data: SeasonData; scores: Scores; game: GameInfo }) {
+function OpenCard({ data, scores, game, fill }: { data: SeasonData; scores: Scores; game: GameInfo; fill?: boolean }) {
   const theme = useTheme();
   const live = game.status === 'Live';
   // Who's on a fantasy roster now, for highlighting them in the due-up lines.
@@ -336,8 +342,8 @@ function OpenCard({ data, scores, game }: { data: SeasonData; scores: Scores; ga
   };
 
   return (
-    <LiveGlow live={live}>
-      <Card>
+    <LiveGlow live={live} fill={fill}>
+      <Card style={fill && styles.fill}>
         <View style={styles.cardHead}>
           <ThemedText type="small" themeColor="textSecondary">{seriesLabel(game)}</ThemedText>
           {live && game.live ? (
@@ -424,8 +430,10 @@ const styles = StyleSheet.create({
   chipRow: { flexGrow: 0 },
   chips: { gap: Spacing.one },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
-  gridWide: { flexDirection: 'row', gap: Spacing.three, alignItems: 'flex-start' },
-  column: { flex: 1, minWidth: 0, gap: Spacing.three },
+  column: { gap: Spacing.three },
+  row: { flexDirection: 'row', gap: Spacing.three },
+  cell: { flex: 1, minWidth: 0 },
+  fill: { flexGrow: 1 },
   finalScores: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   finalSide: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.two },
   finalAbbr: { fontSize: 17, lineHeight: 24, fontWeight: 600 },
