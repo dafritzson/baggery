@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type Counts,
   type PlayerGame,
+  SEASON_RATE_WARMUP,
   chartPoints,
   emptyCounts,
   formatRate,
@@ -80,5 +81,25 @@ describe('chart points', () => {
     expect(avg[1]).toBe(0);
     expect(avg[2]).toBeCloseTo(2 / 8);
     expect(chartPoints(games, 'slg', 1)[0].value).toBeCloseTo(5 / 4);
+  });
+
+  it('runs totals for counting stats', () => {
+    expect(chartPoints(games, 'tb', null, { total: true }).map((p) => p.value)).toEqual([0, 0, 5]);
+    expect(chartPoints(games, 'h', 2, { total: true }).map((p) => p.value)).toEqual([0, 2]);
+  });
+
+  it('leaves the first games off the season rate line, but counts them', () => {
+    // 15 games, newest first: 1-for-4 in each, except 4-for-4 on opening day.
+    const season = Array.from({ length: 15 }, (_, i) =>
+      game(`2026-04-${String(15 - i).padStart(2, '0')}`, { ab: 4, h: i === 14 ? 4 : 1 }),
+    );
+    const points = chartPoints(season, 'avg', null);
+    expect(points).toHaveLength(15 - SEASON_RATE_WARMUP);
+    expect(points[0].game.date).toBe('2026-04-11');
+    expect(points[0].value).toBeCloseTo(14 / 44);
+    expect(points.at(-1)!.value).toBeCloseTo(18 / 60);
+    // A last-N window keeps every game, and a short season isn't cut.
+    expect(chartPoints(season, 'avg', 15)).toHaveLength(15);
+    expect(chartPoints(season.slice(0, 8), 'avg', null)).toHaveLength(8);
   });
 });

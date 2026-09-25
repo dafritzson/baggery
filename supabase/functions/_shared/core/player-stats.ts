@@ -101,21 +101,37 @@ export function isRateStat(stat: ChartStat): stat is keyof Rates {
 
 export interface ChartPoint {
   game: PlayerGame;
-  /** The count in that game, or the rate over the games shown up to and including it (null before his first AB). */
+  /**
+   * The count in that game, his running total, or the rate over the games up to and including it
+   * (null before his first AB).
+   */
   value: number | null;
 }
 
+/** On the season chart, rates only start after this many games, so a 3-for-4 opener doesn't set the scale. */
+export const SEASON_RATE_WARMUP = 10;
+
 /**
  * Points for the latest `n` games (all of them when `n` is null), oldest first. Counting stats are
- * that game's number; rates are running totals from the first game shown, so the last point is the
- * rate over the whole stretch.
+ * that game's number, or with `total` the running total from the first game shown. Rates are running
+ * too, so the last point is the rate over the whole stretch; for the season they count from opening
+ * day but leave out the first SEASON_RATE_WARMUP games.
  */
-export function chartPoints(games: PlayerGame[], stat: ChartStat, n: number | null): ChartPoint[] {
+export function chartPoints(
+  games: PlayerGame[],
+  stat: ChartStat,
+  n: number | null,
+  { total = false }: { total?: boolean } = {},
+): ChartPoint[] {
   const shown = (n === null ? games : games.slice(0, n)).slice().reverse();
-  if (!isRateStat(stat)) return shown.map((game) => ({ game, value: game[stat] }));
-  let total = emptyCounts();
-  return shown.map((game) => {
-    total = sumCounts([total, game]);
-    return { game, value: rates(total)[stat] };
+  if (!isRateStat(stat)) {
+    let sum = 0;
+    return shown.map((game) => ({ game, value: total ? (sum += game[stat]) : game[stat] }));
+  }
+  let counts = emptyCounts();
+  const points = shown.map((game) => {
+    counts = sumCounts([counts, game]);
+    return { game, value: rates(counts)[stat] };
   });
+  return n === null && points.length > SEASON_RATE_WARMUP ? points.slice(SEASON_RATE_WARMUP) : points;
 }
