@@ -31,6 +31,7 @@ import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { shortDate } from '@/lib/format';
 import type { DraftAction } from '@/lib/player';
+import { type Projection, projection } from '@/lib/projections';
 import { type SeasonData, useSeason } from '@/lib/season';
 import { supabase } from '@/lib/supabase';
 import { ownerName, teamName } from '@/lib/teams';
@@ -172,6 +173,7 @@ export function PlayerDetails({
 
   const name = stats?.person.name ?? data?.players.get(playerId)?.full_name ?? '';
   const canDraft = !!draftAction?.canDraft(playerId);
+  const pool = data?.poolByPlayer.get(playerId);
 
   return (
     <>
@@ -198,7 +200,12 @@ export function PlayerDetails({
         {error && <ThemedText themeColor="danger">{error}</ThemedText>}
         {!stats && !error && <ActivityIndicator style={{ padding: Spacing.five }} />}
         {stats && year && (
-          <StatsBody stats={stats} year={year} opsPlus={data?.poolByPlayer.get(playerId)?.ops_plus ?? null} />
+          <StatsBody
+            stats={stats}
+            year={year}
+            opsPlus={pool?.ops_plus ?? null}
+            projection={data && pool ? projection(data, pool) : null}
+          />
         )}
         <View style={styles.links}>
           <ExternalLink
@@ -354,7 +361,18 @@ const GAME_COLUMNS: Column[] = [
   COUNT('so', 'SO'),
 ];
 
-function StatsBody({ stats, year, opsPlus }: { stats: PlayerStats; year: number; opsPlus: number | null }) {
+function StatsBody({
+  stats,
+  year,
+  opsPlus,
+  projection,
+}: {
+  stats: PlayerStats;
+  year: number;
+  opsPlus: number | null;
+  /** Null for a player outside the draft pool. */
+  projection: Projection | null;
+}) {
   const [span, setSpan] = useState<(typeof WINDOWS)[number]>(15);
   const [showYears, setShowYears] = useState(false);
   const games = stats.games.slice(0, span);
@@ -382,6 +400,12 @@ function StatsBody({ stats, year, opsPlus }: { stats: PlayerStats; year: number;
           }))}
         />
       </Section>
+
+      {projection && (
+        <Section title="Round 1 projection">
+          <ProjectionTiles projection={projection} />
+        </Section>
+      )}
 
       {stats.games.length > 0 && (
         <Section title="Chart">
@@ -459,6 +483,35 @@ function WindowToggle({ value, onChange }: { value: number; onChange: (n: (typeo
         </Pressable>
       ))}
     </ThemedView>
+  );
+}
+
+/** The draft table's projection columns for one player, as tiles, with the games they assume. */
+function ProjectionTiles({ projection: p }: { projection: Projection }) {
+  const theme = useTheme();
+  const tiles = [
+    { label: 'RDTB', value: p.rdtb === null ? '—' : p.rdtb.toFixed(1), key: true },
+    { label: 'TB·E[G]/162', value: p.tbExpected === null ? '—' : p.tbExpected.toFixed(1) },
+    { label: 'RDSLG', value: formatRate(p.rdslg) },
+  ];
+  return (
+    <View style={styles.projection}>
+      <View style={styles.tiles}>
+        {tiles.map((t) => (
+          <View
+            key={t.label}
+            style={[styles.tile, { backgroundColor: t.key ? theme.tint : theme.backgroundElement }]}>
+            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.tileLabel}>{t.label}</ThemedText>
+            <ThemedText type="default" style={[styles.tileValue, styles.number]}>{t.value}</ThemedText>
+          </View>
+        ))}
+      </View>
+      <ThemedText type="small" themeColor="textSecondary" style={styles.tileNote}>
+        {p.bye
+          ? `His team has a bye: ${p.games.toFixed(1)} games expected (Division Series).`
+          : `No bye: ${p.games.toFixed(1)} games expected (Wild Card, then the Division Series half the time).`}
+      </ThemedText>
+    </View>
   );
 }
 
@@ -566,5 +619,11 @@ const styles = StyleSheet.create({
   cell: { flexGrow: 1, flexBasis: 0, height: '100%', justifyContent: 'center', alignItems: 'flex-end', paddingHorizontal: Spacing.one },
   cellText: { fontSize: 13, lineHeight: 18 },
   number: { fontVariant: ['tabular-nums'] },
+  projection: { gap: Spacing.two },
+  tiles: { flexDirection: 'row', gap: Spacing.two },
+  tile: { flex: 1, borderRadius: Spacing.two, paddingVertical: Spacing.two, paddingHorizontal: Spacing.two, gap: 2 },
+  tileLabel: { fontSize: 12, lineHeight: 16 },
+  tileValue: { fontSize: 20, lineHeight: 26, fontWeight: 700 },
+  tileNote: { fontSize: 12, lineHeight: 16 },
   links: { flexDirection: 'row', gap: Spacing.four },
 });

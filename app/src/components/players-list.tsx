@@ -1,13 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
-import { expectedTb, regressedSlg, regressedTb } from '@core/stats.ts';
-
 import { type PlayerRow, PlayerTable } from '@/components/player-table';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useOpenPlayer } from '@/lib/player';
+import { projection } from '@/lib/projections';
 import type { SeasonData } from '@/lib/season';
 
 /** Players who can still be drafted: on a live postseason roster and on nobody's team. */
@@ -17,9 +16,7 @@ export function availablePlayers(data: SeasonData): (PlayerRow & { mlbTeamId: nu
     .filter((p) => p.on_postseason_roster && !taken.has(p.mlb_player_id) && !data.mlbTeams.get(p.mlb_team_id)?.eliminated)
     .map((p) => {
       const team = data.mlbTeams.get(p.mlb_team_id);
-      const bye = team?.has_bye ?? false;
-      const tb = p.regular_season_tb;
-      const g = p.games_played;
+      const { bye, rdslg, tbExpected, rdtb } = projection(data, p);
       return {
         id: p.mlb_player_id,
         mlbTeamId: p.mlb_team_id,
@@ -30,10 +27,10 @@ export function availablePlayers(data: SeasonData): (PlayerRow & { mlbTeamId: nu
         pa: p.plate_appearances,
         slg: p.slg,
         opsPlus: p.ops_plus,
-        tb,
-        rdslg: p.at_bats === null ? null : regressedSlg(tb, p.at_bats),
-        tbExpected: g === null ? null : expectedTb(tb, g, bye),
-        rdtb: g === null ? null : regressedTb(tb, g, bye),
+        tb: p.regular_season_tb,
+        rdslg,
+        tbExpected,
+        rdtb,
       };
     });
 }
