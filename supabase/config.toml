@@ -430,3 +430,6 @@ verify_jwt = false
 
 [functions.player-stats]
 verify_jwt = false
+
+[functions.poll-games]
+verify_jwt = false

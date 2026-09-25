@@ -53,6 +53,9 @@ runs:
         if find supabase/functions -mindepth 1 -maxdepth 1 -type d ! -name '_*' | grep -q .; then
           npx supabase functions deploy --project-ref "$PROJECT_REF"
         fi
+        # Point the live-stats cron job at this project's poll-games function.
+        curl -fsS -X POST "https://$PROJECT_REF.supabase.co/functions/v1/poll-games" \
+          -H 'Content-Type: application/json' -d '{"setup":true}'
 
     - name: Build web app
       shell: bash
