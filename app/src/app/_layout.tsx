@@ -1,8 +1,9 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
-import { useColorScheme } from 'react-native';
+import { useColorScheme, View } from 'react-native';
 
 import { AppHeader, UnderAppHeader } from '@/components/app-header';
 import { BottomTabBar } from '@/components/section-nav';
+import { StatusBarBackdrop } from '@/components/status-bar-backdrop';
 import { ThemedView } from '@/components/themed-view';
 import { useLayout } from '@/hooks/use-layout';
 import { AuthProvider, useAuth } from '@/lib/auth';
@@ -14,7 +15,10 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <RootStack />
+        <View style={{ flex: 1 }}>
+          <RootStack />
+          <StatusBarBackdrop />
+        </View>
       </ThemeProvider>
     </AuthProvider>
   );
