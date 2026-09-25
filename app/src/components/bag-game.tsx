@@ -20,6 +20,7 @@ import {
   type Bag,
   type BagKind,
   type FieldView,
+  FADE_MS,
   INTRO_MS,
   LINGER_MS,
   PERFECT_SCORE,
@@ -111,7 +112,7 @@ export function BagGame({ view, before, onFinish, onReplay }: {
 function bagLayout(bag: Bag, view: FieldView) {
   // Farther bags look smaller, but never too small to tap.
   const size = Math.round(24 + 40 * view.scale(bag.z));
-  const hit = Math.max(size + 12, 48);
+  const hit = Math.max(size + 4, 40);
   // The deep corners run off the sides of a phone; keep every bag fully on screen.
   const spot = view.project(bag.x, bag.z);
   const land = { x: Math.min(Math.max(spot.x, hit / 2), view.width - hit / 2), y: spot.y };
@@ -169,7 +170,7 @@ function FallingBag({ bag, view, onCatch, onGone }: {
     );
     fade.value = withDelay(
       landed + LINGER_MS,
-      withTiming(0, { duration: 250, ...always }, (finished) => {
+      withTiming(0, { duration: FADE_MS, ...always }, (finished) => {
         if (finished) scheduleOnRN(finish);
       }),
       always.reduceMotion,
@@ -239,7 +240,7 @@ function Shadow({ bag, view }: { bag: Bag; view: FieldView }) {
   useEffect(() => {
     visible.value = withDelay(
       INTRO_MS + bag.spawnAt + bag.fallMs + LINGER_MS,
-      withTiming(0, { duration: 250, ...always }),
+      withTiming(0, { duration: FADE_MS, ...always }),
       always.reduceMotion,
     );
   }, [bag, visible]);
