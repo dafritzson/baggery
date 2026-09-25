@@ -194,7 +194,15 @@ function GameCard({ data, scores, game, style }: { data: SeasonData; scores: Sco
           {players.map((p) => {
             const mine = p.team.id === data.myTeam?.id;
             return (
-              <View key={p.id} style={[styles.playerCard, { backgroundColor: mine ? theme.tint : theme.background }]}>
+              <View
+                key={p.id}
+                style={[
+                  styles.playerCard,
+                  // Your players stand out: a stronger tint and an accent outline.
+                  mine
+                    ? { backgroundColor: theme.tintStrong, borderColor: theme.accent }
+                    : { backgroundColor: theme.background, borderColor: 'transparent' },
+                ]}>
                 <View style={styles.playerText}>
                   <PlayerName playerId={p.id} type="smallBold" numberOfLines={1} style={styles.playerName}>
                     {data.players.get(p.id)?.full_name ?? `Player ${p.id}`}
@@ -234,6 +242,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.one + 2,
     paddingHorizontal: Spacing.two + 2,
     borderRadius: Spacing.two + 2,
+    borderWidth: 2,
   },
   playerText: { flex: 1, minWidth: 0 },
   playerName: { fontSize: 13, lineHeight: 17 },
