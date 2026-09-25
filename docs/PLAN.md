@@ -52,3 +52,14 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
 | 2 | During Wild Card | Live stats poller (10s), standings with tiebreakers, per-player breakdown |
 | 3 | Before DS redraft | Redrafts (drop+add, yield, lock at first pitch), eliminations, standings-based order, autodraft |
 | 4 | Later | Bag notifications (with optional spoiler delay), chat, 2020–2025 history import from Google Sheets, money tracker, iOS app via EAS |
+
+## iOS app notes
+
+Things to change when the iOS app (phase 4) gets built, because the web can only imitate them.
+
+- **Tab bar glass.** The phone tab bar (`BottomTabBar` in `app/src/components/section-nav.tsx`)
+  imitates Liquid Glass on the web: translucent fill, blur, a bright rim, a sheen, and in Chromium
+  an SVG lens (`app/src/lib/liquid-lens.ts`). On iOS, render it with `GlassView` from
+  `expo-glass-effect` (already a dependency) for Apple's real Liquid Glass on iOS 26, which also
+  adapts its tint to what's behind it, so the per-page "over artwork" style isn't needed there.
+  Keep the web version for the web.
