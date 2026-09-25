@@ -8,6 +8,7 @@ import {
   type ChartStat,
   type Counts,
   type PlayerGame,
+  SEASON_RATE_WARMUP,
   chartPoints,
   formatRate,
   isRateStat,
@@ -43,29 +44,73 @@ const PAD = { top: 12, right: 8, bottom: 22, left: 40 };
 // SVG text doesn't inherit the page font on web.
 const FONT = Platform.OS === 'web' ? 'Spline Sans, Inter, system-ui, sans-serif' : undefined;
 
-/** A player's games as a chart: one stat, per game (bars) or running across the games shown (line). */
+/**
+ * The dashed line: a level (his season rate, or his season average per game), or for running
+ * totals his season pace, which climbs by `perGame` each game.
+ */
+type Reference = { level: number } | { perGame: number } | null;
+
+/**
+ * A player's games as a chart: one stat, per game (bars), as a running total (line) or, for rates,
+ * running across the games shown (line).
+ */
 export function StatChart({ games, season }: { games: PlayerGame[]; season: Counts | null }) {
   const [stat, setStat] = useState<ChartStat>('tb');
   const [span, setSpan] = useState<Span>(30);
-  const points = chartPoints(games, stat, span);
+  const [total, setTotal] = useState(false);
   const info = STATS.find((s) => s.key === stat)!;
   const rate = isRateStat(stat);
+  const running = !rate && total;
+  const points = chartPoints(games, stat, span, { total: running });
 
-  // The season's figure as a dashed reference: its rate, or its per-game average for a count.
-  const reference = season && season.g ? (rate ? rates(season)[stat] : season[stat] / season.g) : null;
+  let reference: Reference = null;
+  if (season && season.g) {
+    if (rate) reference = { level: rates(season)[stat] ?? 0 };
+    else reference = running ? { perGame: season[stat] / season.g } : { level: season[stat] / season.g };
+  }
+
+  let note: string;
+  if (rate && span === null && games.length > SEASON_RATE_WARMUP) {
+    note = `${info.name} for the season to date, from his ${SEASON_RATE_WARMUP + 1}th game on. Dashed: his season ${info.label}.`;
+  } else if (rate) {
+    note = `${info.name} across the games shown, game by game. Dashed: his season ${info.label}.`;
+  } else if (running) {
+    note = `His running total of ${info.name.toLowerCase()} across the games shown. Dashed: his season pace.`;
+  } else {
+    note = `${info.name} in each game. Dashed: his season average per game.`;
+  }
 
   return (
     <View style={styles.wrap}>
       <View style={styles.controls}>
-        <StatMenu value={stat} onChange={setStat} />
-        <SpanToggle value={span} onChange={setSpan} />
+        <View style={styles.controlGroup}>
+          <StatMenu value={stat} onChange={setStat} />
+          {!rate && (
+            <Toggle
+              options={[
+                { value: false, label: 'Per game' },
+                { value: true, label: 'Total' },
+              ]}
+              value={total}
+              onChange={setTotal}
+            />
+          )}
+        </View>
+        <Toggle
+          options={SPANS.map((n) => ({ value: n, label: n === null ? 'Season' : `Last ${n}` }))}
+          value={span}
+          onChange={setSpan}
+        />
       </View>
-      <Plot key={`${stat}:${span}`} points={points} rate={rate} label={info.label} reference={reference} />
-      <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
-        {rate
-          ? `${info.name} across the games shown, game by game. Dashed: his season ${info.label}.`
-          : `${info.name} in each game. Dashed: his season average per game.`}
-      </ThemedText>
+      <Plot
+        key={`${stat}:${span}:${running}`}
+        points={points}
+        rate={rate}
+        line={rate || running}
+        label={info.label}
+        reference={reference}
+      />
+      <ThemedText type="small" themeColor="textSecondary" style={styles.note}>{note}</ThemedText>
     </View>
   );
 }
@@ -73,13 +118,17 @@ export function StatChart({ games, season }: { games: PlayerGame[]; season: Coun
 function Plot({
   points,
   rate,
+  line: asLine,
   label,
   reference,
 }: {
   points: ChartPoint[];
+  /** Values are rates (.312), not counts. */
   rate: boolean;
+  /** A line through the games rather than a bar for each. */
+  line: boolean;
   label: string;
-  reference: number | null;
+  reference: Reference;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
@@ -88,7 +137,12 @@ function Plot({
   const current = points[Math.min(active, points.length - 1)];
 
   const values = points.map((p) => p.value).filter((v): v is number => v !== null);
-  const scale = rate ? rateScale([...values, ...(reference === null ? [] : [reference])]) : countScale(values);
+  // Where the dashed line starts and ends, in data terms; the pace runs from game 1 to the last game.
+  const refFrom = reference && ('level' in reference ? reference.level : reference.perGame);
+  const refTo = reference && ('level' in reference ? reference.level : reference.perGame * points.length);
+  const scale = rate
+    ? rateScale([...values, ...(refFrom === null ? [] : [refFrom])])
+    : countScale(asLine && refTo !== null ? [...values, refTo] : values);
   const plotW = Math.max(0, width - PAD.left - PAD.right);
   const plotH = HEIGHT - PAD.top - PAD.bottom;
   const slot = points.length ? plotW / points.length : 0;
@@ -110,7 +164,7 @@ function Plot({
           <>
             <ThemedText type="smallBold">{current.value === null ? '—' : format(current.value)} {label}</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              {rate ? '  through ' : '  '}
+              {asLine ? '  through ' : '  '}
               {shortDate(current.game.date)} {current.game.home ? 'vs' : '@'} {current.game.opponent} · {current.game.h}-for-
               {current.game.ab}
             </ThemedText>
@@ -158,18 +212,29 @@ function Plot({
                 fill={theme.backgroundSelected}
               />
             )}
-            {reference !== null && reference >= scale.min && reference <= scale.max && (
+            {reference && 'perGame' in reference && points.length > 1 && (
               <Line
-                x1={PAD.left}
-                x2={width - PAD.right}
-                y1={y(reference)}
-                y2={y(reference)}
+                x1={x(0)}
+                x2={x(points.length - 1)}
+                y1={y(refFrom!)}
+                y2={y(refTo!)}
                 stroke={theme.textSecondary}
                 strokeWidth={1}
                 strokeDasharray="4 4"
               />
             )}
-            {!rate &&
+            {reference && 'level' in reference && reference.level >= scale.min && reference.level <= scale.max && (
+              <Line
+                x1={PAD.left}
+                x2={width - PAD.right}
+                y1={y(reference.level)}
+                y2={y(reference.level)}
+                stroke={theme.textSecondary}
+                strokeWidth={1}
+                strokeDasharray="4 4"
+              />
+            )}
+            {!asLine &&
               points.map((p, i) =>
                 p.value ? (
                   <Path
@@ -179,7 +244,7 @@ function Plot({
                   />
                 ) : null,
               )}
-            {rate && line.length > 1 && (
+            {asLine && line.length > 1 && (
               <Path
                 d={`M${line.join('L')}`}
                 fill="none"
@@ -189,7 +254,7 @@ function Plot({
                 strokeLinecap="round"
               />
             )}
-            {rate && current?.value != null && (
+            {asLine && current?.value != null && (
               <Rect
                 x={x(activeIndex) - 4}
                 y={y(current.value) - 4}
@@ -264,19 +329,27 @@ function StatMenu({ value, onChange }: { value: ChartStat; onChange: (s: ChartSt
   );
 }
 
-function SpanToggle({ value, onChange }: { value: Span; onChange: (s: Span) => void }) {
+function Toggle<T>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
   const theme = useTheme();
   return (
     <ThemedView type="backgroundElement" style={styles.toggle}>
-      {SPANS.map((n) => (
+      {options.map((o) => (
         <Pressable
-          key={String(n)}
-          onPress={() => onChange(n)}
+          key={o.label}
+          onPress={() => onChange(o.value)}
           accessibilityRole="button"
-          accessibilityState={{ selected: value === n }}
-          style={[styles.toggleItem, value === n && { backgroundColor: theme.background }]}>
-          <ThemedText type="smallBold" themeColor={value === n ? 'text' : 'textSecondary'} style={styles.toggleText}>
-            {n === null ? 'Season' : `Last ${n}`}
+          accessibilityState={{ selected: value === o.value }}
+          style={[styles.toggleItem, value === o.value && { backgroundColor: theme.background }]}>
+          <ThemedText type="smallBold" themeColor={value === o.value ? 'text' : 'textSecondary'} style={styles.toggleText}>
+            {o.label}
           </ThemedText>
         </Pressable>
       ))}
@@ -284,10 +357,11 @@ function SpanToggle({ value, onChange }: { value: Span; onChange: (s: Span) => v
   );
 }
 
-/** 0 up to a whole-number max, with a few whole-number ticks. */
+/** 0 up to a whole-number max, with up to five ticks on a round step (1, 2, 5, 10, 20, 25, 50 …). */
 function countScale(values: number[]): { min: number; max: number; ticks: number[] } {
   const top = Math.max(4, ...values);
-  const step = top <= 4 ? 1 : top <= 8 ? 2 : Math.ceil(top / 4);
+  const steps = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500];
+  const step = steps.find((s) => Math.ceil(top / s) <= 4) ?? Math.ceil(top / 4);
   const max = Math.ceil(top / step) * step;
   const ticks = [];
   for (let t = 0; t <= max; t += step) ticks.push(t);
@@ -325,6 +399,7 @@ function labelIndexes(count: number, width: number): number[] {
 const styles = StyleSheet.create({
   wrap: { gap: Spacing.two },
   controls: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two },
+  controlGroup: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   menuChip: { paddingHorizontal: Spacing.two, paddingVertical: 4, borderRadius: Spacing.two },
   toggle: { flexDirection: 'row', borderRadius: Spacing.two, padding: 2 },
   toggleItem: { paddingHorizontal: Spacing.two, paddingVertical: 2, borderRadius: Spacing.one + 2 },
