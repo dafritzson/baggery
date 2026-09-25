@@ -59,11 +59,19 @@ describe('field view', () => {
     expect(center.y).toBeLessThan(home.y);
   });
 
-  it('shrinks things with distance and keeps the foul poles on screen', () => {
+  it('shrinks things with distance', () => {
     expect(view.scale(0)).toBe(1);
     expect(view.scale(300)).toBeLessThan(view.scale(100));
+  });
+
+  it('draws the infield wider than tall, like a view from behind home plate', () => {
+    const base = 90 / Math.SQRT2;
+    const width = view.project(base, base).x - view.project(-base, base).x;
+    const height = view.project(0, 0).y - view.project(0, 2 * base).y;
+    expect(width / height).toBeGreaterThan(1.1);
+    // The foul poles sit at (or just past) the edges of a phone screen.
     const pole = 330 / Math.SQRT2;
-    expect(view.project(-pole, pole).x).toBeGreaterThan(0);
-    expect(view.project(pole, pole).x).toBeLessThan(390);
+    expect(view.project(-pole, pole).x).toBeLessThan(20);
+    expect(view.project(pole, pole).x).toBeGreaterThan(370);
   });
 });

@@ -25,7 +25,7 @@ export const PERFECT_SCORE = KINDS.reduce((n, k) => n + BAG_KINDS[k].count * BAG
 /** "BAGGERY", then "Get yo bags", then the first bag drops. */
 export const INTRO_MS = 3000;
 /** How long a bag sits on the grass before it disappears. */
-export const LINGER_MS = 900;
+export const LINGER_MS = 700;
 
 export interface Bag {
   id: number;
@@ -36,7 +36,7 @@ export interface Bag {
   /** Where it lands, in field coordinates. */
   x: number;
   z: number;
-  /** Sideways drift and spin while falling, -1 to 1. */
+  /** How far it curves in from the side (and spins) while falling, -1 to 1. */
   drift: number;
   spin: number;
 }
@@ -76,7 +76,7 @@ export function makeSchedule(seed: number = Math.floor(Math.random() * 2 ** 32))
   let spawnAt = 0;
   return kinds.map((kind, id) => {
     const progress = id / (kinds.length - 1);
-    const fallMs = (1700 - 550 * progress) * (kind === 'single' ? 1 : 0.85);
+    const fallMs = (1530 - 495 * progress) * (kind === 'single' ? 1 : 0.85);
     // Land anywhere fair, short of the warning track; nearer spots a little more often.
     const angle = (random() * 2 - 1) * (FOUL_LINE - 0.06);
     const distance = 30 + (fenceDistance(angle) - 55) * random() ** 1.2;
@@ -96,10 +96,17 @@ export function makeSchedule(seed: number = Math.floor(Math.random() * 2 ** 32))
 }
 
 /** Camera: this far behind home plate and this high, looking out toward center field. */
-const CAMERA_BACK = 90;
+const CAMERA_BACK = 110;
 const CAMERA_HEIGHT = 40;
 /** The foul poles, 330 ft down each line. */
 const POLE = 330 / Math.SQRT2;
+/**
+ * Framing: the horizon this far down the visible area, and the foul poles this far from center
+ * (as a share of the field's width; past 0.5 they're just off the sides). Together they set
+ * how foreshortened the field looks: a lower horizon and wider poles look less top-down.
+ */
+const HORIZON = 0.34;
+const POLE_SPREAD = 0.56;
 
 export interface Point {
   x: number;
@@ -122,12 +129,12 @@ export interface FieldView {
  * `bottom` (the lowest visible y; phones have a tab bar over the rest).
  */
 export function fieldView(width: number, height: number, bottom: number = height): FieldView {
-  const horizon = bottom * 0.28;
+  const horizon = bottom * HORIZON;
   const homeY = bottom - 28;
   // Keep the diamond's proportions on wide screens; the stands fill out the sides.
   const fieldWidth = Math.min(width, bottom * 0.72);
   const vertical = (homeY - horizon) * CAMERA_BACK;
-  const horizontal = ((fieldWidth * 0.47) * (POLE + CAMERA_BACK)) / POLE;
+  const horizontal = (fieldWidth * POLE_SPREAD * (POLE + CAMERA_BACK)) / POLE;
   const depth = (z: number) => Math.max(z + CAMERA_BACK, 10);
   return {
     width,

@@ -102,10 +102,12 @@ export function BagGame({ view, before, onFinish, onReplay }: {
 
 /** Where a bag is drawn: its emoji size and hit box, centered just above where it lands. */
 function bagLayout(bag: Bag, view: FieldView) {
-  const land = view.project(bag.x, bag.z);
   // Farther bags look smaller, but never too small to tap.
   const size = Math.round(24 + 40 * view.scale(bag.z));
   const hit = Math.max(size + 20, 56);
+  // The deep corners run off the sides of a phone; keep every bag fully on screen.
+  const spot = view.project(bag.x, bag.z);
+  const land = { x: Math.min(Math.max(spot.x, hit / 2), view.width - hit / 2), y: spot.y };
   const center = { x: land.x, y: land.y - size * 0.55 };
   // Starts just above the top of the screen.
   const dropFrom = -(center.y + size);
@@ -180,7 +182,8 @@ function FallingBag({ bag, view, onCatch, onGone }: {
     return {
       opacity: fade.value * (1 - pop.value),
       transform: [
-        { translateX: bag.drift * 50 * up },
+        // Starts off to the side and curves in toward where it lands.
+        { translateX: bag.drift * 90 * up * up },
         { translateY: dropFrom * up },
         { rotate: `${bag.spin * 60 * up}deg` },
         // Squash on landing; puff up when caught.
@@ -336,7 +339,7 @@ function Final({ view, score, before, onReplay }: {
   const newRecord = !!before && score > (before.record?.score ?? 0);
   const note =
     score === PERFECT_SCORE
-      ? 'Perfect game!'
+      ? 'Nice.'
       : newRecord
         ? 'New league record!'
         : before && score > before.mine
