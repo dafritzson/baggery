@@ -61,6 +61,17 @@ export interface PoolEntry {
   /** Null until the pool is synced with them. */
   at_bats: number | null;
   games_played: number | null;
+  /** The rest of the season line, for the table's optional columns. Null until the pool is next synced. */
+  hits: number | null;
+  doubles: number | null;
+  triples: number | null;
+  home_runs: number | null;
+  runs: number | null;
+  rbi: number | null;
+  walks: number | null;
+  strikeouts: number | null;
+  hit_by_pitch: number | null;
+  sac_flies: number | null;
   /** Null with no at-bats. */
   slg: number | null;
   ops_plus: number | null;
@@ -123,7 +134,7 @@ async function fetchSeason(
     supabase
       .from('season_player_pool')
       .select(
-        'mlb_player_id, mlb_team_id, regular_season_tb, plate_appearances, at_bats, games_played, slg, ops_plus, on_postseason_roster, player:mlb_players(id, full_name, primary_position)',
+        'mlb_player_id, mlb_team_id, regular_season_tb, plate_appearances, at_bats, games_played, hits, doubles, triples, home_runs, runs, rbi, walks, strikeouts, hit_by_pitch, sac_flies, slg, ops_plus, on_postseason_roster, player:mlb_players(id, full_name, primary_position)',
       )
       .eq('season_id', season.id),
     supabase
@@ -152,6 +163,16 @@ async function fetchSeason(
       plate_appearances: row.plate_appearances,
       at_bats: row.at_bats,
       games_played: row.games_played,
+      hits: row.hits,
+      doubles: row.doubles,
+      triples: row.triples,
+      home_runs: row.home_runs,
+      runs: row.runs,
+      rbi: row.rbi,
+      walks: row.walks,
+      strikeouts: row.strikeouts,
+      hit_by_pitch: row.hit_by_pitch,
+      sac_flies: row.sac_flies,
       // Postgres numeric arrives as a string.
       slg: row.slg === null ? null : Number(row.slg),
       ops_plus: row.ops_plus,

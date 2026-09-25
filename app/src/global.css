@@ -51,6 +51,12 @@
 .menu-content-narrow {
   min-width: 140px;
 }
+/* A long menu scrolls inside the window instead of running off it. */
+.menu-content-scroll {
+  max-height: var(--radix-dropdown-menu-content-available-height);
+  overflow-y: auto;
+  max-width: 340px;
+}
 /* Above react-native-web's Modal (z-index 9999), for menus inside the player popup. */
 .menu-content-over-modal {
   z-index: 10000;
