@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -126,6 +126,7 @@ export function PlayerTable({
   columns: visible = DEFAULT_COLUMNS,
   contained = false,
   headerAction,
+  onNaturalWidth,
   style,
 }: {
   rows: PlayerRow[];
@@ -145,15 +146,19 @@ export function PlayerTable({
    */
   headerAction?: ReactNode;
   style?: ViewStyle;
+  /** The width the table needs to show every chosen column without scrolling sideways. */
+  onNaturalWidth?: (width: number) => void;
 }) {
   const theme = useTheme();
   const box = contained && Platform.OS === 'web';
   const columns = useMemo(() => COLUMNS.filter((c) => visible.includes(c.key)), [visible]);
   const [tableWidth, setTableWidth] = useState(0);
-  // Wide enough for the longest name, and wider when the table has room to spare.
-  const nameColumnWidth = tableWidth
-    ? { minWidth: Math.max(0, tableWidth - statsWidth(columns)), maxWidth: tableWidth * MAX_NAME_SHARE }
-    : null;
+  // Box mode: the outer width too, so the difference is the vertical scrollbar.
+  const [outerWidth, setOuterWidth] = useState(0);
+  const [nameWidth, setNameWidth] = useState(0);
+  // Just wide enough for the longest name (capped, so some stats always show beside it); the stat
+  // columns share whatever width is left.
+  const nameColumnWidth = tableWidth ? { maxWidth: tableWidth * MAX_NAME_SHARE } : null;
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'tb', desc: true });
   const [pressedId, setPressedId] = useState<number | null>(null);
 
@@ -186,14 +191,19 @@ export function PlayerTable({
     onPressIn: () => setPressedId(id),
     onPressOut: () => setPressedId(null),
   });
+  const scrollbar = box && outerWidth && tableWidth ? outerWidth - tableWidth : 0;
+  const naturalWidth = nameWidth ? Math.ceil(nameWidth + statsWidth(columns) + scrollbar) : 0;
+  useEffect(() => {
+    if (naturalWidth) onNaturalWidth?.(naturalWidth);
+  }, [naturalWidth, onNaturalWidth]);
   // Pinned cells need a fill, or the rows scrolling under them show through.
   const fill = { backgroundColor: theme.backgroundElement };
 
   const stats = (
-    <View>
+    <View style={styles.stats}>
       <View style={[styles.header, styles.cells, { borderBottomColor: theme.border }, box && [sticky({ top: 0 }, 1), fill]]}>
         {columns.map((c) => (
-          <Pressable key={c.key} onPress={() => sortBy(c.key)} style={[styles.cell, { width: c.width }]}>
+          <Pressable key={c.key} onPress={() => sortBy(c.key)} style={[styles.cell, { minWidth: c.width, flexGrow: c.width, flexBasis: c.width }]}>
             <ThemedText
               type="smallBold"
               numberOfLines={1}
@@ -209,7 +219,7 @@ export function PlayerTable({
           {columns.map((c) => {
             const value = c.value(r);
             return (
-              <View key={c.key} style={[styles.cell, { width: c.width }]}>
+              <View key={c.key} style={[styles.cell, { minWidth: c.width, flexGrow: c.width, flexBasis: c.width }]}>
                 <ThemedText
                   type={c.key === sort.key ? 'smallBold' : 'small'}
                   themeColor={value === null ? 'textSecondary' : 'text'}
@@ -228,13 +238,15 @@ export function PlayerTable({
     <ThemedView
       type="backgroundElement"
       style={[styles.table, box && styles.box, style]}
-      onLayout={box ? undefined : (e) => setTableWidth(e.nativeEvent.layout.width)}>
+      onLayout={(e) => (box ? setOuterWidth : setTableWidth)(e.nativeEvent.layout.width)}>
       {box && (
         // The box's width less its vertical scrollbar: sizing the name column to the outer width
         // left the last column under the scrollbar.
         <View pointerEvents="none" style={styles.ruler} onLayout={(e) => setTableWidth(e.nativeEvent.layout.width)} />
       )}
-      <View style={[styles.nameColumn, nameColumnWidth, { borderRightColor: theme.border }, box && [sticky({ left: 0 }, 2), fill]]}>
+      <View
+        onLayout={(e) => setNameWidth(e.nativeEvent.layout.width)}
+        style={[styles.nameColumn, nameColumnWidth, { borderRightColor: theme.border }, box && [sticky({ left: 0 }, 2), fill]]}>
         <View style={[styles.header, styles.nameHeader, { borderBottomColor: theme.border }, box && [sticky({ top: 0 }, 3), fill]]}>
           {headerAction}
           <Pressable onPress={() => sortBy('name')} style={[styles.nameCell, styles.nameSort, !!headerAction && styles.nameSortAfterAction]}>

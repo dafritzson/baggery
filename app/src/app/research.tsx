@@ -13,7 +13,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { usePlayerColumns } from '@/lib/player-columns';
 import { type SeasonData, useSeason } from '@/lib/season';
 
-/** Name column width beside the stats panel. */
+/** A first guess at the name column's width, until the table has measured it. */
 const NAME_WIDTH = 200;
 /** Room for the table's vertical scrollbar, so the last column isn't under it. */
 const SCROLLBAR = 16;
@@ -36,6 +36,8 @@ export default function ResearchScreen() {
 function ResearchWide({ data }: { data: SeasonData }) {
   const theme = useTheme();
   const [columns] = usePlayerColumns();
+  // What the table says it needs (its longest name plus the chosen columns); a guess until then.
+  const [tableWidth, setTableWidth] = useState<number | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
   // Until someone is picked, show the player with the most total bases.
   const top = useMemo(
@@ -48,8 +50,8 @@ function ResearchWide({ data }: { data: SeasonData }) {
     <ThemedView style={styles.fill}>
       <View style={styles.columns}>
         {/* As wide as the chosen columns; it shrinks (and scrolls sideways) once the panel is at its minimum. */}
-        <View style={[styles.list, { width: NAME_WIDTH + statsWidthFor(columns) + SCROLLBAR }]}>
-          <PlayersList data={data} onSelect={setPicked} selectedId={selectedId} fill />
+        <View style={[styles.list, { width: tableWidth ?? NAME_WIDTH + statsWidthFor(columns) + SCROLLBAR }]}>
+          <PlayersList data={data} onSelect={setPicked} selectedId={selectedId} fill onTableWidth={setTableWidth} />
         </View>
         <ThemedView style={[styles.panel, { borderColor: theme.border }]}>
           {selectedId !== null ? (
