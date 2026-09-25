@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { PlayerDetails } from '@/components/player-popup';
-import { STATS_WIDTH } from '@/components/player-table';
+import { statsWidthFor } from '@/components/player-table';
 import { PlayersList, availablePlayers } from '@/components/players-list';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
@@ -10,10 +10,13 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing, WideContentWidth } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
+import { usePlayerColumns } from '@/lib/player-columns';
 import { type SeasonData, useSeason } from '@/lib/season';
 
 /** Name column width beside the stats panel. */
 const NAME_WIDTH = 200;
+/** Room for the table's vertical scrollbar, so the last column isn't under it. */
+const SCROLLBAR = 16;
 
 /** The draft room's player list, to browse and open player stats any time. */
 export default function ResearchScreen() {
@@ -32,6 +35,7 @@ export default function ResearchScreen() {
 /** Desktop: the list on the left, the selected player's stats in a panel on the right. */
 function ResearchWide({ data }: { data: SeasonData }) {
   const theme = useTheme();
+  const [columns] = usePlayerColumns();
   const [picked, setPicked] = useState<number | null>(null);
   // Until someone is picked, show the player with the most total bases.
   const top = useMemo(
@@ -43,7 +47,8 @@ function ResearchWide({ data }: { data: SeasonData }) {
   return (
     <ThemedView style={styles.fill}>
       <View style={styles.columns}>
-        <View style={styles.list}>
+        {/* As wide as the chosen columns; it shrinks (and scrolls sideways) once the panel is at its minimum. */}
+        <View style={[styles.list, { width: NAME_WIDTH + statsWidthFor(columns) + SCROLLBAR }]}>
           <PlayersList data={data} onSelect={setPicked} selectedId={selectedId} fill />
         </View>
         <ThemedView style={[styles.panel, { borderColor: theme.border }]}>
@@ -69,7 +74,7 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     padding: Spacing.three,
   },
-  list: { width: NAME_WIDTH + STATS_WIDTH },
-  panel: { flex: 1, minWidth: 0, borderWidth: StyleSheet.hairlineWidth, borderRadius: Spacing.three, overflow: 'hidden' },
+  list: { flexShrink: 1 },
+  panel: { flex: 1, minWidth: 420, borderWidth: StyleSheet.hairlineWidth, borderRadius: Spacing.three, overflow: 'hidden' },
   empty: { padding: Spacing.three },
 });

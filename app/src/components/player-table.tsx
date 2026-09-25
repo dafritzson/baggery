@@ -101,8 +101,8 @@ export const DEFAULT_COLUMNS: ColumnKey[] = COLUMNS.filter((c) => c.default).map
 /** Longest the name column gets, as a share of the table, so some stats always show beside it. */
 const MAX_NAME_SHARE = 0.65;
 const statsWidth = (columns: Column[]) => columns.reduce((sum, c) => sum + c.width, 0) + Spacing.two;
-/** The default columns' width, for laying out the table beside other things. */
-export const STATS_WIDTH = statsWidth(COLUMNS.filter((c) => c.default));
+/** How wide the stats part of the table is with these columns showing. */
+export const statsWidthFor = (keys: ColumnKey[]) => statsWidth(COLUMNS.filter((c) => keys.includes(c.key)));
 const ROW_HEIGHT = 36;
 
 // Web only: the header row and name column stay in view while the table scrolls under them.

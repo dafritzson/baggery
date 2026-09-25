@@ -64,8 +64,9 @@
 .menu-content[data-state='open'] {
   animation: menu-in 120ms ease-out;
 }
+/* Dark: the device's setting, unless the header's toggle picked one (data-theme on <html>). */
 @media (prefers-color-scheme: dark) {
-  .menu-content {
+  :root:not([data-theme='light']) .menu-content {
     --menu-bg: #212225;
     --menu-border: #2e3135;
     --menu-text: #ffffff;
@@ -74,6 +75,15 @@
     --menu-danger: #ff6b6b;
     --menu-danger-highlight: #3a1a1e;
   }
+}
+:root[data-theme='dark'] .menu-content {
+  --menu-bg: #212225;
+  --menu-border: #2e3135;
+  --menu-text: #ffffff;
+  --menu-text-secondary: #b0b4ba;
+  --menu-highlight: #2e3135;
+  --menu-danger: #ff6b6b;
+  --menu-danger-highlight: #3a1a1e;
 }
 @keyframes menu-in {
   from {
