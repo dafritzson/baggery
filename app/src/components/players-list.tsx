@@ -65,14 +65,26 @@ export function PlayersList({
 
   return (
     <View style={[{ gap: Spacing.two }, fill && styles.fill]}>
-      <TextInput
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Search players"
-        placeholderTextColor={theme.textSecondary}
-        autoCorrect={false}
-        style={[styles.search, { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border }]}
-      />
+      <View>
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search players"
+          placeholderTextColor={theme.textSecondary}
+          autoCorrect={false}
+          style={[styles.search, { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border }]}
+        />
+        {query !== '' && (
+          <Pressable
+            onPress={() => setQuery('')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+            style={({ pressed }) => [styles.clear, { backgroundColor: theme.textSecondary, opacity: pressed ? 0.6 : 1 }]}>
+            <ThemedText type="smallBold" style={[styles.clearText, { color: theme.backgroundElement }]}>✕</ThemedText>
+          </Pressable>
+        )}
+      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} contentContainerStyle={styles.chips}>
         <Chip label="All" active={teamFilter === null} onPress={() => setTeamFilter(null)} />
         {mlbTeams.map((t) => (
@@ -110,7 +122,20 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  search: { minHeight: 44, borderRadius: Spacing.two, borderWidth: 1, paddingHorizontal: Spacing.three, fontSize: 16 },
+  // Room on the right for the clear button.
+  search: { minHeight: 44, borderRadius: Spacing.two, borderWidth: 1, paddingLeft: Spacing.three, paddingRight: 44, fontSize: 16 },
+  clear: {
+    position: 'absolute',
+    right: Spacing.three,
+    top: '50%',
+    marginTop: -11,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clearText: { fontSize: 12, lineHeight: 14 },
   chipRow: { flexGrow: 0 },
   chips: { gap: Spacing.one },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Spacing.four },
