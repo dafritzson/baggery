@@ -26,6 +26,14 @@ export const Colors = {
     tintStrong: '#D2DDF3',
     /** Raised-tile look for tinted cards: a light top edge and a shaded bottom edge. */
     bevel: 'inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -2px 0 rgba(11, 61, 145, 0.10)',
+    /** Standings totals, like the old scoring sheet: safe (blue), tied at the cut (lavender), out (red). */
+    standingSafe: '#D3E2F4',
+    standingTied: '#DCD5EC',
+    standingOut: '#F3D0D0',
+    /** The same, bolder, for your own team. */
+    standingSafeMine: '#8FB6E6',
+    standingTiedMine: '#AE9DDA',
+    standingOutMine: '#E59A9A',
   },
   dark: {
     text: '#ffffff',
@@ -43,6 +51,12 @@ export const Colors = {
     tintHover: '#1D2A49',
     tintStrong: '#223257',
     bevel: 'inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -2px 0 rgba(0, 0, 0, 0.45)',
+    standingSafe: '#1C3050',
+    standingTied: '#30284A',
+    standingOut: '#4A2228',
+    standingSafeMine: '#2F5A9A',
+    standingTiedMine: '#5A4592',
+    standingOutMine: '#8A3440',
   },
 } as const;
 

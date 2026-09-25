@@ -69,8 +69,12 @@ export function StandingsTable({
   const columns = roundColumns(round, scores.games);
   const survivors = data.season.survivors_after_round[round - 1] ?? teams.length;
   const byId = new Map(teams.map((t) => [t.id, t]));
-  // Below the cut only when strictly behind the last team through; a tie across it isn't settled.
+  // Like the old sheet: blue when through, lavender when tied across the cut line (drink-off
+  // territory until tiebreakers are in), red when below it.
   const cutTotal = standings[survivors - 1]?.total ?? 0;
+  const tieAtCut = standings.length > survivors && standings[survivors].total === cutTotal;
+  const standing = (total: number, i: number) =>
+    tieAtCut ? (total > cutTotal ? 'safe' : total === cutTotal ? 'tied' : 'out') : i < survivors ? 'safe' : 'out';
   const compact = useLayout() === 'compact';
   // Before a round's first pitch there's nothing to rank.
   const started = columns.some((c) => c.started);
@@ -95,7 +99,9 @@ export function StandingsTable({
         return value === null || value === undefined ? '' : String(value);
       }),
       total: started ? String(s.total) : '',
-      tone: team.id === selectedTeamId ? 'selected' : i >= survivors && s.total < cutTotal ? 'out' : mine ? 'mine' : undefined,
+      selected: team.id === selectedTeamId,
+      standing: started ? standing(s.total, i) : undefined,
+      mine,
       cutAfter: started && i === survivors - 1 && standings.length > survivors,
       onPress: () => onSelectTeam(team.id),
     };

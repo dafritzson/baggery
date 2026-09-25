@@ -21,7 +21,12 @@ export interface GridRow {
   total: string;
   /** Bold, e.g. the team total row. */
   strong?: boolean;
-  tone?: 'mine' | 'selected' | 'out';
+  /** Highlights the row (the team shown beside the standings). */
+  selected?: boolean;
+  /** Colors the total, like the old scoring sheet: safe, tied at the cut, or out. */
+  standing?: 'safe' | 'tied' | 'out';
+  /** Your own team: a bolder standing color and a bold name. */
+  mine?: boolean;
   /** Draw the cut line under this row. */
   cutAfter?: boolean;
   onPress?: () => void;
@@ -48,13 +53,20 @@ export function ScoreGrid({
   labelWidth: number;
 }) {
   const theme = useTheme();
-  const toneColor = (tone: GridRow['tone']) =>
-    tone === 'out' ? theme.highlight : tone === 'selected' ? theme.tintStrong : tone === 'mine' ? theme.tint : undefined;
+  const standingColor = (r: GridRow) => {
+    if (!r.standing) return undefined;
+    const colors = {
+      safe: [theme.standingSafe, theme.standingSafeMine],
+      tied: [theme.standingTied, theme.standingTiedMine],
+      out: [theme.standingOut, theme.standingOutMine],
+    }[r.standing];
+    return colors[r.mine ? 1 : 0];
+  };
   const rowStyle = (r: GridRow, i: number) => [
     styles.row,
     i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border },
     rows[i - 1]?.cutAfter && [styles.cut, { borderTopColor: theme.danger }],
-    { backgroundColor: toneColor(r.tone) },
+    r.selected && { backgroundColor: theme.backgroundSelected },
   ];
   const header = (text: string, live?: boolean) => (
     <>
@@ -110,7 +122,9 @@ export function ScoreGrid({
       </ScrollView>
       <View style={[styles.totals, { borderLeftColor: theme.border }]}>
         <View style={[styles.header, styles.totalCell, { borderBottomColor: theme.border }]}>{header(totalHeader)}</View>
-        {rows.map((r, i) => pressable(r, i, styles.totalCell, cellText(r.total, true)))}
+        {rows.map((r, i) =>
+          pressable(r, i, [styles.totalCell, { backgroundColor: standingColor(r) }], cellText(r.total, true)),
+        )}
       </View>
     </ThemedView>
   );
