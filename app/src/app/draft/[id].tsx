@@ -112,7 +112,6 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
           <ClockBar
             status={status}
             myTurn={myTurn}
-            draftNumber={draft.number}
             menu={<DraftMenu data={data} draft={draft} run={run} commissioner={commissioner} />}
           />
         )
@@ -220,12 +219,10 @@ function OnTheClock({ status, myTurn }: { status: ClockStatus; myTurn: boolean }
 function ClockBar({
   status,
   myTurn,
-  draftNumber,
   menu,
 }: {
   status: ClockStatus;
   myTurn: boolean;
-  draftNumber: number;
   menu: ReactNode;
 }) {
   const theme = useTheme();
@@ -236,7 +233,7 @@ function ClockBar({
       style={[styles.clockBar, myTurn && { backgroundColor: theme.highlight, borderColor: theme.danger }]}>
       <View style={{ flex: 1 }}>
         <ThemedText type="smallBold" numberOfLines={1}>
-          Draft {draftNumber} · {status.headline}
+          {status.headline}
         </ThemedText>
         {detail !== '' && (
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>{detail}</ThemedText>
