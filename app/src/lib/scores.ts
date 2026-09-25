@@ -6,8 +6,16 @@ import type { RosterSpell } from '@core/scoring.ts';
 import type { SeasonData } from '@/lib/season';
 import { supabase } from '@/lib/supabase';
 
+/** A game with what the Games tab shows beyond scoring. */
+export interface GameInfo extends ScoreGame {
+  homeScore: number | null;
+  awayScore: number | null;
+  /** MLB detailedState: "Scheduled", "In Progress", "Final", "Postponed", ... */
+  detailedState: string | null;
+}
+
 export interface Scores {
-  games: ScoreGame[];
+  games: GameInfo[];
   /** Box-score TB of players who have been on a fantasy roster this season. */
   stats: ScoreStat[];
 }
@@ -31,7 +39,7 @@ export function useScores(data: SeasonData | null): { scores: Scores | null; ref
     const fetchId = ++latest.current;
     const { data: games } = await supabase
       .from('mlb_games')
-      .select('game_pk, game_type, series_game_number, start_time, status, home_team_id, away_team_id')
+      .select('game_pk, game_type, series_game_number, start_time, status, detailed_state, home_team_id, away_team_id, home_score, away_score')
       .eq('season_year', year);
     const gamePks = (games ?? []).map((g) => g.game_pk as number);
     const playerIds = playerKey ? playerKey.split(',').map(Number) : [];
@@ -51,6 +59,9 @@ export function useScores(data: SeasonData | null): { scores: Scores | null; ref
           status: g.status,
           homeTeamId: g.home_team_id,
           awayTeamId: g.away_team_id,
+          homeScore: g.home_score,
+          awayScore: g.away_score,
+          detailedState: g.detailed_state,
         })),
       stats: (stats ?? []).map((s) => ({ gamePk: s.game_pk, playerId: s.mlb_player_id, tb: s.tb })),
     });
