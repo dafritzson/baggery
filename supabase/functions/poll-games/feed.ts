@@ -120,6 +120,14 @@ function livePlayer(p: any): LivePlayer | null {
   return p?.id ? { id: p.id, name: p.fullName ?? `Player ${p.id}` } : null;
 }
 
+/** The runs so far from `/game/{gamePk}/linescore`, or null before the game has any. */
+// deno-lint-ignore no-explicit-any
+export function linescoreRuns(data: any): { home: number; away: number } | null {
+  const home = data?.teams?.home?.runs;
+  const away = data?.teams?.away?.runs;
+  return typeof home === 'number' && typeof away === 'number' ? { home, away } : null;
+}
+
 /** The live state from `/game/{gamePk}/linescore`, or null before the game has an inning. */
 // deno-lint-ignore no-explicit-any
 export function linescoreLive(data: any): LiveState | null {

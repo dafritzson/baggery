@@ -2,14 +2,16 @@
 // player_game_stats, which the standings are scored from.
 //
 // POST {}                    from pg_cron (x-poller-secret header): polls the latest season's
-//                            games. The cron job only calls while games are on (private.poll_due).
+//                            games. The cron job calls every 5 seconds while there's something to
+//                            fetch (private.poll_due): live games every call, the schedule every
+//                            minute while games are on (10 otherwise), finished games every 10.
 // POST { setup: true }       from the deploy: records this function's URL for the cron job.
 // POST { seasonId }          commissioner: reloads every game of that season's postseason.
 
 import { requireCommissioner, requireUser } from '../_shared/auth.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
-import { boxscoreBatting, linescoreLive, scheduleGames } from './feed.ts';
+import { boxscoreBatting, linescoreLive, linescoreRuns, scheduleGames } from './feed.ts';
 
 const MLB = 'https://statsapi.mlb.com/api/v1';
 const LEAGUES: Record<number, 'AL' | 'NL'> = { 103: 'AL', 104: 'NL' };
@@ -50,6 +52,16 @@ async function saveGame(gamePk: number): Promise<number> {
       update mlb_games set live = ${sql.json(JSON.parse(JSON.stringify(live)))}
       where game_pk = ${gamePk} and live is distinct from ${sql.json(JSON.parse(JSON.stringify(live)))}`;
   }
+  // The score, too: the schedule, which also has it, is only read once a minute during games.
+  const runs = linescoreRuns(linescore);
+  if (runs) {
+    await sql`
+      update mlb_games set home_score = ${runs.home}, away_score = ${runs.away}
+      where game_pk = ${gamePk} and (home_score, away_score) is distinct from (${runs.home}, ${runs.away})`;
+  }
+  await sql`
+    insert into private.box_reads (game_pk, read_at) values (${gamePk}, now())
+    on conflict (game_pk) do update set read_at = excluded.read_at`;
   const { rows, players } = boxscoreBatting(gamePk, boxscore);
   if (!rows.length) return 0;
   await sql.begin(async (tx) => {
@@ -73,11 +85,40 @@ async function saveGame(gamePk: number): Promise<number> {
 }
 
 /**
- * Reads the season's postseason schedule, then the box score of every game that's on or just
- * finished. A reload (`all`) reads every game that has started, and treats finished games as
- * settled so the cron job leaves them alone.
+ * Reads the schedule if it's due (private.schedule_due), then the box score of every live game
+ * and of finished games due a re-check. A reload (`all`) reads the schedule and every game that
+ * has started, and treats finished games as settled so the cron job leaves them alone.
  */
 async function poll(year: number, all: boolean) {
+  const [{ due: scheduleDue }] = await sql`select private.schedule_due() as due`;
+  if (all || scheduleDue) await syncSchedule(year, all);
+
+  const due = all
+    ? await sql`select game_pk from mlb_games where season_year = ${year} and status in ('Live', 'Final')`
+    : await sql`
+        select g.game_pk from mlb_games g
+        left join private.box_reads b using (game_pk)
+        where g.season_year = ${year}
+          and (g.status = 'Live'
+               or (g.status = 'Final' and g.final_seen_at > now() - interval '6 hours'
+                   and (b.read_at is null or b.read_at < now() - interval '10 minutes')))`;
+
+  let batted = 0;
+  // A few at a time, to be gentle with the MLB API.
+  const pending = due.map((r) => r.game_pk as number);
+  while (pending.length) {
+    const counts = await Promise.all(pending.splice(0, 4).map(saveGame));
+    batted += counts.reduce((a, b) => a + b, 0);
+  }
+  return { year, schedule: all || scheduleDue, boxscores: due.length, battingLines: batted };
+}
+
+/**
+ * Reads the postseason schedule into mlb_games. Rows are only rewritten when something changed,
+ * so open apps don't refetch for nothing. A live game keeps the score its linescore gave (read
+ * every few seconds) over the schedule's, which can lag behind.
+ */
+async function syncSchedule(year: number, all: boolean) {
   const teams = await knownTeamIds(year);
   const games = scheduleGames(await mlb(`/schedule?sportId=1&season=${year}&gameType=F,D,L,W`), year, teams);
   if (games.length) {
@@ -93,29 +134,26 @@ async function poll(year: number, all: boolean) {
         game_type = excluded.game_type, start_time = excluded.start_time, start_time_tbd = excluded.start_time_tbd,
         official_date = excluded.official_date, status = excluded.status,
         detailed_state = excluded.detailed_state, home_team_id = excluded.home_team_id,
-        away_team_id = excluded.away_team_id, home_score = excluded.home_score, away_score = excluded.away_score,
+        away_team_id = excluded.away_team_id,
+        home_score = case when excluded.status = 'Live' and mlb_games.status = 'Live'
+          then mlb_games.home_score else excluded.home_score end,
+        away_score = case when excluded.status = 'Live' and mlb_games.status = 'Live'
+          then mlb_games.away_score else excluded.away_score end,
         series_game_number = excluded.series_game_number, games_in_series = excluded.games_in_series,
         final_seen_at = case when excluded.status = 'Final'
           then coalesce(mlb_games.final_seen_at, excluded.final_seen_at) end,
-        updated_at = now()`;
+        updated_at = now()
+      where (mlb_games.game_type, mlb_games.start_time, mlb_games.start_time_tbd, mlb_games.official_date,
+             mlb_games.status, mlb_games.detailed_state, mlb_games.home_team_id, mlb_games.away_team_id,
+             mlb_games.series_game_number, mlb_games.games_in_series)
+          is distinct from
+            (excluded.game_type, excluded.start_time, excluded.start_time_tbd, excluded.official_date,
+             excluded.status, excluded.detailed_state, excluded.home_team_id, excluded.away_team_id,
+             excluded.series_game_number, excluded.games_in_series)
+         or (excluded.status <> 'Live'
+             and (mlb_games.home_score, mlb_games.away_score) is distinct from (excluded.home_score, excluded.away_score))`;
   }
   await sql`update private.poller set schedule_synced_at = now()`;
-
-  const due = all
-    ? await sql`select game_pk from mlb_games where season_year = ${year} and status in ('Live', 'Final')`
-    : await sql`
-        select game_pk from mlb_games
-        where season_year = ${year}
-          and (status = 'Live' or (status = 'Final' and final_seen_at > now() - interval '3 hours'))`;
-
-  let batted = 0;
-  // A few at a time, to be gentle with the MLB API.
-  const pending = due.map((r) => r.game_pk as number);
-  while (pending.length) {
-    const counts = await Promise.all(pending.splice(0, 4).map(saveGame));
-    batted += counts.reduce((a, b) => a + b, 0);
-  }
-  return { year, games: games.length, boxscores: due.length, battingLines: batted };
 }
 
 /** Holds a short lease so overlapping cron calls don't poll at the same time. */

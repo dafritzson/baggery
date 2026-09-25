@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boxscoreBatting, linescoreLive, scheduleGames } from '../supabase/functions/poll-games/feed.ts';
+import { boxscoreBatting, linescoreLive, linescoreRuns, scheduleGames } from '../supabase/functions/poll-games/feed.ts';
 
 const team = (id: number, score?: number) => ({ team: { id }, score });
 
@@ -121,6 +121,11 @@ describe('box score feed', () => {
 });
 
 describe('linescore feed', () => {
+  it('reads the runs so far', () => {
+    expect(linescoreRuns({ teams: { home: { runs: 2 }, away: { runs: 3 } } })).toEqual({ home: 2, away: 3 });
+    expect(linescoreRuns({ teams: { home: {}, away: {} } })).toBeNull();
+  });
+
   it('reads the inning, count, runners and who is up', () => {
     const live = linescoreLive({
       currentInning: 7,
