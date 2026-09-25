@@ -107,7 +107,7 @@ function bagEmojis(tb: number, playerId: number, gamePk: number): string {
 /** Room for about eight bags; a bigger game scrolls sideways instead of crowding the card. */
 const BAGS_MAX_WIDTH = 176;
 
-function Bags({ tb, playerId, gamePk }: { tb: number | null; playerId: number; gamePk: number }) {
+function Bags({ tb, playerId, gamePk, color }: { tb: number | null; playerId: number; gamePk: number; color?: string }) {
   const [width, setWidth] = useState<number | null>(null);
   if (tb === null) return null;
   return (
@@ -116,7 +116,7 @@ function Bags({ tb, playerId, gamePk }: { tb: number | null; playerId: number; g
       showsHorizontalScrollIndicator
       onContentSizeChange={(w) => setWidth(w)}
       style={[styles.bags, width !== null && { width: Math.min(width, BAGS_MAX_WIDTH) }]}>
-      <ThemedText type="small" numberOfLines={1} accessibilityLabel={`${tb} total bases`}>
+      <ThemedText type="small" numberOfLines={1} style={color ? { color } : undefined} accessibilityLabel={`${tb} total bases`}>
         {tb === 0 ? '–' : bagEmojis(tb, playerId, gamePk)}
       </ThemedText>
     </ScrollView>
@@ -198,20 +198,26 @@ function GameCard({ data, scores, game, style }: { data: SeasonData; scores: Sco
                 key={p.id}
                 style={[
                   styles.playerCard,
-                  // Your players stand out: a stronger tint and an accent outline.
-                  mine
-                    ? { backgroundColor: theme.tintStrong, borderColor: theme.accent }
-                    : { backgroundColor: theme.background, borderColor: 'transparent' },
+                  // Your players stand out: filled with the accent color.
+                  { backgroundColor: mine ? theme.accent : theme.background },
                 ]}>
                 <View style={styles.playerText}>
-                  <PlayerName playerId={p.id} type="smallBold" numberOfLines={1} style={styles.playerName}>
+                  <PlayerName
+                    playerId={p.id}
+                    type="smallBold"
+                    numberOfLines={1}
+                    style={[styles.playerName, mine && { color: theme.accentText }]}>
                     {data.players.get(p.id)?.full_name ?? `Player ${p.id}`}
                   </PlayerName>
-                  <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.owner}>
+                  <ThemedText
+                    type="small"
+                    themeColor="textSecondary"
+                    numberOfLines={1}
+                    style={[styles.owner, mine && { color: theme.accentText, opacity: 0.85 }]}>
                     {mine ? 'You' : teamName(p.team)}
                   </ThemedText>
                 </View>
-                <Bags tb={p.tb} playerId={p.id} gamePk={game.gamePk} />
+                <Bags tb={p.tb} playerId={p.id} gamePk={game.gamePk} color={mine ? theme.accentText : undefined} />
               </View>
             );
           })}
@@ -242,7 +248,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.one + 2,
     paddingHorizontal: Spacing.two + 2,
     borderRadius: Spacing.two + 2,
-    borderWidth: 2,
   },
   playerText: { flex: 1, minWidth: 0 },
   playerName: { fontSize: 13, lineHeight: 17 },
