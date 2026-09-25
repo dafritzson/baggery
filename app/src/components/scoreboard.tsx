@@ -10,6 +10,7 @@ import {
 } from '@core/scoreboard.ts';
 import type { FantasyRound } from '@core/types.ts';
 
+import { OwnerBadge } from '@/components/owner-badge';
 import { PlayerName } from '@/components/player-name';
 import { type GridRow, ScoreGrid } from '@/components/score-grid';
 import { ThemedText } from '@/components/themed-text';
@@ -20,6 +21,9 @@ import { useTheme } from '@/hooks/use-theme';
 import { type Scores, coreSpells } from '@/lib/scores';
 import type { SeasonData } from '@/lib/season';
 import { ownerName, teamName } from '@/lib/teams';
+
+/** Height of the round chips' row and the team panel's header, which sit side by side. */
+const CHIPS_ROW = 40;
 
 export const ROUNDS: { round: FantasyRound; label: string; series: string }[] = [
   { round: 1, label: 'Round 1', series: 'Wild Card + Division Series' },
@@ -81,25 +85,22 @@ export function StandingsTable({
   const compact = useLayout() === 'compact';
   // Before a round's first pitch there's nothing to rank.
   const started = columns.some((c) => c.started);
-  // Just wide enough for the ranks' digits.
-  const rankWidth = standings.length >= 10 ? 16 : 9;
 
   const rows: GridRow[] = standings.map((s, i) => {
     const team = byId.get(s.teamId)!;
     const owner = ownerName(data, team);
     const mine = team.id === data.myTeam?.id;
+    const tied = standings.some((o) => o !== s && o.rank === s.rank);
     return {
       key: s.teamId,
       label: (
         <>
           {/* No rank column before the round starts, so it doesn't eat into long team names. */}
           {started && (
-            <ThemedText type="small" themeColor="textSecondary" style={[styles.rank, { width: rankWidth }]}>{s.rank}</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.rank}>{tied ? `T${s.rank}` : s.rank}</ThemedText>
           )}
-          <View style={styles.teamLabel}>
-            <ThemedText type="smallBold" numberOfLines={1}>{teamName(team)}</ThemedText>
-            {owner && <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.owner}>{mine ? 'You' : owner}</ThemedText>}
-          </View>
+          {!compact && <View style={styles.badge}><OwnerBadge teamId={team.id} owner={owner} mine={mine} /></View>}
+          <TeamLabel name={teamName(team)} owner={owner} mine={mine} />
         </>
       ),
       cells: columns.map((c) => {
@@ -130,8 +131,27 @@ export function StandingsTable({
         rows={rows}
         labelHeader="Team"
         totalHeader={`RD ${round}`}
-        labelWidth={compact ? 144 : 184}
+        labelWidth={compact ? 160 : 220}
+        rowHeight={48}
       />
+    </View>
+  );
+}
+
+/** Team name over the owner's name (or "Open spot"), with a YOU tag on my team. */
+function TeamLabel({ name, owner, mine }: { name: string; owner: string | null; mine: boolean }) {
+  const theme = useTheme();
+  return (
+    <View style={styles.teamLabel}>
+      <ThemedText numberOfLines={1} style={styles.teamName}>{name}</ThemedText>
+      <View style={styles.ownerLine}>
+        <ThemedText numberOfLines={1} themeColor="textSecondary" style={styles.owner}>{owner ?? 'Open spot'}</ThemedText>
+        {mine && (
+          <View style={[styles.you, { backgroundColor: theme.accent }]}>
+            <ThemedText style={[styles.youText, { color: theme.accentText }]}>YOU</ThemedText>
+          </View>
+        )}
+      </View>
     </View>
   );
 }
@@ -139,6 +159,7 @@ export function StandingsTable({
 /** One team's TB by player and game, a block per series, with the round totals on top. */
 export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; scores: Scores; teamId: string }) {
   const theme = useTheme();
+  const compact = useLayout() === 'compact';
   const team = data.teams.find((t) => t.id === teamId);
   if (!team) return null;
   const blocks = teamSeriesBlocks(teamId, scores.games, scores.stats, coreSpells(data), (id) => data.poolByPlayer.get(id)?.mlb_team_id);
@@ -153,26 +174,35 @@ export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; sco
     return i === 0 || scores.games.some((g) => g.gameType === b.gameType);
   });
   const owner = ownerName(data, team);
+  const mine = team.id === data.myTeam?.id;
 
   return (
-    <View style={styles.section}>
-      <View>
-        <ThemedText type="subtitle" style={styles.teamTitle}>{teamName(team)}</ThemedText>
-        {owner && <ThemedText themeColor="textSecondary">{owner}</ThemedText>}
+    <View style={styles.team}>
+      {/* As tall as the round chips' row beside it, so both columns' tables start level. */}
+      <View style={styles.teamHead}>
+        {!compact && <OwnerBadge teamId={team.id} owner={owner} mine={mine} size={36} />}
+        <View style={styles.teamLabel}>
+          <ThemedText numberOfLines={1} style={styles.teamTitle}>{teamName(team)}</ThemedText>
+          <ThemedText numberOfLines={1} themeColor="textSecondary" style={styles.owner}>
+            {owner ?? 'Open spot'}{mine ? ' · You' : ''}
+          </ThemedText>
+        </View>
+        <ThemedView type="backgroundElement" style={styles.totals}>
+          {ROUNDS.map((r, i) => (
+            <View key={r.round} style={[styles.totalCell, i > 0 && { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: theme.border }]}>
+              <ThemedText themeColor="textSecondary" style={styles.totalLabel}>RD {r.round}</ThemedText>
+              <ThemedText style={styles.totalNumber}>
+                {out !== null && r.round > out ? 'Out' : started(r.round) ? totals[r.round] : '—'}
+              </ThemedText>
+            </View>
+          ))}
+        </ThemedView>
       </View>
-      <View style={styles.totals}>
-        {ROUNDS.map((r) => (
-          <ThemedView key={r.round} type="backgroundElement" style={[styles.totalBox, { borderColor: theme.border }]}>
-            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionTitle}>{r.label}</ThemedText>
-            <ThemedText style={styles.totalNumber}>
-              {out !== null && r.round > out ? 'Out' : started(r.round) ? totals[r.round] : '—'}
-            </ThemedText>
-          </ThemedView>
+      <View style={styles.blocks}>
+        {shown.map((b) => (
+          <SeriesTable key={b.gameType} data={data} block={b} />
         ))}
       </View>
-      {shown.map((b) => (
-        <SeriesTable key={b.gameType} data={data} block={b} />
-      ))}
     </View>
   );
 }
@@ -205,8 +235,11 @@ function SeriesTable({ data, block }: { data: SeasonData; block: SeriesBlock }) 
     },
   ];
   return (
-    <View style={styles.block}>
-      <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionTitle}>{block.name}</ThemedText>
+    <View style={styles.section}>
+      <View style={styles.sectionHead}>
+        <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionTitle}>{block.name}</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">{block.total} TB</ThemedText>
+      </View>
       <ScoreGrid
         columns={block.columns.map((c) => ({ label: c.label, live: c.live }))}
         rows={rows}
@@ -219,17 +252,26 @@ function SeriesTable({ data, block }: { data: SeasonData; block: SeriesBlock }) 
 }
 
 const styles = StyleSheet.create({
-  chips: { flexDirection: 'row', gap: Spacing.one, flexWrap: 'wrap' },
+  chips: { flexDirection: 'row', gap: Spacing.one, flexWrap: 'wrap', minHeight: CHIPS_ROW, alignItems: 'center', alignContent: 'center' },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
+  // Section heads are one line of fixed height, so tables side by side start level.
   section: { gap: Spacing.three },
-  sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: Spacing.two, flexWrap: 'wrap' },
-  sectionTitle: { textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 12 },
-  rank: { fontVariant: ['tabular-nums'] },
-  teamLabel: { flex: 1, minWidth: 0 },
-  owner: { fontSize: 12, lineHeight: 14 },
-  teamTitle: { fontSize: 24, lineHeight: 30 },
-  totals: { flexDirection: 'row', gap: Spacing.two },
-  totalBox: { flex: 1, padding: Spacing.two, borderRadius: Radius.md, alignItems: 'center', gap: Spacing.half },
-  totalNumber: { fontSize: 28, lineHeight: 34, fontWeight: 700, fontVariant: ['tabular-nums'] },
-  block: { gap: Spacing.two },
+  sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: Spacing.two, height: 16 },
+  sectionTitle: { textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 12, lineHeight: 16 },
+  rank: { width: 24, textAlign: 'center', fontSize: 13, fontVariant: ['tabular-nums'] },
+  badge: { marginRight: Spacing.one },
+  teamLabel: { flex: 1, minWidth: 0, gap: 1 },
+  teamName: { fontSize: 15, lineHeight: 19, fontWeight: 600 },
+  ownerLine: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  owner: { fontSize: 12, lineHeight: 15, flexShrink: 1 },
+  you: { paddingHorizontal: 5, height: 15, borderRadius: Radius.sm, justifyContent: 'center' },
+  youText: { fontSize: 9, lineHeight: 11, fontWeight: 800, letterSpacing: 0.6 },
+  team: { gap: Spacing.four },
+  teamHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two + 4, height: CHIPS_ROW },
+  teamTitle: { fontSize: 18, lineHeight: 22, fontWeight: 700 },
+  totals: { flexDirection: 'row', height: CHIPS_ROW, borderRadius: Radius.md },
+  totalCell: { paddingHorizontal: Spacing.three - 2, justifyContent: 'center', alignItems: 'center' },
+  totalLabel: { fontSize: 10, lineHeight: 12, fontWeight: 700, letterSpacing: 0.5 },
+  totalNumber: { fontSize: 16, lineHeight: 20, fontWeight: 700, fontVariant: ['tabular-nums'] },
+  blocks: { gap: Spacing.four },
 });
