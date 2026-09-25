@@ -207,26 +207,33 @@ function GameCard({ data, scores, game, style }: { data: SeasonData; scores: Sco
   const live = game.status === 'Live';
   // Who's on a fantasy roster now, for highlighting them in the due-up lines.
   const currentOwner = new Map(data.spells.filter((s) => s.to_at === null).map((s) => [s.mlb_player_id, s.fantasy_team_id]));
-  const lineup = (side: 'away' | 'home') => {
+  /**
+   * A small card per team listing who's up, one name per line: the batting team's batter, on
+   * deck and in the hole (tinted blue), and the fielding team's next three (plain).
+   */
+  const upNext = (which: 'away' | 'home') => {
     const state = game.live;
     if (!live || !state) return null;
-    const batting = state.battingSide === side;
+    const batting = state.battingSide === which;
     const up = batting ? state.batting : state.dueUp;
-    const labels = batting ? ['AB', 'OD', 'IH'] : ['Due', '', ''];
+    const labels = batting ? ['AB', 'OD', 'IH'] : ['1', '2', '3'];
+    const abbr = data.mlbTeams.get(which === 'away' ? game.awayTeamId : game.homeTeamId)?.abbreviation ?? '';
     return (
-      <View style={styles.lineup}>
+      <View style={[styles.upCard, { backgroundColor: batting ? theme.tint : theme.background }]}>
+        <ThemedText type="smallBold" style={[styles.upHead, { color: batting ? theme.accent : theme.textSecondary }]}>
+          {abbr} {batting ? 'at bat' : 'due up'}
+        </ThemedText>
         {up.map((p, i) => {
-          if (!p) return null;
-          const owner = currentOwner.get(p.id);
+          const owner = p ? currentOwner.get(p.id) : undefined;
           const mine = owner !== undefined && owner === data.myTeam?.id;
           return (
-            <View key={i} style={styles.upNext}>
-              {labels[i] !== '' && <ThemedText type="small" themeColor="textSecondary" style={styles.upLabel}>{labels[i]}</ThemedText>}
+            <View key={i} style={styles.upRow}>
+              <ThemedText type="small" themeColor="textSecondary" style={styles.upLabel}>{labels[i]}</ThemedText>
               <ThemedText
                 type={owner ? 'smallBold' : 'small'}
                 numberOfLines={1}
                 style={[styles.upName, mine && [styles.upMine, { backgroundColor: theme.mine }]]}>
-                {p.name.split(' ').slice(1).join(' ') || p.name}
+                {p ? p.name.split(' ').slice(1).join(' ') || p.name : '—'}
               </ThemedText>
             </View>
           );
@@ -241,7 +248,6 @@ function GameCard({ data, scores, game, style }: { data: SeasonData; scores: Sco
     const leading = game.status !== 'Preview' && score !== null && other !== null && score > other;
     return (
       <View style={styles.scoreRow}>
-        <View style={styles.lineupSlot}>{lineup(which)}</View>
         <ThemedText type="default" style={[styles.teamAbbr, leading && styles.bold]}>
           {data.mlbTeams.get(teamId)?.abbreviation ?? '—'}
         </ThemedText>
@@ -281,8 +287,14 @@ function GameCard({ data, scores, game, style }: { data: SeasonData; scores: Sco
         )}
       </View>
       <View style={styles.teams}>
-        {side('away')}
-        {side('home')}
+        <View style={styles.upCards}>
+          {upNext('away')}
+          {upNext('home')}
+        </View>
+        <View style={styles.scores}>
+          {side('away')}
+          {side('home')}
+        </View>
       </View>
       {players.length > 0 && (
         <View style={[styles.players, { borderTopColor: theme.border }]}>
@@ -318,14 +330,17 @@ const styles = StyleSheet.create({
   gridWide: { flexDirection: 'row', flexWrap: 'wrap' },
   cardWide: { width: '48.5%' },
   cardHead: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.two },
-  teams: { gap: Spacing.half },
+  // Who's up (two small cards) on the left, the scores on the right.
+  teams: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  upCards: { flex: 1, minWidth: 0, flexDirection: 'row', gap: Spacing.one + 2 },
+  upCard: { flex: 1, minWidth: 0, borderRadius: Spacing.two, paddingVertical: Spacing.one, paddingHorizontal: Spacing.one + 2 },
+  upHead: { fontSize: 9, lineHeight: 12, textTransform: 'uppercase', letterSpacing: 0.4 },
+  upRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  upLabel: { width: 14, fontSize: 9, lineHeight: 14 },
+  upName: { flexShrink: 1, fontSize: 11, lineHeight: 14 },
+  upMine: { paddingHorizontal: 3, borderRadius: 3, overflow: 'hidden' },
+  scores: { marginLeft: 'auto', gap: Spacing.half },
   scoreRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 28 },
-  lineupSlot: { flex: 1, minWidth: 0 },
-  lineup: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: Spacing.two, rowGap: 2 },
-  upNext: { flexDirection: 'row', alignItems: 'center', gap: 3, maxWidth: '100%' },
-  upLabel: { fontSize: 10, lineHeight: 14, letterSpacing: 0.3 },
-  upName: { fontSize: 12, lineHeight: 16, flexShrink: 1 },
-  upMine: { paddingHorizontal: 4, borderRadius: 4, overflow: 'hidden' },
   teamAbbr: { width: 40, fontWeight: 600, textAlign: 'right' },
   score: { width: 28, textAlign: 'right', fontSize: 20, lineHeight: 26, fontVariant: ['tabular-nums'], fontWeight: 600 },
   liveStatus: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
