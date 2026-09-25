@@ -74,7 +74,7 @@ export interface MlbTeam {
 }
 
 export interface SeasonData {
-  season: { id: string; year: number; status: string; league_id: string };
+  season: { id: string; year: number; status: string; league_id: string; survivors_after_round: number[] };
   teams: Team[];
   drafts: Draft[];
   actions: DraftActionRow[];
@@ -107,7 +107,7 @@ async function fetchSeason(
 ): Promise<{ data: SeasonData | null; years: number[] }> {
   const { data: seasons } = await supabase
     .from('seasons')
-    .select('id, year, status, league_id')
+    .select('id, year, status, league_id, survivors_after_round')
     .order('year', { ascending: false });
   const years = (seasons ?? []).map((s) => s.year as number);
   const season = year ? seasons?.find((s) => s.year === year) : seasons?.[0];
