@@ -89,7 +89,7 @@ function DayChips({ days, day, today, onChange }: { days: string[]; day?: string
   );
 }
 
-const BAGS = ['👜', '💼', '🎒', '🛍️', '👝', '💰', '🧳'];
+const BAGS = ['👜', '💼', '🎒', '🛍️', '👝', '🧳'];
 
 /**
  * One bag emoji per total base, each picked at random. Seeded by player, game and position, so a
@@ -104,8 +104,8 @@ function bagEmojis(tb: number, playerId: number, gamePk: number): string {
   }).join('');
 }
 
-/** Room for about six bags; a bigger game scrolls sideways instead of crowding the row. */
-const BAGS_MAX_WIDTH = 128;
+/** Room for about eight bags; a bigger game scrolls sideways instead of crowding the card. */
+const BAGS_MAX_WIDTH = 176;
 
 function Bags({ tb, playerId, gamePk }: { tb: number | null; playerId: number; gamePk: number }) {
   const [width, setWidth] = useState<number | null>(null);
@@ -194,13 +194,15 @@ function GameCard({ data, scores, game, style }: { data: SeasonData; scores: Sco
           {players.map((p) => {
             const mine = p.team.id === data.myTeam?.id;
             return (
-              <View key={p.id} style={styles.playerRow}>
-                <PlayerName playerId={p.id} type={mine ? 'smallBold' : 'small'} numberOfLines={1}>
-                  {data.players.get(p.id)?.full_name ?? `Player ${p.id}`}
-                </PlayerName>
-                <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.owner}>
-                  {mine ? 'You' : teamName(p.team)}
-                </ThemedText>
+              <View key={p.id} style={[styles.playerCard, { backgroundColor: mine ? theme.tint : theme.background }]}>
+                <View style={styles.playerText}>
+                  <PlayerName playerId={p.id} type="smallBold" numberOfLines={1} style={styles.playerName}>
+                    {data.players.get(p.id)?.full_name ?? `Player ${p.id}`}
+                  </PlayerName>
+                  <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.owner}>
+                    {mine ? 'You' : teamName(p.team)}
+                  </ThemedText>
+                </View>
                 <Bags tb={p.tb} playerId={p.id} gamePk={game.gamePk} />
               </View>
             );
@@ -224,8 +226,17 @@ const styles = StyleSheet.create({
   teamName: { flex: 1 },
   score: { fontSize: 22, lineHeight: 28, fontVariant: ['tabular-nums'], fontWeight: 600 },
   bold: { fontWeight: 800 },
-  players: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: Spacing.two, gap: Spacing.one },
-  playerRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  owner: { flex: 1, textAlign: 'right' },
+  players: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: Spacing.two + 2, gap: Spacing.one + 2 },
+  playerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingVertical: Spacing.one + 2,
+    paddingHorizontal: Spacing.two + 2,
+    borderRadius: Spacing.two + 2,
+  },
+  playerText: { flex: 1, minWidth: 0 },
+  playerName: { fontSize: 13, lineHeight: 17 },
+  owner: { fontSize: 11, lineHeight: 14 },
   bags: { maxWidth: BAGS_MAX_WIDTH, flexGrow: 0, flexShrink: 0 },
 });
