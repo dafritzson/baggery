@@ -20,8 +20,12 @@ create table private.score_changes (
   row jsonb
 );
 
+-- Security definer: whoever writes the tables (the poller, the service role) can add to the
+-- outbox without access to the private schema.
 create function private.collect_score_change() returns trigger
 language plpgsql
+security definer
+set search_path = ''
 as $$
 begin
   if tg_op = 'DELETE' then

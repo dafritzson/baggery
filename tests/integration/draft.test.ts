@@ -272,7 +272,7 @@ describe('live stats poller', () => {
 
     // Knock one game's row out of date, then reload: the poll puts it back and broadcasts that.
     const { data: game } = await admin.from('mlb_games').select('game_pk').eq('season_year', 2025).eq('game_type', 'W').eq('series_game_number', 7).single();
-    await admin.from('mlb_games').update({ detailed_state: 'Stale' }).eq('game_pk', game!.game_pk);
+    expect((await admin.from('mlb_games').update({ detailed_state: 'Stale' }).eq('game_pk', game!.game_pk)).error).toBeNull();
     expect((await call('Daniel', 'poll-games', { seasonId: season2025 })).error).toBeUndefined();
 
     for (let i = 0; i < 50 && !received.some((m) => m.games?.some((g) => g.game_pk === game!.game_pk)); i++) {
