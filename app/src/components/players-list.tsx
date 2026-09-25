@@ -152,6 +152,7 @@ function ColumnsMenu({ value, onChange }: { value: ColumnKey[]; onChange: (colum
   const theme = useTheme();
   const toggle = (key: ColumnKey) =>
     onChange(COLUMNS.map((c) => c.key).filter((k) => (k === key ? !value.includes(k) : value.includes(k))));
+  const all = COLUMNS.every((c) => value.includes(c.key));
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger className="menu-trigger menu-trigger-chip" aria-label="Choose columns">
@@ -161,6 +162,17 @@ function ColumnsMenu({ value, onChange }: { value: ColumnKey[]; onChange: (colum
       </DropdownMenu.Trigger>
       <DropdownMenu.Content className="menu-content menu-content-scroll" align="start" sideOffset={6} collisionPadding={8}>
         <DropdownMenu.Label className="menu-label menu-label-heading">Columns</DropdownMenu.Label>
+        {/* Ticked only when every column shows: ticking shows them all, unticking hides them all. */}
+        <DropdownMenu.CheckboxItem
+          key="all"
+          className="menu-item"
+          value={all ? 'on' : 'off'}
+          onValueChange={() => onChange(all ? [] : COLUMNS.map((c) => c.key))}
+          shouldDismissMenuOnSelect={false}>
+          <DropdownMenu.ItemTitle>All columns</DropdownMenu.ItemTitle>
+          <DropdownMenu.ItemIndicator className="menu-check">✓</DropdownMenu.ItemIndicator>
+        </DropdownMenu.CheckboxItem>
+        <DropdownMenu.Separator className="menu-separator" />
         {COLUMNS.map((c) => (
           <DropdownMenu.CheckboxItem
             key={c.key}
@@ -223,7 +235,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   clearText: { fontSize: 12, lineHeight: 14 },
-  chipRow: { flexGrow: 0 },
+  // A ScrollView shrinks by default; in a `fill` list the tall table would squash the pills.
+  chipRow: { flexGrow: 0, flexShrink: 0 },
   chips: { gap: Spacing.one },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Spacing.four },
 });
