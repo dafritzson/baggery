@@ -5,15 +5,16 @@ import type { LiveState } from '@core/live.ts';
 import { SERIES } from '@core/scoreboard.ts';
 
 import { Card } from '@/components/card';
+import { YouTag } from '@/components/owner-badge';
 import { PlayerName } from '@/components/player-name';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
-import { type GameInfo, type Scores, useScores } from '@/lib/scores';
+import { type BattingLine, type GameInfo, type Scores, useScores } from '@/lib/scores';
 import { type SeasonData, useSeason } from '@/lib/season';
-import { teamName } from '@/lib/teams';
+import { ownerName, teamName } from '@/lib/teams';
 
 /** Local calendar day of a game, e.g. "2026-09-29", for grouping. */
 function dayKey(iso: string): string {
@@ -58,11 +59,24 @@ export default function GamesScreen() {
       ) : (
         <>
           <DayChips days={days} day={day} today={today} onChange={setPicked} />
-          <View style={[styles.grid, wide && styles.gridWide]}>
-            {games.map((g) => (
-              <GameCard key={g.gamePk} data={data} scores={scores} game={g} style={wide ? styles.cardWide : undefined} />
-            ))}
-          </View>
+          {wide ? (
+            // Two columns that fill the width; cards alternate between them in start order.
+            <View style={styles.gridWide}>
+              {[0, 1].map((col) => (
+                <View key={col} style={styles.column}>
+                  {games.filter((_, i) => i % 2 === col).map((g) => (
+                    <GameCard key={g.gamePk} data={data} scores={scores} game={g} />
+                  ))}
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.column}>
+              {games.map((g) => (
+                <GameCard key={g.gamePk} data={data} scores={scores} game={g} />
+              ))}
+            </View>
+          )}
         </>
       )}
     </Screen>
@@ -205,11 +219,57 @@ function ownerOf(data: SeasonData, playerId: number, game: GameInfo): string | u
   )?.fantasy_team_id;
 }
 
-function GameCard({ data, scores, game, style }: { data: SeasonData; scores: Scores; game: GameInfo; style?: object }) {
+/** "1-3 HR BB": hits-at bats, then the extra-base hits and walks. Empty before a first time up. */
+function lineScore(line: BattingLine | undefined): string {
+  if (!line) return '';
+  const times = (n: number, label: string) => (n === 0 ? [] : [n === 1 ? label : `${n}${label}`]);
+  return [`${line.h}-${line.ab}`, ...times(line.hr, 'HR'), ...times(line.triples, '3B'), ...times(line.doubles, '2B'), ...times(line.bb, 'BB')].join(' ');
+}
+
+function GameCard({ data, scores, game }: { data: SeasonData; scores: Scores; game: GameInfo }) {
+  if (game.status === 'Final') return <FinalCard data={data} scores={scores} game={game} />;
+  return <OpenCard data={data} scores={scores} game={game} />;
+}
+
+/** A finished game: the final score on one line, then how the baggers did. */
+function FinalCard({ data, scores, game }: { data: SeasonData; scores: Scores; game: GameInfo }) {
+  const theme = useTheme();
+  const side = (which: 'away' | 'home') => {
+    const teamId = which === 'away' ? game.awayTeamId : game.homeTeamId;
+    const score = which === 'away' ? game.awayScore : game.homeScore;
+    const other = which === 'away' ? game.homeScore : game.awayScore;
+    const won = score !== null && other !== null && score > other;
+    const color = { color: won ? theme.text : theme.textSecondary };
+    return (
+      <View style={styles.finalSide}>
+        <ThemedText style={[styles.finalAbbr, color]}>{data.mlbTeams.get(teamId)?.abbreviation ?? '—'}</ThemedText>
+        <ThemedText style={[styles.finalScore, color, won && styles.bold]}>{score ?? ''}</ThemedText>
+      </View>
+    );
+  };
+  return (
+    <Card>
+      <View style={styles.cardHead}>
+        <ThemedText type="small" themeColor="textSecondary">{seriesLabel(game)}</ThemedText>
+        <ThemedText type="smallBold" themeColor="textSecondary">{statusLine(game)}</ThemedText>
+      </View>
+      <View style={styles.finalScores}>
+        {side('away')}
+        <ThemedText themeColor="textSecondary">–</ThemedText>
+        {side('home')}
+      </View>
+      <Baggers data={data} scores={scores} game={game} />
+    </Card>
+  );
+}
+
+/** A game that's on or still to come: who's up, the score, and the baggers so far. */
+function OpenCard({ data, scores, game }: { data: SeasonData; scores: Scores; game: GameInfo }) {
   const theme = useTheme();
   const live = game.status === 'Live';
   // Who's on a fantasy roster now, for highlighting them in the due-up lines.
   const currentOwner = new Map(data.spells.filter((s) => s.to_at === null).map((s) => [s.mlb_player_id, s.fantasy_team_id]));
+  const lines = new Map(scores.lines.filter((l) => l.gamePk === game.gamePk).map((l) => [l.playerId, l]));
   /**
    * A small card per team listing who's up, one name per line: the batting team's batter, on
    * deck and in the hole (tinted blue), and the fielding team's next three (plain).
@@ -238,6 +298,7 @@ function GameCard({ data, scores, game, style }: { data: SeasonData; scores: Sco
                 style={[styles.upName, mine && [styles.upMine, { backgroundColor: theme.mine }]]}>
                 {p ? p.name.split(' ').slice(1).join(' ') || p.name : '—'}
               </ThemedText>
+              {p && <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.upLine}>{lineScore(lines.get(p.id))}</ThemedText>}
             </View>
           );
         })}
@@ -261,23 +322,8 @@ function GameCard({ data, scores, game, style }: { data: SeasonData; scores: Sco
     );
   };
 
-  // Fantasy-rostered players on either team, with their TB in this game.
-  const tb = new Map(scores.stats.filter((s) => s.gamePk === game.gamePk).map((s) => [s.playerId, s.tb]));
-  const playerIds = [...new Set(data.spells.map((s) => s.mlb_player_id))];
-  const players = playerIds
-    .filter((id) => {
-      const mlb = data.poolByPlayer.get(id)?.mlb_team_id;
-      return mlb === game.homeTeamId || mlb === game.awayTeamId;
-    })
-    .flatMap((id) => {
-      const owner = ownerOf(data, id, game);
-      const team = owner ? data.teams.find((t) => t.id === owner) : undefined;
-      return team ? [{ id, team, tb: tb.get(id) ?? (game.status === 'Preview' ? null : 0) }] : [];
-    })
-    .sort((a, b) => (b.tb ?? -1) - (a.tb ?? -1));
-
   return (
-    <Card style={style}>
+    <Card>
       <View style={styles.cardHead}>
         <ThemedText type="small" themeColor="textSecondary">{seriesLabel(game)}</ThemedText>
         {live && game.live ? (
@@ -299,29 +345,59 @@ function GameCard({ data, scores, game, style }: { data: SeasonData; scores: Sco
           {side('home')}
         </View>
       </View>
-      {players.length > 0 && (
-        <View style={[styles.players, { borderTopColor: theme.border }]}>
-          {players.map((p) => {
-            const mine = p.team.id === data.myTeam?.id;
-            return (
-              <View
-                key={p.id}
-                style={[styles.playerCard, { backgroundColor: mine ? theme.mine : theme.background }]}>
-                <PlayerName playerId={p.id} type="smallBold" numberOfLines={1} style={styles.playerName}>
-                  {data.players.get(p.id)?.full_name ?? `Player ${p.id}`}
-                </PlayerName>
-                <View style={styles.playerSecondLine}>
-                  <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.owner}>
-                    {mine ? 'You' : teamName(p.team)}
-                  </ThemedText>
-                  <Bags tb={p.tb} playerId={p.id} gamePk={game.gamePk} />
-                </View>
-              </View>
-            );
-          })}
-        </View>
-      )}
+      <Baggers data={data} scores={scores} game={game} />
     </Card>
+  );
+}
+
+/** The fantasy-rostered players on either team, as mini cards with their bags, most TB first. */
+function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; game: GameInfo }) {
+  const theme = useTheme();
+  // Fantasy-rostered players on either team, with their TB in this game.
+  const tb = new Map(scores.stats.filter((s) => s.gamePk === game.gamePk).map((s) => [s.playerId, s.tb]));
+  const playerIds = [...new Set(data.spells.map((s) => s.mlb_player_id))];
+  const players = playerIds
+    .filter((id) => {
+      const mlb = data.poolByPlayer.get(id)?.mlb_team_id;
+      return mlb === game.homeTeamId || mlb === game.awayTeamId;
+    })
+    .flatMap((id) => {
+      const owner = ownerOf(data, id, game);
+      const team = owner ? data.teams.find((t) => t.id === owner) : undefined;
+      return team ? [{ id, team, tb: tb.get(id) ?? (game.status === 'Preview' ? null : 0) }] : [];
+    })
+    .sort((a, b) => (b.tb ?? -1) - (a.tb ?? -1));
+
+  if (players.length === 0) return null;
+  return (
+    <View style={[styles.players, { borderTopColor: theme.border }]}>
+      {players.map((p) => {
+        const mine = p.team.id === data.myTeam?.id;
+        return (
+          <View
+            key={p.id}
+            style={[styles.playerCard, { backgroundColor: mine ? theme.mine : theme.background }]}>
+            <PlayerName playerId={p.id} type="smallBold" numberOfLines={1} style={styles.playerName}>
+              {data.players.get(p.id)?.full_name ?? `Player ${p.id}`}
+            </PlayerName>
+            <View style={styles.playerSecondLine}>
+              {/* Like Standings: team and owner, or a YOU tag on my own players (already tinted). */}
+              <View style={styles.ownerLine}>
+                {mine ? (
+                  <YouTag />
+                ) : (
+                  <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.owner}>
+                    {teamName(p.team)}
+                    {ownerName(data, p.team) ? ` · ${ownerName(data, p.team)}` : ''}
+                  </ThemedText>
+                )}
+              </View>
+              <Bags tb={p.tb} playerId={p.id} gamePk={game.gamePk} />
+            </View>
+          </View>
+        );
+      })}
+    </View>
   );
 }
 
@@ -329,9 +405,12 @@ const styles = StyleSheet.create({
   chipRow: { flexGrow: 0 },
   chips: { gap: Spacing.one },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
-  grid: { gap: Spacing.three },
-  gridWide: { flexDirection: 'row', flexWrap: 'wrap' },
-  cardWide: { width: '48.5%' },
+  gridWide: { flexDirection: 'row', gap: Spacing.three, alignItems: 'flex-start' },
+  column: { flex: 1, minWidth: 0, gap: Spacing.three },
+  finalScores: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  finalSide: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.two },
+  finalAbbr: { fontSize: 17, lineHeight: 24, fontWeight: 600 },
+  finalScore: { fontSize: 22, lineHeight: 28, fontWeight: 600, fontVariant: ['tabular-nums'] },
   cardHead: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.two },
   // Who's up (two small cards) on the left, the scores on the right.
   teams: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
@@ -340,7 +419,9 @@ const styles = StyleSheet.create({
   upHead: { fontSize: 9, lineHeight: 12, textTransform: 'uppercase', letterSpacing: 0.4 },
   upRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   upLabel: { width: 14, fontSize: 9, lineHeight: 14 },
-  upName: { flexShrink: 1, fontSize: 11, lineHeight: 14 },
+  // The name keeps its width; the line score after it gets cut off first.
+  upName: { flexShrink: 0, maxWidth: '75%', fontSize: 11, lineHeight: 14 },
+  upLine: { marginLeft: 2, flexShrink: 1, minWidth: 0, fontSize: 10, lineHeight: 14, fontVariant: ['tabular-nums'] },
   upMine: { paddingHorizontal: 3, borderRadius: 3, overflow: 'hidden' },
   scores: { marginLeft: 'auto', gap: Spacing.half },
   scoreRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 28 },
@@ -374,6 +455,7 @@ const styles = StyleSheet.create({
   },
   playerSecondLine: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, minHeight: 18 },
   playerName: { fontSize: 13, lineHeight: 17 },
-  owner: { flex: 1, minWidth: 0, fontSize: 11, lineHeight: 14 },
+  ownerLine: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
+  owner: { flexShrink: 1, minWidth: 0, fontSize: 11, lineHeight: 14 },
   bags: { maxWidth: BAGS_MAX_WIDTH, flexGrow: 0, flexShrink: 0 },
 });

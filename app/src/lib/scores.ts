@@ -17,10 +17,24 @@ export interface GameInfo extends ScoreGame {
   live: LiveState | null;
 }
 
+/** A batter's line in one game, for the at bat / due up lists of live games. */
+export interface BattingLine {
+  gamePk: number;
+  playerId: number;
+  ab: number;
+  h: number;
+  doubles: number;
+  triples: number;
+  hr: number;
+  bb: number;
+}
+
 export interface Scores {
   games: GameInfo[];
   /** Box-score TB of players who have been on a fantasy roster this season. */
   stats: ScoreStat[];
+  /** Every batter's line in the games being played now. */
+  lines: BattingLine[];
 }
 
 /** Roster spells in the shared core's format. */
@@ -50,6 +64,10 @@ export function useScores(data: SeasonData | null): { scores: Scores | null; ref
       gamePks.length && playerIds.length
         ? await supabase.from('player_game_stats').select('game_pk, mlb_player_id, tb').in('game_pk', gamePks).in('mlb_player_id', playerIds)
         : { data: [] };
+    const livePks = (games ?? []).filter((g) => g.status === 'Live').map((g) => g.game_pk as number);
+    const { data: lines } = livePks.length
+      ? await supabase.from('player_game_stats').select('game_pk, mlb_player_id, ab, h, doubles, triples, hr, bb').in('game_pk', livePks)
+      : { data: [] };
     if (fetchId !== latest.current) return;
     setScores({
       games: (games ?? [])
@@ -68,6 +86,16 @@ export function useScores(data: SeasonData | null): { scores: Scores | null; ref
           live: g.live,
         })),
       stats: (stats ?? []).map((s) => ({ gamePk: s.game_pk, playerId: s.mlb_player_id, tb: s.tb })),
+      lines: (lines ?? []).map((l) => ({
+        gamePk: l.game_pk,
+        playerId: l.mlb_player_id,
+        ab: l.ab,
+        h: l.h,
+        doubles: l.doubles,
+        triples: l.triples,
+        hr: l.hr,
+        bb: l.bb,
+      })),
     });
   }, [year, playerKey]);
 

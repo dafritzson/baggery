@@ -23,6 +23,8 @@ export interface GridRow {
   strong?: boolean;
   /** Highlights the row (the team shown beside the standings). */
   selected?: boolean;
+  /** My team's row: tinted like my players on the Games tab, selected or not. */
+  mine?: boolean;
   /** Colors the total, like the old scoring sheet: safe, tied at the cut, or out. */
   standing?: 'safe' | 'tied' | 'out';
   /** Draw the cut line under this row. */
@@ -62,6 +64,7 @@ export function ScoreGrid({
     i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border },
     rows[i - 1]?.cutAfter && [styles.cut, { borderTopColor: theme.danger }],
     r.selected && { backgroundColor: theme.backgroundSelected },
+    r.mine && { backgroundColor: theme.mine },
   ];
   const header = (text: string, live?: boolean) => (
     <>
