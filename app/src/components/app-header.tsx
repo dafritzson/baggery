@@ -146,10 +146,7 @@ function ThemeToggle() {
       hitSlop={6}
       accessibilityRole="button"
       accessibilityLabel={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-      style={({ pressed, hovered }) => [
-        styles.toggle,
-        (pressed || hovered) && { backgroundColor: theme.backgroundElement },
-      ]}>
+      style={({ pressed }) => [styles.toggle, pressed && { backgroundColor: theme.backgroundElement }]}>
       <Svg width={20} height={20} viewBox="0 0 24 24">
         {dark ? (
           <>
