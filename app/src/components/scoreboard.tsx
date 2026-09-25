@@ -101,7 +101,6 @@ export function StandingsTable({
       total: started ? String(s.total) : '',
       selected: team.id === selectedTeamId,
       standing: started ? standing(s.total, i) : undefined,
-      mine,
       cutAfter: started && i === survivors - 1 && standings.length > survivors,
       onPress: () => onSelectTeam(team.id),
     };

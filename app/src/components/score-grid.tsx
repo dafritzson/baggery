@@ -25,8 +25,6 @@ export interface GridRow {
   selected?: boolean;
   /** Colors the total, like the old scoring sheet: safe, tied at the cut, or out. */
   standing?: 'safe' | 'tied' | 'out';
-  /** Your own team: a bolder standing color and a bold name. */
-  mine?: boolean;
   /** Draw the cut line under this row. */
   cutAfter?: boolean;
   onPress?: () => void;
@@ -53,15 +51,8 @@ export function ScoreGrid({
   labelWidth: number;
 }) {
   const theme = useTheme();
-  const standingColor = (r: GridRow) => {
-    if (!r.standing) return undefined;
-    const colors = {
-      safe: [theme.standingSafe, theme.standingSafeMine],
-      tied: [theme.standingTied, theme.standingTiedMine],
-      out: [theme.standingOut, theme.standingOutMine],
-    }[r.standing];
-    return colors[r.mine ? 1 : 0];
-  };
+  const standingColor = (r: GridRow) =>
+    r.standing && { safe: theme.standingSafe, tied: theme.standingTied, out: theme.standingOut }[r.standing];
   const rowStyle = (r: GridRow, i: number) => [
     styles.row,
     i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border },

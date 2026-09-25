@@ -30,10 +30,6 @@ export const Colors = {
     standingSafe: '#D3E2F4',
     standingTied: '#DCD5EC',
     standingOut: '#F3D0D0',
-    /** The same, bolder, for your own team. */
-    standingSafeMine: '#8FB6E6',
-    standingTiedMine: '#AE9DDA',
-    standingOutMine: '#E59A9A',
   },
   dark: {
     text: '#ffffff',
@@ -54,9 +50,6 @@ export const Colors = {
     standingSafe: '#1C3050',
     standingTied: '#30284A',
     standingOut: '#4A2228',
-    standingSafeMine: '#2F5A9A',
-    standingTiedMine: '#5A4592',
-    standingOutMine: '#8A3440',
   },
 } as const;
 
