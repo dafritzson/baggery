@@ -112,7 +112,7 @@ export function BagGame({ view, before, onFinish, onReplay }: {
 function bagLayout(bag: Bag, view: FieldView) {
   // Farther bags look smaller, but never too small to tap.
   const size = Math.round(24 + 40 * view.scale(bag.z));
-  const hit = Math.max(size + 12, 48);
+  const hit = Math.max(size + 4, 40);
   // The deep corners run off the sides of a phone; keep every bag fully on screen.
   const spot = view.project(bag.x, bag.z);
   const land = { x: Math.min(Math.max(spot.x, hit / 2), view.width - hit / 2), y: spot.y };
