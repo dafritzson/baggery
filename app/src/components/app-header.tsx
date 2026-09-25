@@ -94,8 +94,8 @@ function YearPicker() {
 
   function pick(y: number) {
     if (y === year) return;
-    // A draft belongs to one season, so switching years from a draft room goes home.
-    if (pathname.startsWith('/draft')) router.replace({ pathname: '/', params: { year: y } });
+    // A draft belongs to one season, so switching years from a draft room goes to that season's drafts.
+    if (pathname.startsWith('/draft/')) router.replace({ pathname: '/draft', params: { year: y } });
     else router.setParams({ year: y });
   }
 

@@ -30,15 +30,15 @@ export default function DraftRoomScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data, loading, refetch, requestedYear } = useSeason();
   const draft = data?.drafts.find((d) => d.id === id);
-  // Back to the season being viewed, keeping the year in the URL.
-  const goHome = () => router.replace(requestedYear ? { pathname: '/', params: { year: requestedYear } } : '/');
+  // Back to the season's drafts, keeping the year in the URL.
+  const goToDrafts = () => router.replace(requestedYear ? { pathname: '/draft', params: { year: requestedYear } } : '/draft');
 
   if (loading) return <Screen><ThemedText themeColor="textSecondary">Loading…</ThemedText></Screen>;
   if (!data || !draft) {
     return (
       <Screen>
         <ThemedText>Draft not found.</ThemedText>
-        <Button label="Home" variant="secondary" onPress={goHome} />
+        <Button label="All drafts" variant="secondary" onPress={goToDrafts} />
       </Screen>
     );
   }

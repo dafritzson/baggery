@@ -32,6 +32,7 @@ function RootStack() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={!!session}>
         <Stack.Screen name="index" options={{ title: 'Baggery' }} />
+        <Stack.Screen name="draft/index" options={{ title: 'Drafts · Baggery' }} />
         <Stack.Screen name="draft/[id]" options={{ title: 'Draft room · Baggery' }} />
         <Stack.Screen name="standings" options={{ title: 'Standings · Baggery' }} />
         <Stack.Screen name="games" options={{ title: 'Games · Baggery' }} />

@@ -22,9 +22,9 @@ interface Section {
 const SECTIONS: Section[] = [
   {
     label: 'Draft',
-    href: '/',
+    href: '/draft',
     icon: { ios: 'list.number', android: 'format_list_numbered', web: 'format_list_numbered' },
-    matches: (p) => p === '/' || p.startsWith('/draft'),
+    matches: (p) => p.startsWith('/draft'),
   },
   {
     label: 'Standings',

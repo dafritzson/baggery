@@ -45,7 +45,7 @@ export default function SettingsScreen() {
         ) : (
           <>
             <ThemedText themeColor="textSecondary">You haven&apos;t claimed a spot this season yet.</ThemedText>
-            <Button label="Claim a spot" variant="secondary" onPress={() => router.navigate('/')} />
+            <Button label="Claim a spot" variant="secondary" onPress={() => router.navigate('/draft')} />
           </>
         )}
       </Card>
