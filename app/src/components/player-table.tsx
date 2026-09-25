@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -125,6 +125,7 @@ export function PlayerTable({
   selectedId = null,
   columns: visible = DEFAULT_COLUMNS,
   contained = false,
+  headerAction,
   style,
 }: {
   rows: PlayerRow[];
@@ -138,6 +139,8 @@ export function PlayerTable({
    * scrollbars are always in view. Size the box with `style` (a max height, or flex in a parent).
    */
   contained?: boolean;
+  /** At the right end of the Name header, e.g. the column picker. */
+  headerAction?: ReactNode;
   style?: ViewStyle;
 }) {
   const theme = useTheme();
@@ -224,13 +227,14 @@ export function PlayerTable({
       style={[styles.table, box && styles.box, style]}
       onLayout={(e) => setTableWidth(e.nativeEvent.layout.width)}>
       <View style={[styles.nameColumn, nameColumnWidth, { borderRightColor: theme.border }, box && [sticky({ left: 0 }, 2), fill]]}>
-        <Pressable
-          onPress={() => sortBy('name')}
-          style={[styles.header, styles.nameCell, { borderBottomColor: theme.border }, box && [sticky({ top: 0 }, 3), fill]]}>
-          <ThemedText type="smallBold" themeColor={sort.key === 'name' ? 'text' : 'textSecondary'} style={styles.headerText}>
-            Name{arrow('name')}
-          </ThemedText>
-        </Pressable>
+        <View style={[styles.header, styles.nameHeader, { borderBottomColor: theme.border }, box && [sticky({ top: 0 }, 3), fill]]}>
+          <Pressable onPress={() => sortBy('name')} style={[styles.nameCell, styles.nameSort]}>
+            <ThemedText type="smallBold" themeColor={sort.key === 'name' ? 'text' : 'textSecondary'} style={styles.headerText}>
+              Name{arrow('name')}
+            </ThemedText>
+          </Pressable>
+          {headerAction}
+        </View>
         {sorted.map((r, i) => (
           <Pressable key={r.id} {...rowPress(r.id)} style={[rowStyle(r.id, i), styles.nameCell, styles.nameRow]}>
             <ThemedText type="smallBold" numberOfLines={1} style={styles.name}>{r.name}</ThemedText>
@@ -258,6 +262,8 @@ const styles = StyleSheet.create({
   header: { height: ROW_HEIGHT, borderBottomWidth: StyleSheet.hairlineWidth },
   row: { height: ROW_HEIGHT },
   headerText: { fontSize: 13 },
+  nameHeader: { flexDirection: 'row', alignItems: 'center', paddingRight: Spacing.one },
+  nameSort: { flex: 1, alignSelf: 'stretch' },
   nameCell: { justifyContent: 'center', paddingHorizontal: Spacing.two + 2 },
   nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: Spacing.one },
   name: { flexShrink: 1 },

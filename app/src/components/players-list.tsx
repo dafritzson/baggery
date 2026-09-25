@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+import Svg, { Circle, Path } from 'react-native-svg';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { COLUMNS, type ColumnKey, DEFAULT_COLUMNS, type PlayerRow, PlayerTable } from '@/components/player-table';
@@ -89,6 +90,7 @@ export function PlayersList({
   const shown = available.filter(
     (p) => (teamFilter === null || p.mlbTeamId === teamFilter) && (!q || p.name.toLowerCase().includes(q)),
   );
+  const columnsMenu = <ColumnsMenu value={columns} onChange={setColumns} />;
   const mlbTeams = [...data.mlbTeams.values()].filter((t) => !t.eliminated).sort((a, b) => a.abbreviation.localeCompare(b.abbreviation));
 
   return (
@@ -113,22 +115,19 @@ export function PlayersList({
           </Pressable>
         )}
       </View>
-      <View style={styles.filterRow}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} contentContainerStyle={styles.chips}>
-          <Chip label="All" active={teamFilter === null} onPress={() => setTeamFilter(null)} />
-          {mlbTeams.map((t) => (
-            <Chip key={t.id} label={t.abbreviation} active={teamFilter === t.id} onPress={() => setTeamFilter(teamFilter === t.id ? null : t.id)} />
-          ))}
-        </ScrollView>
-        <ColumnsMenu value={columns} onChange={setColumns} />
-      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} contentContainerStyle={styles.chips}>
+        <Chip label="All" active={teamFilter === null} onPress={() => setTeamFilter(null)} />
+        {mlbTeams.map((t) => (
+          <Chip key={t.id} label={t.abbreviation} active={teamFilter === t.id} onPress={() => setTeamFilter(teamFilter === t.id ? null : t.id)} />
+        ))}
+      </ScrollView>
       {data.pool.length === 0 && (
         <ThemedText themeColor="textSecondary">The player pool is empty. The commissioner needs to sync it from MLB.</ThemedText>
       )}
       {shown.length > 0 &&
         (fill && !contained ? (
           <ScrollView style={styles.fill}>
-            <PlayerTable rows={shown} onSelect={onSelect ?? openPlayer} selectedId={selectedId} columns={columns} />
+            <PlayerTable rows={shown} onSelect={onSelect ?? openPlayer} selectedId={selectedId} columns={columns} headerAction={columnsMenu} />
           </ScrollView>
         ) : (
           <PlayerTable
@@ -136,6 +135,7 @@ export function PlayersList({
             onSelect={onSelect ?? openPlayer}
             selectedId={selectedId}
             columns={columns}
+            headerAction={columnsMenu}
             contained={contained}
             style={contained ? (fill ? styles.shrink : { maxHeight: Math.max(320, height - 200) }) : undefined}
           />
@@ -147,7 +147,7 @@ export function PlayersList({
   );
 }
 
-/** A ⚙︎ button with a checklist of the table's columns; stays open while you tick. */
+/** A small icon in the table's header with a checklist of its columns; stays open while you tick. */
 function ColumnsMenu({ value, onChange }: { value: ColumnKey[]; onChange: (columns: ColumnKey[]) => void }) {
   const theme = useTheme();
   const toggle = (key: ColumnKey) =>
@@ -155,11 +155,11 @@ function ColumnsMenu({ value, onChange }: { value: ColumnKey[]; onChange: (colum
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger className="menu-trigger menu-trigger-chip" aria-label="Choose columns">
-        <View style={[styles.chip, styles.columnsButton, { backgroundColor: theme.backgroundElement }]}>
-          <ThemedText type="smallBold" themeColor="textSecondary">⚙︎ Columns</ThemedText>
+        <View style={styles.columnsButton}>
+          <SlidersIcon color={theme.textSecondary} />
         </View>
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content className="menu-content menu-content-scroll" align="end" sideOffset={6} collisionPadding={8}>
+      <DropdownMenu.Content className="menu-content menu-content-scroll" align="start" sideOffset={6} collisionPadding={8}>
         <DropdownMenu.Label className="menu-label menu-label-heading">Columns</DropdownMenu.Label>
         {COLUMNS.map((c) => (
           <DropdownMenu.CheckboxItem
@@ -181,6 +181,18 @@ function ColumnsMenu({ value, onChange }: { value: ColumnKey[]; onChange: (colum
   );
 }
 
+/** Three slider tracks with knobs: "adjust what's shown". */
+function SlidersIcon({ color }: { color: string }) {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 16 16">
+      <Path d="M2 4h12M2 8h12M2 12h12" stroke={color} strokeWidth={1.5} strokeLinecap="round" />
+      <Circle cx={10} cy={4} r={2} fill={color} />
+      <Circle cx={5} cy={8} r={2} fill={color} />
+      <Circle cx={11} cy={12} r={2} fill={color} />
+    </Svg>
+  );
+}
+
 function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   const theme = useTheme();
   return (
@@ -196,8 +208,7 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   // Takes the height left in a `fill` list, and no more.
   shrink: { flexShrink: 1, minHeight: 0 },
-  filterRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  columnsButton: { flexDirection: 'row', alignItems: 'center' },
+  columnsButton: { width: 28, height: 28, borderRadius: Spacing.one + 2, alignItems: 'center', justifyContent: 'center' },
   // Room on the right for the clear button.
   search: { minHeight: 44, borderRadius: Spacing.two, borderWidth: 1, paddingLeft: Spacing.three, paddingRight: 44, fontSize: 16 },
   clear: {
@@ -212,7 +223,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   clearText: { fontSize: 12, lineHeight: 14 },
-  chipRow: { flexGrow: 0, flexShrink: 1 },
+  chipRow: { flexGrow: 0 },
   chips: { gap: Spacing.one },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Spacing.four },
 });
