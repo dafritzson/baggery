@@ -153,6 +153,7 @@ function ColumnsMenu({ value, onChange }: { value: ColumnKey[]; onChange: (colum
   const toggle = (key: ColumnKey) =>
     onChange(COLUMNS.map((c) => c.key).filter((k) => (k === key ? !value.includes(k) : value.includes(k))));
   const all = COLUMNS.every((c) => value.includes(c.key));
+  const isDefault = value.length === DEFAULT_COLUMNS.length && DEFAULT_COLUMNS.every((k) => value.includes(k));
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger className="menu-trigger menu-trigger-chip" aria-label="Choose columns">
@@ -172,6 +173,16 @@ function ColumnsMenu({ value, onChange }: { value: ColumnKey[]; onChange: (colum
           <DropdownMenu.ItemTitle>All columns</DropdownMenu.ItemTitle>
           <DropdownMenu.ItemIndicator className="menu-check">✓</DropdownMenu.ItemIndicator>
         </DropdownMenu.CheckboxItem>
+        {/* Ticked when exactly the defaults show; ticking goes back to them (unticking leaves them). */}
+        <DropdownMenu.CheckboxItem
+          key="default"
+          className="menu-item"
+          value={isDefault ? 'on' : 'off'}
+          onValueChange={() => onChange(DEFAULT_COLUMNS)}
+          shouldDismissMenuOnSelect={false}>
+          <DropdownMenu.ItemTitle>Default columns</DropdownMenu.ItemTitle>
+          <DropdownMenu.ItemIndicator className="menu-check">✓</DropdownMenu.ItemIndicator>
+        </DropdownMenu.CheckboxItem>
         <DropdownMenu.Separator className="menu-separator" />
         {COLUMNS.map((c) => (
           <DropdownMenu.CheckboxItem
@@ -184,10 +195,6 @@ function ColumnsMenu({ value, onChange }: { value: ColumnKey[]; onChange: (colum
             <DropdownMenu.ItemIndicator className="menu-check">✓</DropdownMenu.ItemIndicator>
           </DropdownMenu.CheckboxItem>
         ))}
-        <DropdownMenu.Separator className="menu-separator" />
-        <DropdownMenu.Item key="reset" className="menu-item" onSelect={() => onChange(DEFAULT_COLUMNS)}>
-          <DropdownMenu.ItemTitle>Reset to default</DropdownMenu.ItemTitle>
-        </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu.Root>
   );
