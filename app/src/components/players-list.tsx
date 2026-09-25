@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+import * as DropdownMenu from 'zeego/dropdown-menu';
 
-import { type PlayerRow, PlayerTable } from '@/components/player-table';
+import { COLUMNS, type ColumnKey, DEFAULT_COLUMNS, type PlayerRow, PlayerTable } from '@/components/player-table';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { useOpenPlayer } from '@/lib/player';
+import { usePlayerColumns } from '@/lib/player-columns';
 import { projection } from '@/lib/projections';
 import type { SeasonData } from '@/lib/season';
 
@@ -17,6 +20,11 @@ export function availablePlayers(data: SeasonData): (PlayerRow & { mlbTeamId: nu
     .map((p) => {
       const team = data.mlbTeams.get(p.mlb_team_id);
       const { bye, rdslg, tbExpected, rdtb } = projection(data, p);
+      const ab = p.at_bats;
+      const h = p.hits;
+      const onBase = h === null || ab === null ? null : h + (p.walks ?? 0) + (p.hit_by_pitch ?? 0);
+      const obpDenominator = ab === null ? 0 : ab + (p.walks ?? 0) + (p.hit_by_pitch ?? 0) + (p.sac_flies ?? 0);
+      const obp = onBase === null || !obpDenominator ? null : onBase / obpDenominator;
       return {
         id: p.mlb_player_id,
         mlbTeamId: p.mlb_team_id,
@@ -24,9 +32,23 @@ export function availablePlayers(data: SeasonData): (PlayerRow & { mlbTeamId: nu
         team: team?.abbreviation ?? '',
         wins: team?.wins ?? null,
         bye,
+        g: p.games_played,
         pa: p.plate_appearances,
+        ab,
+        h,
+        doubles: p.doubles,
+        triples: p.triples,
+        hr: p.home_runs,
+        r: p.runs,
+        rbi: p.rbi,
+        bb: p.walks,
+        so: p.strikeouts,
+        avg: h === null || !ab ? null : h / ab,
+        obp,
         slg: p.slg,
+        ops: obp === null || p.slg === null ? null : obp + p.slg,
         opsPlus: p.ops_plus,
+        tbPerGame: p.games_played ? p.regular_season_tb / p.games_played : null,
         tb: p.regular_season_tb,
         rdslg,
         tbExpected,
@@ -53,6 +75,12 @@ export function PlayersList({
 }) {
   const theme = useTheme();
   const openPlayer = useOpenPlayer();
+  const [columns, setColumns] = usePlayerColumns();
+  const { height } = useWindowDimensions();
+  // Desktop web: the table scrolls in its own box, sized to the window, so its scrollbars are in
+  // view. In `fill` the parent sets the size; otherwise it's capped a bit under the window height.
+  const wide = useLayout() === 'wide';
+  const contained = Platform.OS === 'web' && wide;
   const [query, setQuery] = useState('');
   const [teamFilter, setTeamFilter] = useState<number | null>(null);
 
@@ -85,27 +113,71 @@ export function PlayersList({
           </Pressable>
         )}
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} contentContainerStyle={styles.chips}>
-        <Chip label="All" active={teamFilter === null} onPress={() => setTeamFilter(null)} />
-        {mlbTeams.map((t) => (
-          <Chip key={t.id} label={t.abbreviation} active={teamFilter === t.id} onPress={() => setTeamFilter(teamFilter === t.id ? null : t.id)} />
-        ))}
-      </ScrollView>
+      <View style={styles.filterRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} contentContainerStyle={styles.chips}>
+          <Chip label="All" active={teamFilter === null} onPress={() => setTeamFilter(null)} />
+          {mlbTeams.map((t) => (
+            <Chip key={t.id} label={t.abbreviation} active={teamFilter === t.id} onPress={() => setTeamFilter(teamFilter === t.id ? null : t.id)} />
+          ))}
+        </ScrollView>
+        <ColumnsMenu value={columns} onChange={setColumns} />
+      </View>
       {data.pool.length === 0 && (
         <ThemedText themeColor="textSecondary">The player pool is empty. The commissioner needs to sync it from MLB.</ThemedText>
       )}
       {shown.length > 0 &&
-        (fill ? (
+        (fill && !contained ? (
           <ScrollView style={styles.fill}>
-            <PlayerTable rows={shown} onSelect={onSelect ?? openPlayer} selectedId={selectedId} />
+            <PlayerTable rows={shown} onSelect={onSelect ?? openPlayer} selectedId={selectedId} columns={columns} />
           </ScrollView>
         ) : (
-          <PlayerTable rows={shown} onSelect={onSelect ?? openPlayer} selectedId={selectedId} />
+          <PlayerTable
+            rows={shown}
+            onSelect={onSelect ?? openPlayer}
+            selectedId={selectedId}
+            columns={columns}
+            contained={contained}
+            style={contained ? (fill ? styles.shrink : { maxHeight: Math.max(320, height - 200) }) : undefined}
+          />
         ))}
       {shown.length === 0 && data.pool.length > 0 && (
         <ThemedText type="small" themeColor="textSecondary">No matching players.</ThemedText>
       )}
     </View>
+  );
+}
+
+/** A ⚙︎ button with a checklist of the table's columns; stays open while you tick. */
+function ColumnsMenu({ value, onChange }: { value: ColumnKey[]; onChange: (columns: ColumnKey[]) => void }) {
+  const theme = useTheme();
+  const toggle = (key: ColumnKey) =>
+    onChange(COLUMNS.map((c) => c.key).filter((k) => (k === key ? !value.includes(k) : value.includes(k))));
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger className="menu-trigger menu-trigger-chip" aria-label="Choose columns">
+        <View style={[styles.chip, styles.columnsButton, { backgroundColor: theme.backgroundElement }]}>
+          <ThemedText type="smallBold" themeColor="textSecondary">⚙︎ Columns</ThemedText>
+        </View>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content className="menu-content menu-content-scroll" align="end" sideOffset={6} collisionPadding={8}>
+        <DropdownMenu.Label className="menu-label menu-label-heading">Columns</DropdownMenu.Label>
+        {COLUMNS.map((c) => (
+          <DropdownMenu.CheckboxItem
+            key={c.key}
+            className="menu-item"
+            value={value.includes(c.key) ? 'on' : 'off'}
+            onValueChange={() => toggle(c.key)}
+            shouldDismissMenuOnSelect={false}>
+            <DropdownMenu.ItemTitle>{`${c.label} · ${c.title}`}</DropdownMenu.ItemTitle>
+            <DropdownMenu.ItemIndicator className="menu-check">✓</DropdownMenu.ItemIndicator>
+          </DropdownMenu.CheckboxItem>
+        ))}
+        <DropdownMenu.Separator className="menu-separator" />
+        <DropdownMenu.Item key="reset" className="menu-item" onSelect={() => onChange(DEFAULT_COLUMNS)}>
+          <DropdownMenu.ItemTitle>Reset to default</DropdownMenu.ItemTitle>
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
   );
 }
 
@@ -122,6 +194,10 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  // Takes the height left in a `fill` list, and no more.
+  shrink: { flexShrink: 1, minHeight: 0 },
+  filterRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  columnsButton: { flexDirection: 'row', alignItems: 'center' },
   // Room on the right for the clear button.
   search: { minHeight: 44, borderRadius: Spacing.two, borderWidth: 1, paddingLeft: Spacing.three, paddingRight: 44, fontSize: 16 },
   clear: {
@@ -136,7 +212,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   clearText: { fontSize: 12, lineHeight: 14 },
-  chipRow: { flexGrow: 0 },
+  chipRow: { flexGrow: 0, flexShrink: 1 },
   chips: { gap: Spacing.one },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Spacing.four },
 });

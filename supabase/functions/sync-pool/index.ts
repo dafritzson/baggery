@@ -1,10 +1,12 @@
 // Rebuilds a season's draft pool from the MLB Stats API: every hitter on the active
-// roster of a postseason team, with regular-season stats (TB for autodraft; PA, AB, games, SLG
-// and OPS+ for the draft room) and each team's wins and Wild Card bye. Commissioner only.
+// roster of a postseason team, with regular-season stats (TB for autodraft; PA, AB, games, SLG,
+// OPS+ and the other counts for the draft room) and each team's wins and Wild Card bye.
+// Commissioner only.
 //
 // POST { seasonId, teamIds?: number[] }  (teamIds overrides the clinched-teams lookup)
 
 import { requireCommissioner, requireUser } from '../_shared/auth.ts';
+import { type Counts, sumCounts } from '../_shared/core/player-stats.ts';
 import {
   type BattingLine,
   type StandingsTeam,
@@ -49,14 +51,21 @@ async function standings(year: number, leagueOf: Map<number, 'AL' | 'NL'>): Prom
   });
 }
 
+/** Every count we keep from an MLB hitting line; a BattingLine and then some. */
 // deno-lint-ignore no-explicit-any
-function battingLine(stat: any): BattingLine {
+function battingLine(stat: any): Counts {
   return {
     g: stat?.gamesPlayed ?? 0,
     pa: stat?.plateAppearances ?? 0,
     ab: stat?.atBats ?? 0,
+    r: stat?.runs ?? 0,
     h: stat?.hits ?? 0,
+    doubles: stat?.doubles ?? 0,
+    triples: stat?.triples ?? 0,
+    hr: stat?.homeRuns ?? 0,
+    rbi: stat?.rbi ?? 0,
     bb: stat?.baseOnBalls ?? 0,
+    so: stat?.strikeOuts ?? 0,
     hbp: stat?.hitByPitch ?? 0,
     sf: stat?.sacFlies ?? 0,
     tb: stat?.totalBases ?? 0,
@@ -65,9 +74,9 @@ function battingLine(stat: any): BattingLine {
 
 /** A traded player gets one split per team, and sometimes a combined one without a team. */
 // deno-lint-ignore no-explicit-any
-function seasonLine(splits: any[] = []): BattingLine {
+function seasonLine(splits: any[] = []): Counts {
   const combined = splits.find((s) => !s.team);
-  return combined ? battingLine(combined.stat) : addBattingLines(splits.map((s) => battingLine(s.stat)));
+  return combined ? battingLine(combined.stat) : sumCounts(splits.map((s) => battingLine(s.stat)));
 }
 
 /** League-wide batting totals, for OPS+. Best effort: OPS+ stays blank if this fails. */
@@ -91,7 +100,7 @@ interface PoolPlayer {
   position: string;
   birthDate: string | null;
   teamId: number;
-  season: BattingLine;
+  season: Counts;
 }
 
 async function activeHitters(teamId: number, year: number): Promise<PoolPlayer[]> {
@@ -194,6 +203,16 @@ serve(async (req) => {
             plate_appearances: p.season.pa,
             at_bats: p.season.ab,
             games_played: p.season.g,
+            hits: p.season.h,
+            doubles: p.season.doubles,
+            triples: p.season.triples,
+            home_runs: p.season.hr,
+            runs: p.season.r,
+            rbi: p.season.rbi,
+            walks: p.season.bb,
+            strikeouts: p.season.so,
+            hit_by_pitch: p.season.hbp,
+            sac_flies: p.season.sf,
             slg: seasonSlg(p.season),
             ops_plus: opsPlus(p.season, leagueTotals(p.teamId)),
             on_postseason_roster: true,
@@ -201,7 +220,11 @@ serve(async (req) => {
         )}
         on conflict (season_id, mlb_player_id) do update set mlb_team_id = excluded.mlb_team_id,
           regular_season_tb = excluded.regular_season_tb, plate_appearances = excluded.plate_appearances,
-          at_bats = excluded.at_bats, games_played = excluded.games_played, slg = excluded.slg, ops_plus = excluded.ops_plus, on_postseason_roster = true`;
+          at_bats = excluded.at_bats, games_played = excluded.games_played, hits = excluded.hits,
+          doubles = excluded.doubles, triples = excluded.triples, home_runs = excluded.home_runs, runs = excluded.runs,
+          rbi = excluded.rbi, walks = excluded.walks, strikeouts = excluded.strikeouts,
+          hit_by_pitch = excluded.hit_by_pitch, sac_flies = excluded.sac_flies, slg = excluded.slg,
+          ops_plus = excluded.ops_plus, on_postseason_roster = true`;
     }
     if (season.status === 'setup') {
       await tx`delete from season_player_pool where season_id = ${seasonId} and not on_postseason_roster`;
