@@ -1,6 +1,8 @@
 // Turns MLB Stats API responses into rows for mlb_games and player_game_stats. Pure, so the
 // unit tests can run it on sample responses.
 
+import type { LivePlayer, LiveState } from '../_shared/core/live.ts';
+
 export type GameType = 'F' | 'D' | 'L' | 'W';
 const GAME_TYPES = new Set<string>(['F', 'D', 'L', 'W']);
 
@@ -105,4 +107,28 @@ export function boxscoreBatting(gamePk: number, data: any): { rows: BattingRow[]
     }
   }
   return { rows, players };
+}
+
+// deno-lint-ignore no-explicit-any
+function livePlayer(p: any): LivePlayer | null {
+  return p?.id ? { id: p.id, name: p.fullName ?? `Player ${p.id}` } : null;
+}
+
+/** The live state from `/game/{gamePk}/linescore`, or null before the game has an inning. */
+// deno-lint-ignore no-explicit-any
+export function linescoreLive(data: any): LiveState | null {
+  if (!data?.currentInning) return null;
+  const offense = data.offense ?? {};
+  const defense = data.defense ?? {};
+  return {
+    inning: data.currentInning,
+    inningState: data.inningState ?? data.inningHalf ?? 'Top',
+    battingSide: data.isTopInning === false ? 'home' : 'away',
+    outs: data.outs ?? 0,
+    balls: data.balls ?? 0,
+    strikes: data.strikes ?? 0,
+    bases: [!!offense.first, !!offense.second, !!offense.third],
+    batting: [livePlayer(offense.batter), livePlayer(offense.onDeck), livePlayer(offense.inHole)],
+    dueUp: [livePlayer(defense.batter), livePlayer(defense.onDeck), livePlayer(defense.inHole)],
+  };
 }
