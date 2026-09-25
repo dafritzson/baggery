@@ -323,7 +323,8 @@ function OpenCard({ data, scores, game }: { data: SeasonData; scores: Scores; ga
   };
 
   return (
-    <Card>
+    // A live game stands out from the finished ones: a red border (the color of the live dot) and a faint red tint.
+    <Card style={live && [styles.liveCard, { borderColor: theme.danger, backgroundColor: theme.highlight }]}>
       <View style={styles.cardHead}>
         <ThemedText type="small" themeColor="textSecondary">{seriesLabel(game)}</ThemedText>
         {live && game.live ? (
@@ -353,6 +354,8 @@ function OpenCard({ data, scores, game }: { data: SeasonData; scores: Scores; ga
 /** The fantasy-rostered players on either team, as mini cards with their bags, most TB first. */
 function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; game: GameInfo }) {
   const theme = useTheme();
+  const compact = useLayout() === 'compact';
+  const owner = (team: SeasonData['teams'][number]) => ownerName(data, team);
   // Fantasy-rostered players on either team, with their TB in this game.
   const tb = new Map(scores.stats.filter((s) => s.gamePk === game.gamePk).map((s) => [s.playerId, s.tb]));
   const playerIds = [...new Set(data.spells.map((s) => s.mlb_player_id))];
@@ -381,14 +384,16 @@ function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; gam
               {data.players.get(p.id)?.full_name ?? `Player ${p.id}`}
             </PlayerName>
             <View style={styles.playerSecondLine}>
-              {/* Like Standings: team and owner, or a YOU tag on my own players (already tinted). */}
+              {/*
+                Like Standings: team and owner, or a YOU tag on my own players (already tinted).
+                Phones only have room for the owner's name.
+              */}
               <View style={styles.ownerLine}>
                 {mine ? (
                   <YouTag />
                 ) : (
                   <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.owner}>
-                    {teamName(p.team)}
-                    {ownerName(data, p.team) ? ` · ${ownerName(data, p.team)}` : ''}
+                    {compact ? (owner(p.team) ?? teamName(p.team)) : `${teamName(p.team)}${owner(p.team) ? ` · ${owner(p.team)}` : ''}`}
                   </ThemedText>
                 )}
               </View>
@@ -407,6 +412,7 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
   gridWide: { flexDirection: 'row', gap: Spacing.three, alignItems: 'flex-start' },
   column: { flex: 1, minWidth: 0, gap: Spacing.three },
+  liveCard: { borderWidth: 1.5 },
   finalScores: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   finalSide: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.two },
   finalAbbr: { fontSize: 17, lineHeight: 24, fontWeight: 600 },
