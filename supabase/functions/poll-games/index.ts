@@ -46,18 +46,22 @@ async function knownTeamIds(year: number): Promise<Set<number>> {
 /** Saves a game's box score (everyone's batting line) and its live state (inning, bases, due up). */
 async function saveGame(gamePk: number): Promise<number> {
   const [boxscore, linescore] = await Promise.all([mlb(`/game/${gamePk}/boxscore`), mlb(`/game/${gamePk}/linescore`)]);
+  // The live state and the score (the schedule, which also has it, is only read once a minute
+  // during games), in one update so open apps get one realtime message per change, not two.
   const live = linescoreLive(linescore);
-  if (live) {
-    await sql`
-      update mlb_games set live = ${sql.json(JSON.parse(JSON.stringify(live)))}
-      where game_pk = ${gamePk} and live is distinct from ${sql.json(JSON.parse(JSON.stringify(live)))}`;
-  }
-  // The score, too: the schedule, which also has it, is only read once a minute during games.
   const runs = linescoreRuns(linescore);
-  if (runs) {
+  if (live || runs) {
+    const liveJson = live ? sql.json(JSON.parse(JSON.stringify(live))) : null;
     await sql`
-      update mlb_games set home_score = ${runs.home}, away_score = ${runs.away}
-      where game_pk = ${gamePk} and (home_score, away_score) is distinct from (${runs.home}, ${runs.away})`;
+      update mlb_games set
+        live = coalesce(${liveJson}::jsonb, live),
+        home_score = coalesce(${runs?.home ?? null}::smallint, home_score),
+        away_score = coalesce(${runs?.away ?? null}::smallint, away_score)
+      where game_pk = ${gamePk}
+        and (live, home_score, away_score) is distinct from
+            (coalesce(${liveJson}::jsonb, live),
+             coalesce(${runs?.home ?? null}::smallint, home_score),
+             coalesce(${runs?.away ?? null}::smallint, away_score))`;
   }
   await sql`
     insert into private.box_reads (game_pk, read_at) values (${gamePk}, now())
