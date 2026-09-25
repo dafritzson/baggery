@@ -1,8 +1,9 @@
 import { type ReactNode, use } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { UnderAppHeader } from '@/components/app-header';
+import { BOTTOM_TAB_BAR_SPACE } from '@/components/section-nav';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing, WideContentWidth } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
@@ -26,6 +27,9 @@ export function Screen({
   const underHeader = use(UnderAppHeader);
   const layout = useLayout();
   const maxWidth = width === 'wide' && layout === 'wide' ? WideContentWidth : MaxContentWidth;
+  const { bottom } = useSafeAreaInsets();
+  // Phones: the tab bar floats over the bottom, so the end of the page can scroll clear of it.
+  const paddingBottom = underHeader && layout === 'compact' ? BOTTOM_TAB_BAR_SPACE + bottom : Spacing.six;
   return (
     <ThemedView style={styles.fill}>
       <SafeAreaView style={styles.fill} edges={underHeader ? ['left', 'right'] : ['top', 'left', 'right']}>
@@ -34,7 +38,7 @@ export function Screen({
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined}>
-          <View style={[styles.content, { maxWidth }]}>{children}</View>
+          <View style={[styles.content, { maxWidth, paddingBottom }]}>{children}</View>
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -54,7 +58,6 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.three,
-    paddingBottom: Spacing.six,
     gap: Spacing.three,
   },
 });

@@ -1,10 +1,11 @@
 import { type Href, router, usePathname } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 import { useSeason } from '@/lib/season';
 
@@ -26,10 +27,10 @@ const SECTIONS: Section[] = [
     matches: (p) => p === '/' || p.startsWith('/draft'),
   },
   {
-    label: 'Live',
-    href: '/live',
-    icon: { ios: 'dot.radiowaves.left.and.right', android: 'sensors', web: 'sensors' },
-    matches: (p) => p.startsWith('/live'),
+    label: 'Games',
+    href: '/games',
+    icon: { ios: 'baseball', android: 'sports_baseball', web: 'sports_baseball' },
+    matches: (p) => p.startsWith('/games'),
   },
   {
     label: 'Research',
@@ -73,18 +74,32 @@ export function HeaderTabs() {
   );
 }
 
-/** Phone: a floating bar of section buttons (icon and label) along the bottom of the screen. */
+/** Room the phone tab bar takes at the bottom of the screen, above the safe area. */
+export const BOTTOM_TAB_BAR_SPACE = 96;
+
+/**
+ * Phone: a floating bar of section buttons (icon and label) over the bottom of the screen.
+ * Content scrolls behind it, blurred through the bar's frosted glass.
+ */
 export function BottomTabBar() {
   const theme = useTheme();
+  const dark = useColorScheme() === 'dark';
   const { sections, active, go } = useSections();
   if (!sections.length) return null;
   return (
-    <SafeAreaView edges={['bottom', 'left', 'right']} style={styles.bottomBar}>
+    <SafeAreaView edges={['bottom', 'left', 'right']} style={styles.bottomBar} pointerEvents="box-none">
       <View
         accessibilityRole="tablist"
         style={[
           styles.bottomPill,
-          { backgroundColor: theme.background, borderColor: theme.border, boxShadow: '0 6px 20px rgba(0, 0, 0, 0.14)' },
+          {
+            backgroundColor: dark ? 'rgba(28, 29, 32, 0.62)' : 'rgba(255, 255, 255, 0.62)',
+            borderColor: dark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+            boxShadow: dark
+              ? '0 8px 24px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08)'
+              : '0 8px 24px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.8)',
+          },
+          glass,
         ]}>
         {sections.map((s) => {
           const selected = s === active;
@@ -96,7 +111,7 @@ export function BottomTabBar() {
               accessibilityState={{ selected }}
               accessibilityLabel={s.label}
               onPress={() => go(s)}
-              style={[styles.bottomTab, selected && { backgroundColor: theme.tint }]}>
+              style={[styles.bottomTab, selected && { backgroundColor: dark ? 'rgba(91, 141, 239, 0.18)' : 'rgba(11, 61, 145, 0.10)' }]}>
               <SymbolView name={s.icon} size={22} tintColor={color} />
               <ThemedText type="smallBold" style={[styles.bottomLabel, { color }]}>{s.label}</ThemedText>
             </Pressable>
@@ -107,10 +122,13 @@ export function BottomTabBar() {
   );
 }
 
+// Frosted glass on web (react-native-web passes backdrop-filter through, with the -webkit- prefix).
+const glass = Platform.OS === 'web' ? ({ backdropFilter: 'blur(20px) saturate(180%)' } as object) : null;
+
 const styles = StyleSheet.create({
   headerTabs: { flexDirection: 'row', alignSelf: 'stretch', gap: Spacing.three, marginLeft: Spacing.three },
   headerTab: { justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  bottomBar: { alignItems: 'center', paddingTop: Spacing.two, paddingBottom: Spacing.three },
+  bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', paddingBottom: Spacing.three },
   bottomPill: {
     flexDirection: 'row',
     gap: Spacing.one,
