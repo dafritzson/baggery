@@ -1,5 +1,5 @@
 -- Poll live games as often as is sensible, everything else rarely:
---   live games: box score and inning state every 5 seconds (the cron job's pace);
+--   live games: box score, inning state and score every 10 seconds (the cron job's pace);
 --   the schedule (status, start times): every minute while a game is on or about to start, so
 --     a game shows as Live / Final within a minute; every 10 minutes otherwise;
 --   finished games: box score every 10 minutes for 6 hours, for official scoring changes.
@@ -46,5 +46,5 @@ as $$
     );
 $$;
 
--- Same job name, so this replaces the 10-second schedule.
-select cron.schedule('poll-games', '5 seconds', 'select private.poll_games()');
+-- The cron job stays at every 10 seconds: each call that goes through is an Edge Function
+-- invocation, which the Supabase plan counts.

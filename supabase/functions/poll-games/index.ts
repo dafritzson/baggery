@@ -2,7 +2,7 @@
 // player_game_stats, which the standings are scored from.
 //
 // POST {}                    from pg_cron (x-poller-secret header): polls the latest season's
-//                            games. The cron job calls every 5 seconds while there's something to
+//                            games. The cron job calls every 10 seconds while there's something to
 //                            fetch (private.poll_due): live games every call, the schedule every
 //                            minute while games are on (10 otherwise), finished games every 10.
 // POST { setup: true }       from the deploy: records this function's URL for the cron job.
