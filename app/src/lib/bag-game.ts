@@ -6,21 +6,27 @@
  * center field.
  */
 
-export type BagKind = 'single' | 'double' | 'triple' | 'homer';
+export type BagKind = 'single' | 'double' | 'triple' | 'homer' | 'decoy';
 
-/** Each kind's emoji, what it's worth, and how many fall per game. */
+/** Each kind's emoji, what it's worth, and how many fall per game. Decoys cost a bag. */
 export const BAG_KINDS: Record<BagKind, { emoji: string; bags: number; count: number; label: string }> = {
   single: { emoji: '👜', bags: 1, count: 48, label: '' },
   double: { emoji: '🛍️', bags: 2, count: 5, label: 'Double!' },
   triple: { emoji: '🎒', bags: 3, count: 1, label: 'Triple!' },
   homer: { emoji: '💰', bags: 4, count: 2, label: 'Home run!' },
+  decoy: { emoji: '🥯', bags: -1, count: 10, label: '' },
 };
 
 const KINDS = Object.keys(BAG_KINDS) as BagKind[];
+/** The kinds worth catching (not decoys). */
+const BAG_ONLY = KINDS.filter((k) => BAG_KINDS[k].bags > 0);
 
-export const TOTAL_BAGS = KINDS.reduce((n, k) => n + BAG_KINDS[k].count, 0);
-/** Catching every bag: 69. The database checks scores against it (bag_game_bests). */
-export const PERFECT_SCORE = KINDS.reduce((n, k) => n + BAG_KINDS[k].count * BAG_KINDS[k].bags, 0);
+/** Bags per game (decoys don't count). */
+export const TOTAL_BAGS = BAG_ONLY.reduce((n, k) => n + BAG_KINDS[k].count, 0);
+/** Everything that falls in a game, decoys included. */
+export const TOTAL_DROPS = KINDS.reduce((n, k) => n + BAG_KINDS[k].count, 0);
+/** Catching every bag and no decoys: 69. The database checks scores against it (bag_game_bests). */
+export const PERFECT_SCORE = BAG_ONLY.reduce((n, k) => n + BAG_KINDS[k].count * BAG_KINDS[k].bags, 0);
 
 /** "BAGGERY", then "Get yo bags", then the first bag drops. */
 export const INTRO_MS = 3000;
@@ -34,7 +40,7 @@ export const LINGER_MS = 500;
  */
 const FALL_MS = [1125, 720];
 const GAP_MS = [700, 380];
-/** Doubles, triples and home runs fall faster than singles by this factor. */
+/** Doubles, triples and home runs fall faster than singles (and decoys) by this factor. */
 const SPECIAL_FALL = 0.8;
 
 export interface Bag {
@@ -76,7 +82,8 @@ const ramp = (progress: number) => 1 - (1 - progress) ** 2;
 const between = ([from, to]: number[], t: number) => from + (to - from) * t;
 
 /**
- * Every bag in one game, in the order they fall: the specials shuffled in among the singles.
+ * Everything that falls in one game, in order: the specials and decoys shuffled in among the
+ * singles.
  * Bags come faster, and fall faster, as the game goes on.
  */
 export function makeSchedule(seed: number = Math.floor(Math.random() * 2 ** 32)): Bag[] {
@@ -90,7 +97,7 @@ export function makeSchedule(seed: number = Math.floor(Math.random() * 2 ** 32))
   let spawnAt = 0;
   return kinds.map((kind, id) => {
     const t = ramp(id / (kinds.length - 1));
-    const fallMs = between(FALL_MS, t) * (kind === 'single' ? 1 : SPECIAL_FALL);
+    const fallMs = between(FALL_MS, t) * (BAG_KINDS[kind].bags > 1 ? SPECIAL_FALL : 1);
     // Land anywhere fair, short of the warning track; nearer spots a little more often.
     const angle = (random() * 2 - 1) * (FOUL_LINE - 0.06);
     const distance = 30 + (fenceDistance(angle) - 55) * random() ** 1.2;
