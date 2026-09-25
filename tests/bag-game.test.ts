@@ -26,15 +26,23 @@ describe('bag game schedule', () => {
     expect(makeSchedule(7).map((b) => b.kind)).not.toEqual(makeSchedule(8).map((b) => b.kind));
   });
 
-  it('drops bags in order, speeding up, over about half a minute', () => {
+  it('drops bags in order, speeding up, over about 20 to 35 seconds', () => {
     for (const seed of [1, 2, 3, 4, 5]) {
       const bags = makeSchedule(seed);
       for (let i = 1; i < bags.length; i++) expect(bags[i].spawnAt).toBeGreaterThan(bags[i - 1].spawnAt);
       const last = bags[bags.length - 1];
-      expect(last.spawnAt).toBeGreaterThan(28_000);
-      expect(last.spawnAt).toBeLessThan(42_000);
+      expect(last.spawnAt).toBeGreaterThan(20_000);
+      expect(last.spawnAt).toBeLessThan(35_000);
       expect(bags[0].fallMs).toBeGreaterThan(last.fallMs);
     }
+  });
+
+  it('speeds up early, not just at the end', () => {
+    const singles = makeSchedule(3).filter((b) => b.kind === 'single');
+    const first = singles[0].fallMs;
+    const last = singles[singles.length - 1].fallMs;
+    const third = singles[Math.round(singles.length / 3)].fallMs;
+    expect(first - third).toBeGreaterThan((first - last) / 2);
   });
 
   it('lands every bag in fair territory, short of the fence', () => {
@@ -69,9 +77,13 @@ describe('field view', () => {
     const width = view.project(base, base).x - view.project(-base, base).x;
     const height = view.project(0, 0).y - view.project(0, 2 * base).y;
     expect(width / height).toBeGreaterThan(1.1);
-    // The foul poles sit at (or just past) the edges of a phone screen.
+    // The foul poles sit just inside the edges of a phone screen.
     const pole = 330 / Math.SQRT2;
-    expect(view.project(-pole, pole).x).toBeLessThan(20);
-    expect(view.project(pole, pole).x).toBeGreaterThan(370);
+    const left = view.project(-pole, pole).x;
+    const right = view.project(pole, pole).x;
+    expect(left).toBeGreaterThan(0);
+    expect(left).toBeLessThan(25);
+    expect(right).toBeLessThan(390);
+    expect(right).toBeGreaterThan(365);
   });
 });

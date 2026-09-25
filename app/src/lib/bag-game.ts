@@ -25,7 +25,17 @@ export const PERFECT_SCORE = KINDS.reduce((n, k) => n + BAG_KINDS[k].count * BAG
 /** "BAGGERY", then "Get yo bags", then the first bag drops. */
 export const INTRO_MS = 3000;
 /** How long a bag sits on the grass before it disappears. */
-export const LINGER_MS = 700;
+export const LINGER_MS = 550;
+
+/**
+ * Difficulty. Each bag's fall time, and the wait before the next one drops, go from the first
+ * value to the second over the game. Most of the change comes early (see `ramp`), so it's quick
+ * from the start and keeps getting harder.
+ */
+const FALL_MS = [1250, 800];
+const GAP_MS = [700, 380];
+/** Doubles, triples and home runs fall faster than singles by this factor. */
+const SPECIAL_FALL = 0.8;
 
 export interface Bag {
   id: number;
@@ -61,9 +71,13 @@ export function fenceDistance(angle: number): number {
 /** Fair territory is 45° either side of the center field line. */
 const FOUL_LINE = Math.PI / 4;
 
+/** 0 to 1 over the game, front-loaded: halfway there about 30% of the way in. */
+const ramp = (progress: number) => 1 - (1 - progress) ** 2;
+const between = ([from, to]: number[], t: number) => from + (to - from) * t;
+
 /**
  * Every bag in one game, in the order they fall: the specials shuffled in among the singles.
- * Bags come slowly at first and faster (and falling faster) near the end.
+ * Bags come faster, and fall faster, as the game goes on.
  */
 export function makeSchedule(seed: number = Math.floor(Math.random() * 2 ** 32)): Bag[] {
   const random = seededRandom(seed);
@@ -75,8 +89,8 @@ export function makeSchedule(seed: number = Math.floor(Math.random() * 2 ** 32))
 
   let spawnAt = 0;
   return kinds.map((kind, id) => {
-    const progress = id / (kinds.length - 1);
-    const fallMs = (1530 - 495 * progress) * (kind === 'single' ? 1 : 0.85);
+    const t = ramp(id / (kinds.length - 1));
+    const fallMs = between(FALL_MS, t) * (kind === 'single' ? 1 : SPECIAL_FALL);
     // Land anywhere fair, short of the warning track; nearer spots a little more often.
     const angle = (random() * 2 - 1) * (FOUL_LINE - 0.06);
     const distance = 30 + (fenceDistance(angle) - 55) * random() ** 1.2;
@@ -90,23 +104,23 @@ export function makeSchedule(seed: number = Math.floor(Math.random() * 2 ** 32))
       drift: random() * 2 - 1,
       spin: random() * 2 - 1,
     };
-    spawnAt += (850 - 400 * progress) * (0.75 + random() * 0.5);
+    spawnAt += between(GAP_MS, t) * (0.75 + random() * 0.5);
     return bag;
   });
 }
 
 /** Camera: this far behind home plate and this high, looking out toward center field. */
-const CAMERA_BACK = 110;
+const CAMERA_BACK = 160;
 const CAMERA_HEIGHT = 40;
 /** The foul poles, 330 ft down each line. */
 const POLE = 330 / Math.SQRT2;
 /**
  * Framing: the horizon this far down the visible area, and the foul poles this far from center
- * (as a share of the field's width; past 0.5 they're just off the sides). Together they set
- * how foreshortened the field looks: a lower horizon and wider poles look less top-down.
+ * (as a share of the field's width; 0.5 is the edge). With the camera distance they set how
+ * foreshortened the field looks: a lower horizon and a camera further back look less top-down.
  */
-const HORIZON = 0.34;
-const POLE_SPREAD = 0.56;
+const HORIZON = 0.4;
+const POLE_SPREAD = 0.47;
 
 export interface Point {
   x: number;

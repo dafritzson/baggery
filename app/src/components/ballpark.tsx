@@ -31,7 +31,7 @@ const NIGHT = {
 
 const WALL_HEIGHT = 8;
 /** The walls in foul territory run this far outside each foul line. */
-const FOUL_WALL_OFFSET = 45;
+const FOUL_WALL_OFFSET = 60;
 const POLE = 330 / Math.SQRT2;
 const WARNING_TRACK = 15;
 
