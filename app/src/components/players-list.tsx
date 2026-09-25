@@ -1,13 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
-import { expectedTb, regressedSlg, regressedTb } from '@core/stats.ts';
-
 import { type PlayerRow, PlayerTable } from '@/components/player-table';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useOpenPlayer } from '@/lib/player';
+import { projection } from '@/lib/projections';
 import type { SeasonData } from '@/lib/season';
 
 /** Players who can still be drafted: on a live postseason roster and on nobody's team. */
@@ -17,9 +16,7 @@ export function availablePlayers(data: SeasonData): (PlayerRow & { mlbTeamId: nu
     .filter((p) => p.on_postseason_roster && !taken.has(p.mlb_player_id) && !data.mlbTeams.get(p.mlb_team_id)?.eliminated)
     .map((p) => {
       const team = data.mlbTeams.get(p.mlb_team_id);
-      const bye = team?.has_bye ?? false;
-      const tb = p.regular_season_tb;
-      const g = p.games_played;
+      const { bye, rdslg, tbExpected, rdtb } = projection(data, p);
       return {
         id: p.mlb_player_id,
         mlbTeamId: p.mlb_team_id,
@@ -30,10 +27,10 @@ export function availablePlayers(data: SeasonData): (PlayerRow & { mlbTeamId: nu
         pa: p.plate_appearances,
         slg: p.slg,
         opsPlus: p.ops_plus,
-        tb,
-        rdslg: p.at_bats === null ? null : regressedSlg(tb, p.at_bats),
-        tbExpected: g === null ? null : expectedTb(tb, g, bye),
-        rdtb: g === null ? null : regressedTb(tb, g, bye),
+        tb: p.regular_season_tb,
+        rdslg,
+        tbExpected,
+        rdtb,
       };
     });
 }
@@ -68,14 +65,26 @@ export function PlayersList({
 
   return (
     <View style={[{ gap: Spacing.two }, fill && styles.fill]}>
-      <TextInput
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Search players"
-        placeholderTextColor={theme.textSecondary}
-        autoCorrect={false}
-        style={[styles.search, { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border }]}
-      />
+      <View>
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search players"
+          placeholderTextColor={theme.textSecondary}
+          autoCorrect={false}
+          style={[styles.search, { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border }]}
+        />
+        {query !== '' && (
+          <Pressable
+            onPress={() => setQuery('')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+            style={({ pressed }) => [styles.clear, { backgroundColor: theme.textSecondary, opacity: pressed ? 0.6 : 1 }]}>
+            <ThemedText type="smallBold" style={[styles.clearText, { color: theme.backgroundElement }]}>✕</ThemedText>
+          </Pressable>
+        )}
+      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} contentContainerStyle={styles.chips}>
         <Chip label="All" active={teamFilter === null} onPress={() => setTeamFilter(null)} />
         {mlbTeams.map((t) => (
@@ -113,7 +122,20 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  search: { minHeight: 44, borderRadius: Spacing.two, borderWidth: 1, paddingHorizontal: Spacing.three, fontSize: 16 },
+  // Room on the right for the clear button.
+  search: { minHeight: 44, borderRadius: Spacing.two, borderWidth: 1, paddingLeft: Spacing.three, paddingRight: 44, fontSize: 16 },
+  clear: {
+    position: 'absolute',
+    right: Spacing.three,
+    top: '50%',
+    marginTop: -11,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clearText: { fontSize: 12, lineHeight: 14 },
   chipRow: { flexGrow: 0 },
   chips: { gap: Spacing.one },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Spacing.four },
