@@ -31,8 +31,8 @@ export const PERFECT_SCORE = BAG_ONLY.reduce((n, k) => n + BAG_KINDS[k].count * 
 /** "BAGGERY", then "Get yo bags", then the first bag drops. */
 export const INTRO_MS = 3000;
 /** How long a bag sits on the grass before it starts to fade, and how long the fade takes. */
-export const LINGER_MS = 400;
-export const FADE_MS = 200;
+export const LINGER_MS = 350;
+export const FADE_MS = 150;
 
 /**
  * Difficulty. Each bag's fall time, and the wait before the next one drops, go from the first
