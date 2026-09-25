@@ -58,6 +58,9 @@ export interface PoolEntry {
   mlb_team_id: number;
   regular_season_tb: number;
   plate_appearances: number;
+  /** Null until the pool is synced with them. */
+  at_bats: number | null;
+  games_played: number | null;
   /** Null with no at-bats. */
   slg: number | null;
   ops_plus: number | null;
@@ -120,7 +123,7 @@ async function fetchSeason(
     supabase
       .from('season_player_pool')
       .select(
-        'mlb_player_id, mlb_team_id, regular_season_tb, plate_appearances, slg, ops_plus, on_postseason_roster, player:mlb_players(id, full_name, primary_position)',
+        'mlb_player_id, mlb_team_id, regular_season_tb, plate_appearances, at_bats, games_played, slg, ops_plus, on_postseason_roster, player:mlb_players(id, full_name, primary_position)',
       )
       .eq('season_id', season.id),
     supabase
@@ -147,6 +150,8 @@ async function fetchSeason(
       mlb_team_id: row.mlb_team_id,
       regular_season_tb: row.regular_season_tb,
       plate_appearances: row.plate_appearances,
+      at_bats: row.at_bats,
+      games_played: row.games_played,
       // Postgres numeric arrives as a string.
       slg: row.slg === null ? null : Number(row.slg),
       ops_plus: row.ops_plus,

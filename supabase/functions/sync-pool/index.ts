@@ -1,6 +1,6 @@
 // Rebuilds a season's draft pool from the MLB Stats API: every hitter on the active
-// roster of a postseason team, with regular-season stats (TB for autodraft; PA, SLG and
-// OPS+ for the draft room) and each team's wins and Wild Card bye. Commissioner only.
+// roster of a postseason team, with regular-season stats (TB for autodraft; PA, AB, games, SLG
+// and OPS+ for the draft room) and each team's wins and Wild Card bye. Commissioner only.
 //
 // POST { seasonId, teamIds?: number[] }  (teamIds overrides the clinched-teams lookup)
 
@@ -52,6 +52,7 @@ async function standings(year: number, leagueOf: Map<number, 'AL' | 'NL'>): Prom
 // deno-lint-ignore no-explicit-any
 function battingLine(stat: any): BattingLine {
   return {
+    g: stat?.gamesPlayed ?? 0,
     pa: stat?.plateAppearances ?? 0,
     ab: stat?.atBats ?? 0,
     h: stat?.hits ?? 0,
@@ -191,6 +192,8 @@ serve(async (req) => {
             mlb_team_id: p.teamId,
             regular_season_tb: p.season.tb,
             plate_appearances: p.season.pa,
+            at_bats: p.season.ab,
+            games_played: p.season.g,
             slg: seasonSlg(p.season),
             ops_plus: opsPlus(p.season, leagueTotals(p.teamId)),
             on_postseason_roster: true,
@@ -198,7 +201,7 @@ serve(async (req) => {
         )}
         on conflict (season_id, mlb_player_id) do update set mlb_team_id = excluded.mlb_team_id,
           regular_season_tb = excluded.regular_season_tb, plate_appearances = excluded.plate_appearances,
-          slg = excluded.slg, ops_plus = excluded.ops_plus, on_postseason_roster = true`;
+          at_bats = excluded.at_bats, games_played = excluded.games_played, slg = excluded.slg, ops_plus = excluded.ops_plus, on_postseason_roster = true`;
     }
     if (season.status === 'setup') {
       await tx`delete from season_player_pool where season_id = ${seasonId} and not on_postseason_roster`;

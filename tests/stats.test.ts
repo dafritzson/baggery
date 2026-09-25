@@ -5,7 +5,11 @@ import {
   addBattingLines,
   byeTeamIds,
   emptyBattingLine,
+  expectedRound1Games,
+  expectedTb,
   opsPlus,
+  regressedSlg,
+  regressedTb,
   seasonSlg,
 } from '../supabase/functions/_shared/core/stats.ts';
 
@@ -16,10 +20,10 @@ function line(s: Partial<BattingLine>): BattingLine {
 describe('addBattingLines', () => {
   it('sums every count (a traded player’s splits)', () => {
     const total = addBattingLines([
-      line({ pa: 300, ab: 260, h: 70, bb: 30, hbp: 5, sf: 5, tb: 120 }),
-      line({ pa: 200, ab: 180, h: 50, bb: 15, hbp: 2, sf: 3, tb: 90 }),
+      line({ g: 80, pa: 300, ab: 260, h: 70, bb: 30, hbp: 5, sf: 5, tb: 120 }),
+      line({ g: 50, pa: 200, ab: 180, h: 50, bb: 15, hbp: 2, sf: 3, tb: 90 }),
     ]);
-    expect(total).toEqual({ pa: 500, ab: 440, h: 120, bb: 45, hbp: 7, sf: 8, tb: 210 });
+    expect(total).toEqual({ g: 130, pa: 500, ab: 440, h: 120, bb: 45, hbp: 7, sf: 8, tb: 210 });
   });
 });
 
@@ -29,6 +33,44 @@ describe('seasonSlg', () => {
   });
   it('is null with no at-bats', () => {
     expect(seasonSlg(line({ pa: 2, bb: 2 }))).toBeNull();
+  });
+});
+
+describe('expectedRound1Games', () => {
+  it('is the Division Series with a bye, plus the Wild Card without one', () => {
+    expect(expectedRound1Games(true)).toBe(4.125);
+    expect(expectedRound1Games(false)).toBe(6.625);
+  });
+});
+
+describe('regressedSlg (RDSLG)', () => {
+  it('adds 200 at-bats of .435 slugging', () => {
+    // (300 + 87) / (600 + 200)
+    expect(regressedSlg(300, 600)).toBeCloseTo(0.48375);
+  });
+  it('is .435 with no at-bats', () => {
+    expect(regressedSlg(0, 0)).toBeCloseTo(0.435);
+  });
+});
+
+describe('regressedTb (RDTB)', () => {
+  it('adds 200 games of 1.5 TB, then scales to expected round-1 games', () => {
+    // (300 + 300) / (150 + 200) TB per game
+    expect(regressedTb(300, 150, true)).toBeCloseTo((600 / 350) * 4.125);
+    expect(regressedTb(300, 150, false)).toBeCloseTo((600 / 350) * 6.625);
+  });
+  it('is 1.5 TB a game with no games', () => {
+    expect(regressedTb(0, 0, true)).toBeCloseTo(1.5 * 4.125);
+  });
+});
+
+describe('expectedTb (TB·E[G]/162)', () => {
+  it('is TB per game times expected round-1 games', () => {
+    expect(expectedTb(300, 150, true)).toBeCloseTo(2 * 4.125);
+    expect(expectedTb(300, 150, false)).toBeCloseTo(2 * 6.625);
+  });
+  it('is null with no games', () => {
+    expect(expectedTb(0, 0, false)).toBeNull();
   });
 });
 

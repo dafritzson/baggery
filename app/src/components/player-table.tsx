@@ -16,6 +16,10 @@ export interface PlayerRow {
   slg: number | null;
   opsPlus: number | null;
   tb: number;
+  /** Projections, from core/stats.ts. */
+  rdslg: number | null;
+  tbExpected: number | null;
+  rdtb: number | null;
 }
 
 type SortKey = 'name' | 'wins' | 'bye' | 'pa' | 'slg' | 'opsPlus' | 'tb' | 'rdslg' | 'tbExpected' | 'rdtb';
@@ -26,8 +30,6 @@ interface Column {
   width: number;
   value: (row: PlayerRow) => number | null;
   format?: (value: number) => string;
-  /** Formula not decided yet: the column shows blanks and can't be sorted. */
-  pending?: boolean;
 }
 
 /** ".688", or "1.000" and up. */
@@ -42,9 +44,9 @@ const COLUMNS: Column[] = [
   { key: 'slg', label: 'SLG', width: 52, value: (r) => r.slg, format: formatRate },
   { key: 'opsPlus', label: 'OPS+', width: 58, value: (r) => r.opsPlus },
   { key: 'tb', label: 'TB', width: 44, value: (r) => r.tb },
-  { key: 'rdslg', label: 'RDSLG', width: 60, value: () => null, pending: true },
-  { key: 'tbExpected', label: 'TB·E[G]/162', width: 96, value: () => null, pending: true },
-  { key: 'rdtb', label: 'RDTB', width: 52, value: () => null, pending: true },
+  { key: 'rdslg', label: 'RDSLG', width: 60, value: (r) => r.rdslg, format: formatRate },
+  { key: 'tbExpected', label: 'TB·E[G]/162', width: 96, value: (r) => r.tbExpected, format: (v) => v.toFixed(1) },
+  { key: 'rdtb', label: 'RDTB', width: 52, value: (r) => r.rdtb, format: (v) => v.toFixed(1) },
 ];
 
 /** Longest the name column gets, as a share of the table, so some stats always show beside it. */
@@ -133,7 +135,7 @@ export function PlayerTable({
         <View>
           <View style={[styles.header, styles.cells, { borderBottomColor: theme.border }]}>
             {COLUMNS.map((c) => (
-              <Pressable key={c.key} disabled={c.pending} onPress={() => sortBy(c.key)} style={[styles.cell, { width: c.width }]}>
+              <Pressable key={c.key} onPress={() => sortBy(c.key)} style={[styles.cell, { width: c.width }]}>
                 <ThemedText
                   type="smallBold"
                   numberOfLines={1}

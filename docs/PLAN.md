@@ -34,8 +34,9 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
   names the team; `user_id` and `name` are nullable, so open spots and historical teams work.
   Unnamed spots show a random name in the app (`app/src/lib/team-name-list.ts`). `eliminated_after_round`.
 - `mlb_teams`, `mlb_players`, `mlb_games`, `player_game_stats`: stats mirror of the MLB API.
-- `season_player_pool`: who is draftable in a season, plus regular-season TB (for autodraft), PA,
-  SLG and OPS+ for the draft room table. `season_mlb_teams` holds each team's wins and Wild Card bye.
+- `season_player_pool`: who is draftable in a season, plus regular-season TB (for autodraft), PA, AB,
+  games, SLG and OPS+ for the draft room table (RDSLG, RDTB and TB·E[G]/162 are computed from
+  them in the app, formulas in `core/stats.ts`). `season_mlb_teams` holds each team's wins and Wild Card bye.
 - `drafts`, `draft_actions`: every pick or yield, numbered. `unique(draft_id, action_number)`
   prevents double picks.
 - `roster_spells`: (team, player, from, to) intervals. `unique(season_id, mlb_player_id)`
