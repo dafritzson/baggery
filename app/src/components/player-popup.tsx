@@ -314,10 +314,17 @@ function leagueStatus(data: SeasonData, playerId: number): { label: string; avai
   return { label: 'Available', available: true };
 }
 
+/** Numbers only the season row has: OPS+ and the draft table's projections. */
+interface SeasonExtras {
+  opsPlus: number | null;
+  /** Null for a player outside the draft pool. */
+  projection: Projection | null;
+}
+
 interface Column {
   label: string;
   width: number;
-  value: (c: Counts, opsPlus: number | null) => string;
+  value: (c: Counts, season: SeasonExtras | null) => string;
 }
 
 const COUNT = (key: keyof Counts, label: string, width = 30): Column => ({ label, width, value: (c) => String(c[key]) });
@@ -328,7 +335,7 @@ const RATE = (key: 'avg' | 'obp' | 'slg' | 'ops', label: string): Column => ({
 });
 
 // TB first: it's what decides everything in Baggery, so it's in view even on a phone.
-const LINE_COLUMNS: Column[] = [
+const COUNT_COLUMNS: Column[] = [
   COUNT('tb', 'TB', 38),
   COUNT('g', 'G'),
   COUNT('pa', 'PA', 36),
@@ -345,8 +352,21 @@ const LINE_COLUMNS: Column[] = [
   RATE('obp', 'OBP'),
   RATE('slg', 'SLG'),
   RATE('ops', 'OPS'),
-  { label: 'OPS+', width: 42, value: (_, opsPlus) => (opsPlus === null ? '' : String(opsPlus)) },
 ];
+
+/** Blank on the Last N rows. The projections match the draft table's columns. */
+const SEASON_COLUMNS: Column[] = [
+  { label: 'OPS+', width: 48, value: (_, s) => (s?.opsPlus == null ? '' : String(s.opsPlus)) },
+  { label: 'RDSLG', width: 60, value: (_, s) => (s?.projection?.rdslg == null ? '' : formatRate(s.projection.rdslg)) },
+  {
+    label: 'TB·E[G]/162',
+    width: 88,
+    value: (_, s) => (s?.projection?.tbExpected == null ? '' : s.projection.tbExpected.toFixed(1)),
+  },
+  { label: 'RDTB', width: 50, value: (_, s) => (s?.projection?.rdtb == null ? '' : s.projection.rdtb.toFixed(1)) },
+];
+
+const LINE_COLUMNS = [...COUNT_COLUMNS, ...SEASON_COLUMNS];
 
 const GAME_COLUMNS: Column[] = [
   COUNT('tb', 'TB', 38),
@@ -377,8 +397,8 @@ function StatsBody({
   const [showYears, setShowYears] = useState(false);
   const games = stats.games.slice(0, span);
 
-  const splits: { label: string; line: Counts; opsPlus?: number | null; key?: boolean }[] = [];
-  if (stats.season) splits.push({ label: String(year), line: stats.season, opsPlus, key: true });
+  const splits: { label: string; line: Counts; season?: SeasonExtras; key?: boolean }[] = [];
+  if (stats.season) splits.push({ label: String(year), line: stats.season, season: { opsPlus, projection }, key: true });
   for (const n of WINDOWS) {
     if (stats.games.length >= n) splits.push({ label: `Last ${n}`, line: lastGames(stats.games, n) });
   }
@@ -396,16 +416,10 @@ function StatsBody({
             key: s.label,
             label: s.label,
             strong: s.key,
-            cells: LINE_COLUMNS.map((c) => c.value(s.line, s.opsPlus ?? null)),
+            cells: LINE_COLUMNS.map((c) => c.value(s.line, s.season ?? null)),
           }))}
         />
       </Section>
-
-      {projection && (
-        <Section title="Round 1 projection">
-          <ProjectionTiles projection={projection} />
-        </Section>
-      )}
 
       {stats.games.length > 0 && (
         <Section title="Chart">
@@ -440,11 +454,11 @@ function StatsBody({
           {showYears && (
             <StatTable
               labelWidth={84}
-              columns={LINE_COLUMNS.slice(0, -1)}
+              columns={COUNT_COLUMNS}
               rows={stats.years.map((y) => ({
                 key: `${y.season}`,
                 label: `${y.season} ${y.team}`,
-                cells: LINE_COLUMNS.slice(0, -1).map((c) => c.value(y, null)),
+                cells: COUNT_COLUMNS.map((c) => c.value(y, null)),
               }))}
             />
           )}
@@ -483,35 +497,6 @@ function WindowToggle({ value, onChange }: { value: number; onChange: (n: (typeo
         </Pressable>
       ))}
     </ThemedView>
-  );
-}
-
-/** The draft table's projection columns for one player, as tiles, with the games they assume. */
-function ProjectionTiles({ projection: p }: { projection: Projection }) {
-  const theme = useTheme();
-  const tiles = [
-    { label: 'RDTB', value: p.rdtb === null ? '—' : p.rdtb.toFixed(1), key: true },
-    { label: 'TB·E[G]/162', value: p.tbExpected === null ? '—' : p.tbExpected.toFixed(1) },
-    { label: 'RDSLG', value: formatRate(p.rdslg) },
-  ];
-  return (
-    <View style={styles.projection}>
-      <View style={styles.tiles}>
-        {tiles.map((t) => (
-          <View
-            key={t.label}
-            style={[styles.tile, { backgroundColor: t.key ? theme.tint : theme.backgroundElement }]}>
-            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.tileLabel}>{t.label}</ThemedText>
-            <ThemedText type="default" style={[styles.tileValue, styles.number]}>{t.value}</ThemedText>
-          </View>
-        ))}
-      </View>
-      <ThemedText type="small" themeColor="textSecondary" style={styles.tileNote}>
-        {p.bye
-          ? `His team has a bye: ${p.games.toFixed(1)} games expected (Division Series).`
-          : `No bye: ${p.games.toFixed(1)} games expected (Wild Card, then the Division Series half the time).`}
-      </ThemedText>
-    </View>
   );
 }
 
@@ -619,11 +604,5 @@ const styles = StyleSheet.create({
   cell: { flexGrow: 1, flexBasis: 0, height: '100%', justifyContent: 'center', alignItems: 'flex-end', paddingHorizontal: Spacing.one },
   cellText: { fontSize: 13, lineHeight: 18 },
   number: { fontVariant: ['tabular-nums'] },
-  projection: { gap: Spacing.two },
-  tiles: { flexDirection: 'row', gap: Spacing.two },
-  tile: { flex: 1, borderRadius: Spacing.two, paddingVertical: Spacing.two, paddingHorizontal: Spacing.two, gap: 2 },
-  tileLabel: { fontSize: 12, lineHeight: 16 },
-  tileValue: { fontSize: 20, lineHeight: 26, fontWeight: 700 },
-  tileNote: { fontSize: 12, lineHeight: 16 },
   links: { flexDirection: 'row', gap: Spacing.four },
 });
