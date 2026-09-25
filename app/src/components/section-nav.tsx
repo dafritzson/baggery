@@ -6,7 +6,7 @@ import { Animated, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 import { liquidBackdrop } from '@/lib/liquid-lens';
@@ -93,9 +93,12 @@ export const BOTTOM_TAB_BAR_SPACE = 96;
  * springs over to whichever tab you pick.
  */
 export function BottomTabBar() {
-  const theme = useTheme();
   const dark = useColorScheme() === 'dark';
+  const pathname = usePathname();
   const { sections, active, go } = useSections();
+  // Readable over whatever's behind it: the theme's glass over plain pages, a darker glass with
+  // white labels over artwork (Home's ballpark), in either theme.
+  const look = OVER_ARTWORK(pathname) ? LOOKS.overArtwork : dark ? LOOKS.dark : LOOKS.light;
   // Where each tab sits in the bar, for the bubble to slide to.
   const [frames, setFrames] = useState<Record<string, { x: number; width: number }>>({});
   const [bubbleX] = useState(() => new Animated.Value(0));
@@ -126,12 +129,12 @@ export function BottomTabBar() {
         accessibilityRole="tablist"
         style={[
           styles.bottomPill,
-          { backgroundColor: dark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(255, 255, 255, 0.18)', boxShadow: dark ? GLASS_RIM_DARK : GLASS_RIM },
-          glass,
+          { backgroundColor: look.fill, boxShadow: look.rim },
+          look.backdrop,
         ]}>
         {/* Light across the top of the glass. */}
         <LinearGradient
-          colors={dark ? ['rgba(255, 255, 255, 0.14)', 'rgba(255, 255, 255, 0)'] : ['rgba(255, 255, 255, 0.55)', 'rgba(255, 255, 255, 0)']}
+          colors={[look.sheen, 'rgba(255, 255, 255, 0)']}
           locations={[0, 0.6]}
           style={[StyleSheet.absoluteFill, styles.round]}
           pointerEvents="none"
@@ -144,15 +147,15 @@ export function BottomTabBar() {
               {
                 left: bubbleX,
                 width: bubbleWidth,
-                backgroundColor: dark ? 'rgba(255, 255, 255, 0.13)' : 'rgba(255, 255, 255, 0.55)',
-                boxShadow: dark ? BUBBLE_RIM_DARK : BUBBLE_RIM,
+                backgroundColor: look.bubble,
+                boxShadow: look.bubbleRim,
               },
             ]}
           />
         )}
         {sections.map((s) => {
           const selected = s === active;
-          const color = selected ? theme.accent : theme.textSecondary;
+          const color = selected ? look.selected : look.label;
           return (
             <Pressable
               key={s.label}
@@ -175,18 +178,54 @@ export function BottomTabBar() {
   );
 }
 
-// A bright rim (brighter at the top, where the light hits) and a soft drop shadow.
-const GLASS_RIM =
-  'inset 0 1px 0.5px rgba(255, 255, 255, 0.95), inset 0 -1px 0.5px rgba(255, 255, 255, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.55), 0 10px 30px rgba(16, 24, 40, 0.18)';
-const GLASS_RIM_DARK =
-  'inset 0 1px 0.5px rgba(255, 255, 255, 0.35), inset 0 -1px 0.5px rgba(255, 255, 255, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 10px 30px rgba(0, 0, 0, 0.55)';
-const BUBBLE_RIM = 'inset 0 1px 0 rgba(255, 255, 255, 1), inset 0 0 0 1px rgba(255, 255, 255, 0.8), 0 2px 8px rgba(16, 24, 40, 0.12)';
-const BUBBLE_RIM_DARK = 'inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.12)';
+/**
+ * Pages whose background is artwork rather than a plain page color, so the bar can't count on the
+ * theme's background behind it. See docs/PLAN.md, "iOS app notes": on iOS, real Liquid Glass
+ * adapts to what's behind it by itself.
+ */
+const OVER_ARTWORK = (pathname: string) => pathname === '/';
 
 // Web: clear glass that blurs a little and brings out the colors behind it. In Chromium the lens
 // bends what's behind the rim, so the blur stays light enough to see it (react-native-web passes
 // backdrop-filter through, with the -webkit- prefix).
-const glass = Platform.OS === 'web' ? ({ backdropFilter: liquidBackdrop('blur(3px) saturate(220%) brightness(1.06)', 'blur(8px) saturate(220%) brightness(1.06)') } as object) : null;
+const backdrop = (withLens: string, withoutLens: string) =>
+  Platform.OS === 'web' ? ({ backdropFilter: liquidBackdrop(withLens, withoutLens) } as object) : null;
+
+/** The bar's glass: fill, rim (brightest at the top, where the light hits), sheen, bubble and labels. */
+const LOOKS = {
+  light: {
+    fill: 'rgba(255, 255, 255, 0.18)',
+    rim: 'inset 0 1px 0.5px rgba(255, 255, 255, 0.95), inset 0 -1px 0.5px rgba(255, 255, 255, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.55), 0 10px 30px rgba(16, 24, 40, 0.18)',
+    sheen: 'rgba(255, 255, 255, 0.55)',
+    bubble: 'rgba(255, 255, 255, 0.55)',
+    bubbleRim: 'inset 0 1px 0 rgba(255, 255, 255, 1), inset 0 0 0 1px rgba(255, 255, 255, 0.8), 0 2px 8px rgba(16, 24, 40, 0.12)',
+    label: Colors.light.textSecondary,
+    selected: Colors.light.accent,
+    backdrop: backdrop('blur(3px) saturate(220%) brightness(1.06)', 'blur(8px) saturate(220%) brightness(1.06)'),
+  },
+  dark: {
+    fill: 'rgba(255, 255, 255, 0.07)',
+    rim: 'inset 0 1px 0.5px rgba(255, 255, 255, 0.35), inset 0 -1px 0.5px rgba(255, 255, 255, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 10px 30px rgba(0, 0, 0, 0.55)',
+    sheen: 'rgba(255, 255, 255, 0.14)',
+    bubble: 'rgba(255, 255, 255, 0.13)',
+    bubbleRim: 'inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.12)',
+    label: Colors.dark.textSecondary,
+    selected: Colors.dark.accent,
+    backdrop: backdrop('blur(3px) saturate(220%) brightness(1.06)', 'blur(8px) saturate(220%) brightness(1.06)'),
+  },
+  // Over busy, colorful artwork: a smoky glass that darkens and calms what's behind it, with white
+  // labels, so they stand out on grass, dirt or sky alike.
+  overArtwork: {
+    fill: 'rgba(12, 18, 30, 0.46)',
+    rim: 'inset 0 1px 0.5px rgba(255, 255, 255, 0.45), inset 0 -1px 0.5px rgba(255, 255, 255, 0.15), inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 10px 30px rgba(0, 0, 0, 0.35)',
+    sheen: 'rgba(255, 255, 255, 0.16)',
+    bubble: 'rgba(255, 255, 255, 0.24)',
+    bubbleRim: 'inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.2)',
+    label: 'rgba(255, 255, 255, 0.82)',
+    selected: '#FFFFFF',
+    backdrop: backdrop('blur(10px) saturate(140%) brightness(0.85)', 'blur(14px) saturate(140%) brightness(0.85)'),
+  },
+};
 
 const styles = StyleSheet.create({
   headerTabs: { flexDirection: 'row', alignSelf: 'stretch', gap: Spacing.three, marginLeft: Spacing.three },
