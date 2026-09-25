@@ -25,6 +25,7 @@ import {
   PERFECT_SCORE,
   type Point,
   TOTAL_BAGS,
+  TOTAL_DROPS,
   makeSchedule,
 } from '@/lib/bag-game';
 
@@ -42,6 +43,7 @@ const KIND_COLORS: Record<BagKind, string> = {
   double: '#7FDBFF',
   triple: '#D7A8FF',
   homer: '#FFD84D',
+  decoy: '#FF5A5F',
 };
 
 interface Popup {
@@ -63,15 +65,20 @@ export function BagGame({ view, before, onFinish, onReplay }: {
 }) {
   const [bags] = useState(makeSchedule);
   const [score, setScore] = useState(0);
-  const [gone, setGone] = useState(0);
+  // Drops finished (caught or vanished), and how many of them were bags rather than decoys.
+  const [gone, setGone] = useState({ all: 0, bags: 0 });
   const [popups, setPopups] = useState<Popup[]>([]);
-  const done = gone === TOTAL_BAGS;
+  const done = gone.all === TOTAL_DROPS;
 
   const catchBag = useCallback((bag: Bag, at: Point) => {
-    setScore((s) => s + BAG_KINDS[bag.kind].bags);
+    // A decoy costs a bag, but the score never goes below zero.
+    setScore((s) => Math.max(0, s + BAG_KINDS[bag.kind].bags));
     setPopups((p) => [...p, { id: bag.id, kind: bag.kind, at }]);
   }, []);
-  const bagGone = useCallback(() => setGone((n) => n + 1), []);
+  const bagGone = useCallback(
+    (bag: Bag) => setGone((g) => ({ all: g.all + 1, bags: g.bags + (bag.kind === 'decoy' ? 0 : 1) })),
+    [],
+  );
   const popupDone = useCallback((id: number) => setPopups((p) => p.filter((x) => x.id !== id)), []);
 
   // Report the score once, however often onFinish changes.
@@ -94,7 +101,7 @@ export function BagGame({ view, before, onFinish, onReplay }: {
         <ScorePopup key={p.id} popup={p} onDone={popupDone} />
       ))}
       <Intro view={view} />
-      <Scoreboard score={score} left={TOTAL_BAGS - gone} done={done} />
+      <Scoreboard score={score} left={TOTAL_BAGS - gone.bags} done={done} />
       {done && <Final view={view} score={score} before={before} onReplay={onReplay} />}
     </View>
   );
@@ -134,7 +141,7 @@ function FallingBag({ bag, view, onCatch, onGone }: {
   bag: Bag;
   view: FieldView;
   onCatch: (bag: Bag, at: Point) => void;
-  onGone: () => void;
+  onGone: (bag: Bag) => void;
 }) {
   const kind = BAG_KINDS[bag.kind];
   const { size, hit, center, dropFrom } = bagLayout(bag, view);
@@ -150,8 +157,8 @@ function FallingBag({ bag, view, onCatch, onGone }: {
     if (gone.current) return;
     gone.current = true;
     setState('gone');
-    onGone();
-  }, [onGone]);
+    onGone(bag);
+  }, [onGone, bag]);
 
   useEffect(() => {
     const landed = INTRO_MS + bag.spawnAt + bag.fallMs;
@@ -198,7 +205,8 @@ function FallingBag({ bag, view, onCatch, onGone }: {
   });
 
   if (state === 'gone') return null;
-  const special = bag.kind !== 'single';
+  // Doubles and up glow; decoys don't, so they're not easy to spot.
+  const special = kind.bags > 1;
   return (
     <Animated.View
       style={[
@@ -208,7 +216,7 @@ function FallingBag({ bag, view, onCatch, onGone }: {
       ]}>
       {/* Pointer down, not Pressable: the bag is caught the instant a finger lands, and each
           finger counts on its own (a Pressable takes one press at a time). */}
-      <View onPointerDown={grab} style={styles.fill} accessibilityRole="button" accessibilityLabel={`${kind.label || 'Single'} bag`}>
+      <View onPointerDown={grab} style={styles.fill} accessibilityRole="button" accessibilityLabel={bag.kind === 'decoy' ? 'Decoy' : `${kind.label || 'Single'} bag`}>
         <Text
           style={[
             styles.emoji,
@@ -260,12 +268,13 @@ function ScorePopup({ popup, onDone }: { popup: Popup; onDone: (id: number) => v
     transform: [{ translateY: -60 * rise.value }, { scale: 0.8 + 0.4 * Math.min(rise.value * 4, 1) }],
   }));
   const kind = BAG_KINDS[popup.kind];
-  const special = popup.kind !== 'single';
+  const big = popup.kind !== 'single';
   return (
     <Animated.View style={[styles.popup, { left: popup.at.x - 100, top: popup.at.y - 30 }, style]}>
-      <Text style={[styles.gameText, styles.outline, { fontSize: special ? 26 : 22, color: KIND_COLORS[popup.kind] }]}>
-        +{kind.bags}
-        {special ? ` ${kind.label}` : ''}
+      <Text style={[styles.gameText, styles.outline, { fontSize: big ? 26 : 22, color: KIND_COLORS[popup.kind] }]}>
+        {kind.bags > 0 ? '+' : ''}
+        {kind.bags}
+        {kind.label ? ` ${kind.label}` : ''}
       </Text>
     </Animated.View>
   );

@@ -1,23 +1,28 @@
 import { describe, expect, it } from 'vitest';
 
-import { BAG_KINDS, PERFECT_SCORE, TOTAL_BAGS, fenceDistance, fieldView, isNight, makeSchedule } from '../app/src/lib/bag-game.ts';
+import { BAG_KINDS, PERFECT_SCORE, TOTAL_BAGS, TOTAL_DROPS, fenceDistance, fieldView, isNight, makeSchedule } from '../app/src/lib/bag-game.ts';
 
 describe('bag game schedule', () => {
-  it('drops 56 bags: 2 home runs, 1 triple, 5 doubles, the rest singles', () => {
+  it('drops 56 bags (2 home runs, 1 triple, 5 doubles, the rest singles) and 10 decoys', () => {
     const bags = makeSchedule(1);
     expect(TOTAL_BAGS).toBe(56);
-    expect(bags).toHaveLength(56);
+    expect(TOTAL_DROPS).toBe(66);
+    expect(bags).toHaveLength(66);
     const count = (kind: string) => bags.filter((b) => b.kind === kind).length;
     expect(count('homer')).toBe(2);
     expect(count('triple')).toBe(1);
     expect(count('double')).toBe(5);
     expect(count('single')).toBe(48);
+    expect(count('decoy')).toBe(10);
+    expect(BAG_KINDS.decoy.bags).toBe(-1);
   });
 
-  it('a perfect game is 69 bags', () => {
+  it('a perfect game is 69 bags: every bag, no decoys', () => {
     // Also the database's cap on scores (bag_game_bests).
     expect(PERFECT_SCORE).toBe(69);
-    const total = makeSchedule(2).reduce((n, b) => n + BAG_KINDS[b.kind].bags, 0);
+    const total = makeSchedule(2)
+      .filter((b) => b.kind !== 'decoy')
+      .reduce((n, b) => n + BAG_KINDS[b.kind].bags, 0);
     expect(total).toBe(PERFECT_SCORE);
   });
 
