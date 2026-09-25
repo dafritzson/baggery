@@ -78,6 +78,8 @@ export function StandingsTable({
   const compact = useLayout() === 'compact';
   // Before a round's first pitch there's nothing to rank.
   const started = columns.some((c) => c.started);
+  // Just wide enough for the ranks' digits.
+  const rankWidth = standings.length >= 10 ? 16 : 9;
 
   const rows: GridRow[] = standings.map((s, i) => {
     const team = byId.get(s.teamId)!;
@@ -87,7 +89,10 @@ export function StandingsTable({
       key: s.teamId,
       label: (
         <>
-          <ThemedText type="small" themeColor="textSecondary" style={styles.rank}>{started ? s.rank : ''}</ThemedText>
+          {/* No rank column before the round starts, so it doesn't eat into long team names. */}
+          {started && (
+            <ThemedText type="small" themeColor="textSecondary" style={[styles.rank, { width: rankWidth }]}>{s.rank}</ThemedText>
+          )}
           <View style={styles.teamLabel}>
             <ThemedText type="smallBold" numberOfLines={1}>{teamName(team)}</ThemedText>
             {owner && <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.owner}>{mine ? 'You' : owner}</ThemedText>}
@@ -216,7 +221,7 @@ const styles = StyleSheet.create({
   section: { gap: Spacing.three },
   sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: Spacing.two, flexWrap: 'wrap' },
   sectionTitle: { textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 12 },
-  rank: { width: 16, fontVariant: ['tabular-nums'] },
+  rank: { fontVariant: ['tabular-nums'] },
   teamLabel: { flex: 1, minWidth: 0 },
   owner: { fontSize: 12, lineHeight: 14 },
   teamTitle: { fontSize: 24, lineHeight: 30 },
