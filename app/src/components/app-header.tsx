@@ -3,16 +3,18 @@ import { router, usePathname } from 'expo-router';
 import { createContext, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Defs, Ellipse, LinearGradient, Path, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, Ellipse, LinearGradient, Path, Stop } from 'react-native-svg';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { HeaderTabs } from '@/components/section-nav';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing, WideContentWidth } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { signOut, useAuth } from '@/lib/auth';
+import { setColorSchemeChoice } from '@/lib/color-scheme';
 import { useSeason } from '@/lib/season';
 import { teamName } from '@/lib/teams';
 import { appEnv } from '@/lib/supabase';
@@ -38,6 +40,7 @@ export function AppHeader() {
           <View style={{ flex: 1 }} />
           {appEnv !== 'production' && <EnvBadge />}
           <YearPicker />
+          <ThemeToggle />
           <AccountButton />
         </View>
       </SafeAreaView>
@@ -132,6 +135,37 @@ function YearPicker() {
   );
 }
 
+/** Moon in light mode, sun in dark: switches to the other, and remembers it in this browser. */
+function ThemeToggle() {
+  const theme = useTheme();
+  const dark = useColorScheme() === 'dark';
+  const color = theme.textSecondary;
+  return (
+    <Pressable
+      onPress={() => setColorSchemeChoice(dark ? 'light' : 'dark')}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+      style={({ pressed }) => [styles.toggle, pressed && { backgroundColor: theme.backgroundElement }]}>
+      <Svg width={20} height={20} viewBox="0 0 24 24">
+        {dark ? (
+          <>
+            <Circle cx={12} cy={12} r={4.5} fill={color} />
+            <Path
+              d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"
+              stroke={color}
+              strokeWidth={2}
+              strokeLinecap="round"
+            />
+          </>
+        ) : (
+          <Path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z" fill={color} />
+        )}
+      </Svg>
+    </Pressable>
+  );
+}
+
 function EnvBadge() {
   const theme = useTheme();
   return (
@@ -214,5 +248,6 @@ const styles = StyleSheet.create({
   year: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Spacing.two },
   badge: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Spacing.one },
   badgeText: { fontSize: 12, lineHeight: 16 },
+  toggle: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   avatar: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
 });

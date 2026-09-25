@@ -1,10 +1,11 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
-import { useColorScheme, View } from 'react-native';
+import { View } from 'react-native';
 
 import { AppHeader, UnderAppHeader } from '@/components/app-header';
 import { BottomTabBar } from '@/components/section-nav';
 import { StatusBarBackdrop } from '@/components/status-bar-backdrop';
 import { ThemedView } from '@/components/themed-view';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLayout } from '@/hooks/use-layout';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { PlayerProvider } from '@/lib/player';
