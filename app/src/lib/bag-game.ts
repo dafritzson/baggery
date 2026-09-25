@@ -25,14 +25,14 @@ export const PERFECT_SCORE = KINDS.reduce((n, k) => n + BAG_KINDS[k].count * BAG
 /** "BAGGERY", then "Get yo bags", then the first bag drops. */
 export const INTRO_MS = 3000;
 /** How long a bag sits on the grass before it disappears. */
-export const LINGER_MS = 550;
+export const LINGER_MS = 500;
 
 /**
  * Difficulty. Each bag's fall time, and the wait before the next one drops, go from the first
  * value to the second over the game. Most of the change comes early (see `ramp`), so it's quick
  * from the start and keeps getting harder.
  */
-const FALL_MS = [1250, 800];
+const FALL_MS = [1125, 720];
 const GAP_MS = [700, 380];
 /** Doubles, triples and home runs fall faster than singles by this factor. */
 const SPECIAL_FALL = 0.8;
