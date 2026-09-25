@@ -2,7 +2,7 @@
 
 Fantasy baseball for the MLB postseason. Managers draft 4 hitters, bags (total bases)
 decide who survives each round. Rules: [docs/RULES.md](docs/RULES.md). Plan and
-architecture: [docs/PLAN.md](docs/PLAN.md).
+architecture: [docs/PLAN.md](docs/PLAN.md). Ideas not yet decided on: [docs/IDEAS.md](docs/IDEAS.md).
 
 ## Layout
 
