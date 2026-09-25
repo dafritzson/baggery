@@ -28,6 +28,8 @@ function dayLabel(key: string, today: string): string {
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
 }
 
+const STATUS_ORDER: Record<string, number> = { Live: 0, Preview: 1, Final: 2 };
+
 /** Today if there are games today, else the next day with games, else the last one. */
 function defaultDay(days: string[], today: string): string | undefined {
   return days.find((d) => d >= today) ?? days.at(-1);
@@ -50,7 +52,8 @@ export default function GamesScreen() {
   const day = picked && days.includes(picked) ? picked : defaultDay(days, today);
   const games = scores.games
     .filter((g) => day && dayKey(g.start) === day)
-    .sort((a, b) => a.start.localeCompare(b.start));
+    // Live games first, then the ones still to come, then the finished ones; by start time within each.
+    .sort((a, b) => (STATUS_ORDER[a.status] ?? 1) - (STATUS_ORDER[b.status] ?? 1) || a.start.localeCompare(b.start));
 
   return (
     <Screen width="wide">
