@@ -10,9 +10,8 @@ import { Ballpark } from '@/components/ballpark';
 import { Button } from '@/components/button';
 import { BOTTOM_TAB_BAR_SPACE } from '@/components/section-nav';
 import { Spacing } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLayout } from '@/hooks/use-layout';
-import { fieldView } from '@/lib/bag-game';
+import { fieldView, isNight } from '@/lib/bag-game';
 import { type BagGameScores, useBagGameScores } from '@/lib/bag-game-scores';
 
 /** Home: a ballpark where bags fall from the sky. A new game starts every time you come here. */
@@ -20,7 +19,8 @@ export default function HomeScreen() {
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const compact = useLayout() === 'compact';
   const { bottom } = useSafeAreaInsets();
-  const night = useColorScheme() === 'dark';
+  // Day or night by the clock (not dark mode), checked whenever Home comes into view.
+  const [night, setNight] = useState(() => isNight(new Date()));
   const reduceMotion = useReducedMotion();
   const [fontsLoaded, fontError] = useFonts({ LuckiestGuy_400Regular });
   const { scores, refresh, save } = useBagGameScores();
@@ -42,6 +42,7 @@ export default function HomeScreen() {
   // when it's left or the app goes to the background. Scores may have changed while away.
   useFocusEffect(
     useCallback(() => {
+      setNight(isNight(new Date()));
       refresh();
       if (!reduceMotion) newGame();
       const sub = AppState.addEventListener('change', (state) => {

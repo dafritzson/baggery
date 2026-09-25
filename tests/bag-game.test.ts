@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { BAG_KINDS, PERFECT_SCORE, TOTAL_BAGS, fenceDistance, fieldView, makeSchedule } from '../app/src/lib/bag-game.ts';
+import { BAG_KINDS, PERFECT_SCORE, TOTAL_BAGS, fenceDistance, fieldView, isNight, makeSchedule } from '../app/src/lib/bag-game.ts';
 
 describe('bag game schedule', () => {
   it('drops 56 bags: 2 home runs, 1 triple, 5 doubles, the rest singles', () => {
@@ -85,5 +85,18 @@ describe('field view', () => {
     expect(left).toBeLessThan(25);
     expect(right).toBeLessThan(390);
     expect(right).toBeGreaterThan(365);
+  });
+});
+
+describe('day or night', () => {
+  const at = (hour: number, minute = 0) => new Date(2026, 9, 1, hour, minute);
+
+  it('is a night game from 7 PM to 6 AM local time', () => {
+    expect(isNight(at(18, 59))).toBe(false);
+    expect(isNight(at(19))).toBe(true);
+    expect(isNight(at(0))).toBe(true);
+    expect(isNight(at(5, 59))).toBe(true);
+    expect(isNight(at(6))).toBe(false);
+    expect(isNight(at(12))).toBe(false);
   });
 });
