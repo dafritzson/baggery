@@ -10,7 +10,7 @@ import {
 } from '@core/scoreboard.ts';
 import type { FantasyRound } from '@core/types.ts';
 
-import { OwnerBadge } from '@/components/owner-badge';
+import { OwnerBadge, YouTag } from '@/components/owner-badge';
 import { PlayerName } from '@/components/player-name';
 import { type GridRow, ScoreGrid } from '@/components/score-grid';
 import { ThemedText } from '@/components/themed-text';
@@ -109,6 +109,7 @@ export function StandingsTable({
       }),
       total: started ? String(s.total) : '',
       selected: team.id === selectedTeamId,
+      mine,
       standing: started ? standing(s.total, i) : undefined,
       cutAfter: started && i === survivors - 1 && standings.length > survivors,
       onPress: () => onSelectTeam(team.id),
@@ -140,17 +141,12 @@ export function StandingsTable({
 
 /** Team name over the owner's name (or "Open spot"), with a YOU tag on my team. */
 function TeamLabel({ name, owner, mine }: { name: string; owner: string | null; mine: boolean }) {
-  const theme = useTheme();
   return (
     <View style={styles.teamLabel}>
       <ThemedText numberOfLines={1} style={styles.teamName}>{name}</ThemedText>
       <View style={styles.ownerLine}>
         <ThemedText numberOfLines={1} themeColor="textSecondary" style={styles.owner}>{owner ?? 'Open spot'}</ThemedText>
-        {mine && (
-          <View style={[styles.you, { backgroundColor: theme.accent }]}>
-            <ThemedText style={[styles.youText, { color: theme.accentText }]}>YOU</ThemedText>
-          </View>
-        )}
+        {mine && <YouTag />}
       </View>
     </View>
   );
@@ -264,8 +260,6 @@ const styles = StyleSheet.create({
   teamName: { fontSize: 15, lineHeight: 19, fontWeight: 600 },
   ownerLine: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   owner: { fontSize: 12, lineHeight: 15, flexShrink: 1 },
-  you: { paddingHorizontal: 5, height: 15, borderRadius: Radius.sm, justifyContent: 'center' },
-  youText: { fontSize: 9, lineHeight: 11, fontWeight: 800, letterSpacing: 0.6 },
   team: { gap: Spacing.four },
   teamHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two + 4, height: CHIPS_ROW },
   teamTitle: { fontSize: 18, lineHeight: 22, fontWeight: 700 },
