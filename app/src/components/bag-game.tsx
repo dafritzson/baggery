@@ -13,6 +13,7 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { Button } from '@/components/button';
+import { type SpecialsCaught, StadiumBoard } from '@/components/stadium-board';
 import { Spacing } from '@/constants/theme';
 import type { BagGameScores } from '@/lib/bag-game-scores';
 import {
@@ -57,14 +58,18 @@ interface Popup {
  * One game: the intro, 100 falling bags to tap, and the final score. Drawn over the ballpark;
  * remount (new `key`) for a new game.
  */
-export function BagGame({ view, before, onFinish, onReplay }: {
+export function BagGame({ view, scores, before, night, onFinish, onReplay }: {
   view: FieldView;
+  /** High scores as they are now, for the stadium scoreboard; undefined if not loaded. */
+  scores: BagGameScores | undefined;
   /** High scores from before this game ended (for the final screen); undefined if not loaded. */
   before: BagGameScores | undefined;
+  night: boolean;
   onFinish: (score: number) => void;
   onReplay: () => void;
 }) {
   const [bags] = useState(makeSchedule);
+  const [specials, setSpecials] = useState<SpecialsCaught>({ double: 0, triple: 0, homer: 0 });
   const [score, setScore] = useState(0);
   // Drops finished (caught or vanished), and how many of them were bags rather than decoys.
   const [gone, setGone] = useState({ all: 0, bags: 0 });
@@ -74,6 +79,8 @@ export function BagGame({ view, before, onFinish, onReplay }: {
   const catchBag = useCallback((bag: Bag, at: Point) => {
     // A decoy costs a bag, but the score never goes below zero.
     setScore((s) => Math.max(0, s + BAG_KINDS[bag.kind].bags));
+    const { kind } = bag;
+    if (kind === 'double' || kind === 'triple' || kind === 'homer') setSpecials((c) => ({ ...c, [kind]: c[kind] + 1 }));
     setPopups((p) => [...p, { id: bag.id, kind: bag.kind, at }]);
   }, []);
   const bagGone = useCallback(
@@ -92,6 +99,14 @@ export function BagGame({ view, before, onFinish, onReplay }: {
 
   return (
     <View style={StyleSheet.absoluteFill}>
+      <StadiumBoard
+        view={view}
+        scores={scores}
+        score={score}
+        left={TOTAL_BAGS - gone.bags}
+        specials={specials}
+        night={night}
+      />
       {bags.map((bag) => (
         <Shadow key={bag.id} bag={bag} view={view} />
       ))}
@@ -102,7 +117,6 @@ export function BagGame({ view, before, onFinish, onReplay }: {
         <ScorePopup key={p.id} popup={p} onDone={popupDone} />
       ))}
       <Intro view={view} />
-      <Scoreboard score={score} left={TOTAL_BAGS - gone.bags} done={done} />
       {done && <Final view={view} score={score} before={before} onReplay={onReplay} />}
     </View>
   );
@@ -320,24 +334,6 @@ function Intro({ view }: { view: FieldView }) {
   );
 }
 
-/** Bags caught so far (bumps on each catch) and how many are still to fall. */
-function Scoreboard({ score, left, done }: { score: number; left: number; done: boolean }) {
-  const bump = useSharedValue(0);
-  useEffect(() => {
-    if (score > 0) bump.value = withSequence(withTiming(1, { duration: 70, ...always }), withTiming(0, { duration: 200, ...always }));
-  }, [score, bump]);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.35 * bump.value }] }));
-  if (done) return null;
-  return (
-    <View style={styles.scoreboard}>
-      <Text style={[styles.gameText, styles.outline, styles.left]}>{left} left</Text>
-      <Animated.Text style={[styles.gameText, styles.outline, styles.score, style]}>
-        {BAG_KINDS.single.emoji} {score}
-      </Animated.Text>
-    </View>
-  );
-}
-
 function Final({ view, score, before, onReplay }: {
   view: FieldView;
   score: number;
@@ -390,19 +386,6 @@ const styles = StyleSheet.create({
   passThrough: { pointerEvents: 'none' },
   title: { color: '#FFD84D', letterSpacing: 2 },
   tagline: { position: 'absolute', letterSpacing: 1 },
-  scoreboard: {
-    position: 'absolute',
-    top: Spacing.three,
-    left: Spacing.three,
-    right: Spacing.three,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    zIndex: 2100,
-    pointerEvents: 'none',
-  },
-  left: { fontSize: 18 },
-  score: { fontSize: 32, lineHeight: 40 },
   final: { gap: Spacing.two, paddingTop: Spacing.three },
   note: { fontSize: 20 },
   details: { fontSize: 15 },
