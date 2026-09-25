@@ -347,7 +347,7 @@ function Toggle<T>({
           onPress={() => onChange(o.value)}
           accessibilityRole="button"
           accessibilityState={{ selected: value === o.value }}
-          style={[styles.toggleItem, value === o.value && { backgroundColor: theme.background, boxShadow: theme.raised }]}>
+          style={[styles.toggleItem, value === o.value && { backgroundColor: theme.segment, boxShadow: theme.raised }]}>
           <ThemedText type="smallBold" themeColor={value === o.value ? 'text' : 'textSecondary'} style={styles.toggleText}>
             {o.label}
           </ThemedText>

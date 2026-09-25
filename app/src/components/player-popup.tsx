@@ -490,7 +490,7 @@ function WindowToggle({ value, onChange }: { value: number; onChange: (n: (typeo
           onPress={() => onChange(n)}
           accessibilityRole="button"
           accessibilityState={{ selected: value === n }}
-          style={[styles.toggleItem, value === n && { backgroundColor: theme.background, boxShadow: theme.raised }]}>
+          style={[styles.toggleItem, value === n && { backgroundColor: theme.segment, boxShadow: theme.raised }]}>
           <ThemedText type="smallBold" themeColor={value === n ? 'text' : 'textSecondary'} style={styles.toggleText}>
             Last {n}
           </ThemedText>

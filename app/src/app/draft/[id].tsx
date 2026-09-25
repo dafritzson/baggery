@@ -278,7 +278,7 @@ function Segmented({ value, onChange }: { value: Tab; onChange: (t: Tab) => void
         <Pressable
           key={key}
           onPress={() => onChange(key)}
-          style={[styles.segment, value === key && { backgroundColor: theme.background, boxShadow: theme.raised }]}>
+          style={[styles.segment, value === key && { backgroundColor: theme.segment, boxShadow: theme.raised }]}>
           <ThemedText type="smallBold" themeColor={value === key ? 'text' : 'textSecondary'}>{label}</ThemedText>
         </Pressable>
       ))}

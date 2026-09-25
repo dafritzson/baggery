@@ -72,7 +72,7 @@ export default function StandingsScreen() {
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
               onPress={() => setView(v)}
-              style={[styles.toggleItem, active && { backgroundColor: theme.background, boxShadow: theme.raised }]}>
+              style={[styles.toggleItem, active && { backgroundColor: theme.segment, boxShadow: theme.raised }]}>
               <ThemedText type="smallBold" numberOfLines={1} themeColor={active ? 'text' : 'textSecondary'}>
                 {v === 'standings' ? 'Standings' : team ? (team.id === data.myTeam?.id ? 'My team' : teamName(team)) : 'Team'}
               </ThemedText>

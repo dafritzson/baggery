@@ -24,6 +24,8 @@ export const Colors = {
     tint: '#E9EFFB',
     tintHover: '#DDE7F9',
     tintStrong: '#D2DDF3',
+    /** The selected option in a segmented toggle: lighter than its sunken track. */
+    segment: '#ffffff',
     /**
      * 3D surfaces, all soft shadows: raised (cards, tables, chips, buttons) casts a close shadow
      * plus a wide, faint one; sunken (inputs, toggle tracks, pressed buttons) has a soft shadow
@@ -41,7 +43,8 @@ export const Colors = {
   },
   dark: {
     text: '#ffffff',
-    background: '#000000',
+    // Near-black rather than black, so the raised/floating shadows below still read.
+    background: '#111113',
     backgroundElement: '#212225',
     backgroundSelected: '#2E3135',
     textSecondary: '#B0B4BA',
@@ -54,6 +57,7 @@ export const Colors = {
     tint: '#16213A',
     tintHover: '#1D2A49',
     tintStrong: '#223257',
+    segment: '#2E3135',
     raised: '0 1px 2px rgba(0, 0, 0, 0.8), 0 4px 14px rgba(0, 0, 0, 0.7)',
     sunken: 'inset 0 2px 5px rgba(0, 0, 0, 0.6)',
     floating: '0 16px 40px rgba(0, 0, 0, 0.8), 0 4px 12px rgba(0, 0, 0, 0.6)',
