@@ -43,18 +43,22 @@ export function ScoreGrid({
   labelHeader,
   totalHeader,
   labelWidth,
+  rowHeight = ROW,
 }: {
   columns: GridColumn[];
   rows: GridRow[];
   labelHeader: string;
   totalHeader: string;
   labelWidth: number;
+  /** Body rows' height; the header stays at the default. */
+  rowHeight?: number;
 }) {
   const theme = useTheme();
   const standingColor = (r: GridRow) =>
     r.standing && { safe: theme.standingSafe, tied: theme.standingTied, out: theme.standingOut }[r.standing];
   const rowStyle = (r: GridRow, i: number) => [
     styles.row,
+    { height: rowHeight },
     i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border },
     rows[i - 1]?.cutAfter && [styles.cut, { borderTopColor: theme.danger }],
     r.selected && { backgroundColor: theme.backgroundSelected },
@@ -92,7 +96,7 @@ export function ScoreGrid({
         <View style={styles.fill}>
           <View style={[styles.header, styles.cells, { borderBottomColor: theme.border }]}>
             {columns.map((c) => (
-              <View key={c.label} style={[styles.cell, c.divider && [styles.divider, { borderLeftColor: theme.border }]]}>
+              <View key={c.label} style={[styles.cell, styles.headerCell, c.divider && [styles.divider, { borderLeftColor: theme.border }]]}>
                 {header(c.label, c.live)}
               </View>
             ))}
@@ -129,13 +133,14 @@ const styles = StyleSheet.create({
   fill: { flexGrow: 1 },
   totals: { borderLeftWidth: StyleSheet.hairlineWidth, width: 52 },
   header: { height: ROW, borderBottomWidth: StyleSheet.hairlineWidth },
+  headerCell: { height: ROW },
   headerText: { fontSize: 12 },
   liveDot: { position: 'absolute', top: 6, right: 4, width: 6, height: 6, borderRadius: 3 },
   row: { height: ROW },
   cut: { borderTopWidth: 2, borderStyle: 'dashed' },
   labelCell: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.two + 2 },
   cells: { flexDirection: 'row', paddingHorizontal: Spacing.one },
-  cell: { minWidth: CELL, flexGrow: 1, flexBasis: 0, height: ROW, justifyContent: 'center', alignItems: 'center' },
+  cell: { minWidth: CELL, flexGrow: 1, flexBasis: 0, alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center' },
   divider: { borderLeftWidth: StyleSheet.hairlineWidth },
   totalCell: { justifyContent: 'center', alignItems: 'center' },
   number: { fontVariant: ['tabular-nums'] },

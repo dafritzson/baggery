@@ -42,7 +42,7 @@ export default function StandingsScreen() {
   };
 
   const standings = (
-    <View style={styles.stack}>
+    <View style={[styles.stack, wide && styles.wideStack]}>
       <RoundChips round={shownRound} onChange={setRound} />
       <StandingsTable data={data} scores={scores} round={shownRound} selectedTeamId={wide ? teamId : null} onSelectTeam={selectTeam} />
       {scores.games.length === 0 && (
@@ -87,6 +87,8 @@ export default function StandingsScreen() {
 
 const styles = StyleSheet.create({
   stack: { gap: Spacing.three },
+  // Matches the team panel's gap under its header, so the two columns' tables start level.
+  wideStack: { gap: Spacing.four },
   toggle: { flexDirection: 'row', borderRadius: Radius.lg, padding: 3 },
   toggleItem: { flex: 1, alignItems: 'center', paddingVertical: Spacing.two, borderRadius: Radius.lg },
 });
