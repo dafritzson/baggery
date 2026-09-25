@@ -37,9 +37,11 @@ describe('seasonSlg', () => {
 });
 
 describe('expectedRound1Games', () => {
-  it('is the Division Series with a bye, plus the Wild Card without one', () => {
+  it('is the Division Series with a bye', () => {
     expect(expectedRound1Games(true)).toBe(4.125);
-    expect(expectedRound1Games(false)).toBe(6.625);
+  });
+  it('is the Wild Card plus half a Division Series without one', () => {
+    expect(expectedRound1Games(false)).toBe(4.5625);
   });
 });
 
@@ -57,7 +59,7 @@ describe('regressedTb (RDTB)', () => {
   it('adds 200 games of 1.5 TB, then scales to expected round-1 games', () => {
     // (300 + 300) / (150 + 200) TB per game
     expect(regressedTb(300, 150, true)).toBeCloseTo((600 / 350) * 4.125);
-    expect(regressedTb(300, 150, false)).toBeCloseTo((600 / 350) * 6.625);
+    expect(regressedTb(300, 150, false)).toBeCloseTo((600 / 350) * 4.5625);
   });
   it('is 1.5 TB a game with no games', () => {
     expect(regressedTb(0, 0, true)).toBeCloseTo(1.5 * 4.125);
@@ -67,7 +69,7 @@ describe('regressedTb (RDTB)', () => {
 describe('expectedTb (TB·E[G]/162)', () => {
   it('is TB per game times expected round-1 games', () => {
     expect(expectedTb(300, 150, true)).toBeCloseTo(2 * 4.125);
-    expect(expectedTb(300, 150, false)).toBeCloseTo(2 * 6.625);
+    expect(expectedTb(300, 150, false)).toBeCloseTo(2 * 4.5625);
   });
   it('is null with no games', () => {
     expect(expectedTb(0, 0, false)).toBeNull();

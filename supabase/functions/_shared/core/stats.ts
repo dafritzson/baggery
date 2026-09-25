@@ -47,13 +47,19 @@ export const REGRESSION_WEIGHT = 200;
 export const REGRESSION_SLG = 0.435;
 /** TB per game that RDTB regresses toward. */
 export const REGRESSION_TB_PER_GAME = 1.5;
+/** Expected games in a best-of-3 Wild Card series and a best-of-5 Division Series. */
+const WILD_CARD_GAMES = 2.5;
+const DIVISION_SERIES_GAMES = 4.125;
+/** Chance a Wild Card team wins its series and plays the Division Series. */
+const WILD_CARD_WIN_CHANCE = 0.5;
 
 /**
- * Expected MLB games in fantasy round 1, if every game is a coin flip: 4.125 in the best-of-5
- * Division Series, plus 2.5 in the best-of-3 Wild Card for teams without a bye.
+ * Expected MLB games in fantasy round 1, if every game is a coin flip. A team with a bye plays
+ * the best-of-5 Division Series (4.125 games). A team without one plays the best-of-3 Wild Card
+ * (2.5 games) and reaches the Division Series half the time: 2.5 + 0.5 × 4.125 = 4.5625.
  */
 export function expectedRound1Games(hasBye: boolean): number {
-  return 4.125 + (hasBye ? 0 : 2.5);
+  return hasBye ? DIVISION_SERIES_GAMES : WILD_CARD_GAMES + WILD_CARD_WIN_CHANCE * DIVISION_SERIES_GAMES;
 }
 
 /** RDSLG: SLG regressed toward .435 by 200 at-bats. */
