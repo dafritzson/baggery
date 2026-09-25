@@ -156,9 +156,10 @@ export function PlayerTable({
   // Box mode: the outer width too, so the difference is the vertical scrollbar.
   const [outerWidth, setOuterWidth] = useState(0);
   const [nameWidth, setNameWidth] = useState(0);
-  // Just wide enough for the longest name (capped, so some stats always show beside it); the stat
-  // columns share whatever width is left.
-  const nameColumnWidth = tableWidth ? { maxWidth: tableWidth * MAX_NAME_SHARE } : null;
+  // Just wide enough for the longest name; the stat columns share whatever width is left. On phones
+  // it's capped so some stats always show beside it. Not on desktop: Research sizes its list to this
+  // table's width, so a cap would shrink the names, then the list, and so on until they're gone.
+  const nameColumnWidth = tableWidth && !box ? { maxWidth: tableWidth * MAX_NAME_SHARE } : null;
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'tb', desc: true });
   const [pressedId, setPressedId] = useState<number | null>(null);
 
