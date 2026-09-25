@@ -89,3 +89,33 @@ export function formatRate(value: number | null): string {
   if (value === null) return '—';
   return value.toFixed(3).replace(/^0\./, '.');
 }
+
+/** Stats the popup's chart can show. Counting stats are per game; rates run across the games shown. */
+export type ChartStat = 'tb' | 'h' | 'hr' | 'rbi' | 'r' | 'bb' | 'so' | 'avg' | 'obp' | 'slg' | 'ops';
+
+export const RATE_STATS: readonly ChartStat[] = ['avg', 'obp', 'slg', 'ops'];
+
+export function isRateStat(stat: ChartStat): stat is keyof Rates {
+  return RATE_STATS.includes(stat);
+}
+
+export interface ChartPoint {
+  game: PlayerGame;
+  /** The count in that game, or the rate over the games shown up to and including it (null before his first AB). */
+  value: number | null;
+}
+
+/**
+ * Points for the latest `n` games (all of them when `n` is null), oldest first. Counting stats are
+ * that game's number; rates are running totals from the first game shown, so the last point is the
+ * rate over the whole stretch.
+ */
+export function chartPoints(games: PlayerGame[], stat: ChartStat, n: number | null): ChartPoint[] {
+  const shown = (n === null ? games : games.slice(0, n)).slice().reverse();
+  if (!isRateStat(stat)) return shown.map((game) => ({ game, value: game[stat] }));
+  let total = emptyCounts();
+  return shown.map((game) => {
+    total = sumCounts([total, game]);
+    return { game, value: rates(total)[stat] };
+  });
+}

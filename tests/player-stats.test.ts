@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type Counts,
   type PlayerGame,
+  chartPoints,
   emptyCounts,
   formatRate,
   lastGames,
@@ -49,5 +50,35 @@ describe('player stats', () => {
     expect(formatRate(0.3125)).toBe('.313');
     expect(formatRate(1.0449)).toBe('1.045');
     expect(formatRate(null)).toBe('—');
+  });
+});
+
+describe('chart points', () => {
+  // Newest first, as the player-stats function returns them.
+  const games = [
+    game('2026-09-20', { ab: 4, h: 2, tb: 5 }),
+    game('2026-09-19', { ab: 4, h: 0 }),
+    game('2026-09-18', { ab: 0, bb: 2 }),
+  ];
+
+  it('gives counting stats game by game, oldest first', () => {
+    expect(chartPoints(games, 'tb', null).map((p) => [p.game.date, p.value])).toEqual([
+      ['2026-09-18', 0],
+      ['2026-09-19', 0],
+      ['2026-09-20', 5],
+    ]);
+  });
+
+  it('keeps only the latest n games', () => {
+    expect(chartPoints(games, 'h', 2).map((p) => p.game.date)).toEqual(['2026-09-19', '2026-09-20']);
+    expect(chartPoints(games, 'h', 30)).toHaveLength(3);
+  });
+
+  it('runs rates from the first game shown', () => {
+    const avg = chartPoints(games, 'avg', null).map((p) => p.value);
+    expect(avg[0]).toBeNull(); // no at-bats yet
+    expect(avg[1]).toBe(0);
+    expect(avg[2]).toBeCloseTo(2 / 8);
+    expect(chartPoints(games, 'slg', 1)[0].value).toBeCloseTo(5 / 4);
   });
 });

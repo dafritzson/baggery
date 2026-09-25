@@ -10,11 +10,13 @@ import {
   rates,
 } from '@core/player-stats.ts';
 
+import { StatChart } from '@/components/stat-chart';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
+import { shortDate } from '@/lib/format';
 import type { DraftAction } from '@/lib/player';
 import { type SeasonData, useSeason } from '@/lib/season';
 import { supabase } from '@/lib/supabase';
@@ -81,7 +83,7 @@ export function PlayerPopup({
 }
 
 /**
- * A player's stats: this season, recent games and past seasons, plus where he stands in the league.
+ * A player's stats: this season, a chart of his games, recent games and past seasons, plus where he stands in the league.
  * Fills its container: the popup, or the side panel on the Research tab.
  */
 export function PlayerDetails({
@@ -306,6 +308,12 @@ function StatsBody({ stats, year, opsPlus }: { stats: PlayerStats; year: number;
       </Section>
 
       {stats.games.length > 0 && (
+        <Section title="Chart">
+          <StatChart games={stats.games} season={stats.season} />
+        </Section>
+      )}
+
+      {stats.games.length > 0 && (
         <Section
           title="Game log"
           action={<WindowToggle value={span} onChange={setSpan} />}>
@@ -344,12 +352,6 @@ function StatsBody({ stats, year, opsPlus }: { stats: PlayerStats; year: number;
       )}
     </>
   );
-}
-
-/** "2026-09-20" → "9/20" */
-function shortDate(date: string): string {
-  const [, m, d] = date.split('-');
-  return `${Number(m)}/${Number(d)}`;
 }
 
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
