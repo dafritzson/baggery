@@ -50,16 +50,17 @@ export const REGRESSION_TB_PER_GAME = 1.5;
 /** Expected games in a best-of-3 Wild Card series and a best-of-5 Division Series. */
 const WILD_CARD_GAMES = 2.5;
 const DIVISION_SERIES_GAMES = 4.125;
-/** Chance a Wild Card team wins its series and plays the Division Series. */
-const WILD_CARD_WIN_CHANCE = 0.5;
 
 /**
- * Expected MLB games in fantasy round 1, if every game is a coin flip. A team with a bye plays
- * the best-of-5 Division Series (4.125 games). A team without one plays the best-of-3 Wild Card
- * (2.5 games) and reaches the Division Series half the time: 2.5 + 0.5 × 4.125 = 4.5625.
+ * Expected MLB games from a drafted slot in fantasy round 1, if every game is a coin flip. A team
+ * with a bye plays the best-of-5 Division Series (4.125 games). A team without one plays the
+ * best-of-3 Wild Card (2.5 games) and the Division Series (4.125), 6.625 in all, even though it
+ * only reaches the Division Series half the time: a manager whose player loses the Wild Card swaps
+ * in another in Draft 2, so the slot still plays those games. The column is there to show what
+ * a bye costs in games.
  */
 export function expectedRound1Games(hasBye: boolean): number {
-  return hasBye ? DIVISION_SERIES_GAMES : WILD_CARD_GAMES + WILD_CARD_WIN_CHANCE * DIVISION_SERIES_GAMES;
+  return hasBye ? DIVISION_SERIES_GAMES : WILD_CARD_GAMES + DIVISION_SERIES_GAMES;
 }
 
 /** RDSLG: SLG regressed toward .435 by 200 at-bats. */
