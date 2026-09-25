@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <!-- viewport-fit=cover lets the app draw under the iPhone status bar and home indicator. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />
+    <!--
+      Opened from the iOS Home Screen: full screen, with a see-through status bar over the app's
+      header (white text). In light mode the app darkens the strip behind it (StatusBarBackdrop).
+    -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Baggery" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B3D91" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
+    <title>%WEB_TITLE%</title>
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+      /* Page background (matches constants/theme.ts), so no white shows around the app in dark mode. */
+      html,
+      body {
+        background-color: #ffffff;
+      }
+      @media (prefers-color-scheme: dark) {
+        html,
+        body {
+          background-color: #000000;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
+    <noscript>
+      You need to enable JavaScript to run this app.
+    </noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"></div>
+  </body>
+</html>
