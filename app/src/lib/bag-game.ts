@@ -147,3 +147,9 @@ export function fieldView(width: number, height: number, bottom: number = height
     scale: (z) => CAMERA_BACK / depth(z),
   };
 }
+
+/** Night game from 7 PM to 6 AM, local time: stars in the sky. */
+export function isNight(date: Date): boolean {
+  const hour = date.getHours();
+  return hour >= 19 || hour < 6;
+}
