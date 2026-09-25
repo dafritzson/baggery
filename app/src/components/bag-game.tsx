@@ -20,6 +20,7 @@ import {
   type Bag,
   type BagKind,
   type FieldView,
+  FADE_MS,
   INTRO_MS,
   LINGER_MS,
   PERFECT_SCORE,
@@ -169,7 +170,7 @@ function FallingBag({ bag, view, onCatch, onGone }: {
     );
     fade.value = withDelay(
       landed + LINGER_MS,
-      withTiming(0, { duration: 250, ...always }, (finished) => {
+      withTiming(0, { duration: FADE_MS, ...always }, (finished) => {
         if (finished) scheduleOnRN(finish);
       }),
       always.reduceMotion,
@@ -239,7 +240,7 @@ function Shadow({ bag, view }: { bag: Bag; view: FieldView }) {
   useEffect(() => {
     visible.value = withDelay(
       INTRO_MS + bag.spawnAt + bag.fallMs + LINGER_MS,
-      withTiming(0, { duration: 250, ...always }),
+      withTiming(0, { duration: FADE_MS, ...always }),
       always.reduceMotion,
     );
   }, [bag, visible]);
