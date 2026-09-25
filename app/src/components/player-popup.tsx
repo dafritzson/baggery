@@ -1,6 +1,19 @@
 import { Image } from 'expo-image';
-import { type ReactNode, useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Animated,
+  type GestureResponderHandlers,
+  Linking,
+  Modal,
+  PanResponder,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 
 import {
   type Counts,
@@ -65,21 +78,75 @@ export function PlayerPopup({
 }) {
   const theme = useTheme();
   const wide = useLayout() === 'wide';
+  const { drag, handlers } = useDragToClose(playerId, onClose);
+  // The backdrop fades as the sheet is dragged down.
+  const dim = drag.interpolate({ inputRange: [0, 400], outputRange: [1, 0], extrapolate: 'clamp' });
   return (
     <Modal visible={playerId !== null} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable
         style={[styles.backdrop, wide ? styles.backdropWide : styles.backdropCompact]}
         onPress={onClose}
         accessibilityLabel="Close">
+        <Animated.View style={[StyleSheet.absoluteFill, styles.dim, { opacity: wide ? 1 : dim }]} pointerEvents="none" />
         {/* Swallows taps so they don't reach the backdrop. */}
-        <Pressable
+        <AnimatedPressable
           onPress={() => {}}
-          style={[styles.panel, wide ? styles.panelWide : styles.panelCompact, { backgroundColor: theme.background }]}>
-          {playerId !== null && <PlayerDetails playerId={playerId} draftAction={draftAction} onClose={onClose} />}
-        </Pressable>
+          style={[
+            styles.panel,
+            wide ? styles.panelWide : styles.panelCompact,
+            { backgroundColor: theme.background },
+            !wide && { transform: [{ translateY: drag }] },
+          ]}>
+          {playerId !== null && (
+            <PlayerDetails
+              playerId={playerId}
+              draftAction={draftAction}
+              onClose={onClose}
+              dragHandlers={wide ? undefined : handlers}
+            />
+          )}
+        </AnimatedPressable>
       </Pressable>
     </Modal>
   );
+}
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+const nativeDriver = Platform.OS !== 'web';
+
+/**
+ * Dragging the bottom sheet down by its header: past a third of the way (or on a quick flick) it
+ * slides out and closes; short of that it springs back.
+ */
+function useDragToClose(playerId: number | null, onClose: () => void) {
+  const { height } = useWindowDimensions();
+  const [drag] = useState(() => new Animated.Value(0));
+  // Back in place each time it opens.
+  useEffect(() => {
+    if (playerId !== null) drag.setValue(0);
+  }, [playerId, drag]);
+
+  const handlers = useMemo(() => {
+    const springBack = () =>
+      Animated.spring(drag, { toValue: 0, bounciness: 0, useNativeDriver: nativeDriver }).start();
+    return PanResponder.create({
+      // Touches that start on the header are its own, or the sheet's Pressable would take them.
+      // Its buttons are deeper, so they still get their taps; a downward drag from one comes here.
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderMove: (_, g) => drag.setValue(Math.max(0, g.dy)),
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > height / 3 || (g.dy > 40 && g.vy > 0.8)) {
+          Animated.timing(drag, { toValue: height, duration: 180, useNativeDriver: nativeDriver }).start(() => onClose());
+        } else {
+          springBack();
+        }
+      },
+      onPanResponderTerminate: springBack,
+    }).panHandlers;
+  }, [drag, height, onClose]);
+
+  return { drag, handlers };
 }
 
 /**
@@ -90,11 +157,14 @@ export function PlayerDetails({
   playerId,
   draftAction = null,
   onClose,
+  dragHandlers,
 }: {
   playerId: number;
   draftAction?: DraftAction | null;
   /** Shows a close button. */
   onClose?: () => void;
+  /** Makes the header a handle for dragging the bottom sheet closed. */
+  dragHandlers?: GestureResponderHandlers;
 }) {
   const { data } = useSeason();
   const year = data?.season.year;
@@ -111,6 +181,7 @@ export function PlayerDetails({
         stats={stats}
         data={data}
         onClose={onClose}
+        dragHandlers={dragHandlers}
         draft={
           canDraft && (
             <DraftChip
@@ -148,6 +219,7 @@ function Header({
   data,
   draft,
   onClose,
+  dragHandlers,
 }: {
   playerId: number;
   name: string;
@@ -155,6 +227,7 @@ function Header({
   data: SeasonData | null;
   draft: ReactNode;
   onClose?: () => void;
+  dragHandlers?: GestureResponderHandlers;
 }) {
   const theme = useTheme();
   const person = stats?.person;
@@ -171,7 +244,10 @@ function Header({
   const status = data ? leagueStatus(data, playerId) : null;
 
   return (
-    <View style={[styles.header, { borderBottomColor: theme.border }]}>
+    <View
+      style={[styles.header, { borderBottomColor: theme.border }, dragHandlers && styles.dragHandle]}
+      {...dragHandlers}>
+      {dragHandlers && <View style={[styles.grabber, { backgroundColor: theme.border }]} />}
       <Image
         source={`https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/${playerId}/headshot/67/current`}
         style={[styles.headshot, { backgroundColor: theme.backgroundElement }]}
@@ -450,7 +526,8 @@ function ExternalLink({ label, url }: { label: string; url: string }) {
 const ROW = 30;
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center' },
+  backdrop: { flex: 1, alignItems: 'center' },
+  dim: { backgroundColor: 'rgba(0,0,0,0.5)' },
   backdropWide: { justifyContent: 'center', padding: Spacing.four },
   backdropCompact: { justifyContent: 'flex-end' },
   panel: { width: '100%', overflow: 'hidden' },
@@ -463,6 +540,9 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  // Web: keep the browser from scrolling or selecting text while the header is dragged.
+  dragHandle: Platform.select({ web: { touchAction: 'none', userSelect: 'none', cursor: 'grab' } as object, default: {} }),
+  grabber: { position: 'absolute', top: 6, alignSelf: 'center', left: '50%', marginLeft: -18, width: 36, height: 5, borderRadius: 3 },
   headshot: { width: 64, height: 64, borderRadius: 32 },
   headerText: { flex: 1, gap: Spacing.half },
   name: { fontSize: 20, lineHeight: 26, fontWeight: 700 },
