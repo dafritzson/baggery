@@ -449,7 +449,7 @@ function PickCard({
       accessibilityRole="button"
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
-      style={[styles.pickCard, { backgroundColor: hovered && playerId !== null ? theme.tintHover : theme.tint, boxShadow: theme.bevel }]}>
+      style={[styles.pickCard, { backgroundColor: hovered && playerId !== null ? theme.tintHover : theme.tint, boxShadow: theme.raised }]}>
       <View style={styles.pickCardTop}>
         <ThemedText type="smallBold" numberOfLines={1} style={styles.pickPlayer}>
           {playerId !== null ? playerName(data, playerId) : 'Yielded'}
