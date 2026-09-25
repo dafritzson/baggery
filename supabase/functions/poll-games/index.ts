@@ -86,11 +86,12 @@ async function poll(year: number, all: boolean) {
     await sql`
       insert into mlb_games ${sql(
         rows,
-        'game_pk', 'season_year', 'game_type', 'start_time', 'status', 'detailed_state', 'home_team_id', 'away_team_id',
+        'game_pk', 'season_year', 'game_type', 'start_time', 'start_time_tbd', 'official_date', 'status', 'detailed_state', 'home_team_id', 'away_team_id',
         'home_score', 'away_score', 'series_game_number', 'games_in_series', 'final_seen_at',
       )}
       on conflict (game_pk) do update set
-        game_type = excluded.game_type, start_time = excluded.start_time, status = excluded.status,
+        game_type = excluded.game_type, start_time = excluded.start_time, start_time_tbd = excluded.start_time_tbd,
+        official_date = excluded.official_date, status = excluded.status,
         detailed_state = excluded.detailed_state, home_team_id = excluded.home_team_id,
         away_team_id = excluded.away_team_id, home_score = excluded.home_score, away_score = excluded.away_score,
         series_game_number = excluded.series_game_number, games_in_series = excluded.games_in_series,

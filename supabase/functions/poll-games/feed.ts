@@ -11,6 +11,10 @@ export interface GameRow {
   season_year: number;
   game_type: GameType;
   start_time: string;
+  /** No start time set yet; start_time is MLB's 3:33 AM ET placeholder. */
+  start_time_tbd: boolean;
+  /** The game's date (YYYY-MM-DD) as MLB lists it, whatever the start time. */
+  official_date: string | null;
   /** MLB abstractGameState: Preview | Live | Final. */
   status: string;
   detailed_state: string | null;
@@ -58,6 +62,8 @@ export function scheduleGames(data: any, year: number, knownTeamIds: Set<number>
       season_year: year,
       game_type: g.gameType,
       start_time: g.gameDate,
+      start_time_tbd: g.status?.startTimeTBD === true,
+      official_date: g.officialDate ?? null,
       status: g.status?.abstractGameState ?? 'Preview',
       detailed_state: g.status?.detailedState ?? null,
       home_team_id: home.team.id,
