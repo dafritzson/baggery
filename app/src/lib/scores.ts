@@ -123,7 +123,8 @@ function listenForScores(listener: (changes: ScoreChanges) => void): () => void 
   if (!scoreChannel) {
     let subscribed = false;
     scoreChannel = supabase
-      .channel('scores')
+      // Private: only signed-in users may listen (a policy on realtime.messages).
+      .channel('scores', { config: { private: true } })
       .on('broadcast', { event: 'changes' }, ({ payload }) => {
         for (const l of scoreListeners) l(payload as ScoreChanges);
       })

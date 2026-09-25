@@ -267,7 +267,7 @@ describe('live stats poller', () => {
   it("broadcasts a poll's changes to open apps in one message", async () => {
     const kyle = clients.get('Kyle')!;
     const received: { games?: { game_pk: number; detailed_state: string }[]; reload?: boolean }[] = [];
-    const channel = kyle.channel('scores').on('broadcast', { event: 'changes' }, ({ payload }) => received.push(payload));
+    const channel = kyle.channel('scores', { config: { private: true } }).on('broadcast', { event: 'changes' }, ({ payload }) => received.push(payload));
     await new Promise<void>((resolve) => channel.subscribe((s) => s === 'SUBSCRIBED' && resolve()));
 
     // Knock one game's row out of date, then reload: the poll puts it back and broadcasts that.
@@ -280,6 +280,13 @@ describe('live stats poller', () => {
     }
     kyle.removeChannel(channel);
     const message = received.find((m) => m.games?.some((g) => g.game_pk === game!.game_pk));
+    if (!message) {
+      // What the database sent, and any send error it logged, to make a failure explain itself.
+      const db = 'supabase_db_baggery';
+      const sent = execSync(`docker exec ${db} psql -U postgres -tAc "select topic, event, private, left(payload::text, 120) from realtime.messages order by inserted_at desc limit 5"`, { encoding: 'utf8' });
+      const logs = execSync(`docker logs ${db} 2>&1 | grep -i 'scores broadcast' | tail -3 || true`, { encoding: 'utf8' });
+      console.log({ received, sent, logs });
+    }
     expect(message?.games?.find((g) => g.game_pk === game!.game_pk)?.detailed_state).toBe('Final');
   });
 

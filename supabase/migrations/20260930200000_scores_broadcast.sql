@@ -3,10 +3,14 @@
 -- messages a second, and a busy day of live games with a dozen apps open would pass that.
 --
 -- Triggers collect changed game and batting-line rows in an outbox; poll-games calls
--- private.flush_score_changes() after each poll, which sends them in one message on the public
--- "scores" topic (event "changes"). The data is public MLB stats.
+-- private.flush_score_changes() after each poll, which sends them in one message on the private
+-- "scores" topic (event "changes"). Signed-in users may listen (policy below).
 
 alter publication supabase_realtime drop table public.mlb_games, public.player_game_stats;
+
+create policy "signed-in users can receive score broadcasts" on realtime.messages
+  for select to authenticated
+  using (realtime.topic() = 'scores' and extension = 'broadcast');
 
 create table private.score_changes (
   id bigserial primary key,
@@ -70,7 +74,7 @@ begin
   end if;
 
   begin
-    perform realtime.send(payload, 'changes', 'scores', false);
+    perform realtime.send(payload, 'changes', 'scores', true);
   exception when others then
     raise warning 'scores broadcast failed: %', sqlerrm;
   end;
