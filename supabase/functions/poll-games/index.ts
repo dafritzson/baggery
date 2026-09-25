@@ -47,7 +47,7 @@ async function knownTeamIds(year: number): Promise<Set<number>> {
 async function saveGame(gamePk: number): Promise<number> {
   const [boxscore, linescore] = await Promise.all([mlb(`/game/${gamePk}/boxscore`), mlb(`/game/${gamePk}/linescore`)]);
   // The live state and the score (the schedule, which also has it, is only read once a minute
-  // during games), in one update so open apps get one realtime message per change, not two.
+  // during games), in one update.
   const live = linescoreLive(linescore);
   const runs = linescoreRuns(linescore);
   if (live || runs) {
@@ -109,11 +109,16 @@ async function poll(year: number, all: boolean) {
                    and (b.read_at is null or b.read_at < now() - interval '10 minutes')))`;
 
   let batted = 0;
-  // A few at a time, to be gentle with the MLB API.
-  const pending = due.map((r) => r.game_pk as number);
-  while (pending.length) {
-    const counts = await Promise.all(pending.splice(0, 4).map(saveGame));
-    batted += counts.reduce((a, b) => a + b, 0);
+  try {
+    // A few at a time, to be gentle with the MLB API.
+    const pending = due.map((r) => r.game_pk as number);
+    while (pending.length) {
+      const counts = await Promise.all(pending.splice(0, 4).map(saveGame));
+      batted += counts.reduce((a, b) => a + b, 0);
+    }
+  } finally {
+    // Everything this poll changed, to open apps in one realtime message.
+    await sql`select private.flush_score_changes()`;
   }
   return { year, games, boxscores: due.length, battingLines: batted };
 }
