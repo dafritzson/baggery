@@ -67,7 +67,15 @@ export default function HomeScreen() {
       onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}>
       {view && <Ballpark view={view} night={night} />}
       {ready && view && game > 0 && (
-        <BagGame key={game} view={view} before={before} onFinish={finish} onReplay={newGame} />
+        <BagGame
+          key={game}
+          view={view}
+          scores={scores}
+          before={before}
+          night={night}
+          onFinish={finish}
+          onReplay={newGame}
+        />
       )}
       {ready && view && game === 0 && reduceMotion && (
         <View style={[styles.start, { height: view.horizon }]}>
