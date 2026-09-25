@@ -201,7 +201,12 @@ describe('draft 1', () => {
     for (const teamId of teamIdByManager.values()) {
       expect(spells!.filter((s) => s.fantasy_team_id === teamId)).toHaveLength(4);
     }
-    const { count: autoPicks } = await admin.from('draft_actions').select('*', { count: 'exact', head: true }).eq('is_auto', true);
+    // All of Mookie's picks were made for them (the test above adds an auto pick of its own).
+    const { count: autoPicks } = await admin
+      .from('draft_actions')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_auto', true)
+      .eq('fantasy_team_id', teamIdByManager.get('Mookie')!);
     expect(autoPicks).toBe(4);
   });
 });
