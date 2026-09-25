@@ -147,3 +147,42 @@
   padding-left: 16px;
   color: var(--menu-text-secondary);
 }
+
+/*
+ * Live games on the Games tab: a rainbow ring that spins around the card, with a soft glow of
+ * the same colors. The card sets data-live-glow on a wrapper View (react-native-web dataSet).
+ * Browsers without @property show a still ring.
+ */
+@property --live-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+[data-live-glow] {
+  position: relative;
+  isolation: isolate;
+  border-radius: 8px;
+  padding: 2px;
+  background: conic-gradient(from var(--live-angle), #ff4d6d, #ffb703, #4ade80, #22d3ee, #6366f1, #d946ef, #ff4d6d);
+  animation: live-spin 4s linear infinite;
+}
+[data-live-glow]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  filter: blur(12px);
+  opacity: 0.45;
+  z-index: -1;
+}
+@keyframes live-spin {
+  to {
+    --live-angle: 360deg;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-live-glow] {
+    animation: none;
+  }
+}

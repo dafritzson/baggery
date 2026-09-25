@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import type { LiveState } from '@core/live.ts';
@@ -266,6 +266,16 @@ function FinalCard({ data, scores, game }: { data: SeasonData; scores: Scores; g
   );
 }
 
+/**
+ * A live game gets a spinning rainbow ring (global.css) so it stands out from the rest. Web only
+ * for now; an iOS app would draw it natively.
+ */
+function LiveGlow({ live, children }: { live: boolean; children: ReactNode }) {
+  if (!live) return children;
+  // dataSet isn't in React Native's types; react-native-web turns it into data-* attributes.
+  return <View {...({ dataSet: { liveGlow: '' } } as object)}>{children}</View>;
+}
+
 /** A game that's on or still to come: who's up, the score, and the baggers so far. */
 function OpenCard({ data, scores, game }: { data: SeasonData; scores: Scores; game: GameInfo }) {
   const theme = useTheme();
@@ -326,31 +336,32 @@ function OpenCard({ data, scores, game }: { data: SeasonData; scores: Scores; ga
   };
 
   return (
-    // A live game stands out from the finished ones: a red border (the color of the live dot) and a faint red tint.
-    <Card style={live && [styles.liveCard, { borderColor: theme.danger, backgroundColor: theme.highlight }]}>
-      <View style={styles.cardHead}>
-        <ThemedText type="small" themeColor="textSecondary">{seriesLabel(game)}</ThemedText>
-        {live && game.live ? (
-          <LiveStatus live={game.live} />
-        ) : (
-          <ThemedText type="smallBold" style={{ color: live ? theme.danger : theme.textSecondary }}>
-            {live ? '● ' : ''}
-            {statusLine(game)}
-          </ThemedText>
-        )}
-      </View>
-      <View style={styles.teams}>
-        <View style={styles.upCards}>
-          {upNext('away')}
-          {upNext('home')}
+    <LiveGlow live={live}>
+      <Card>
+        <View style={styles.cardHead}>
+          <ThemedText type="small" themeColor="textSecondary">{seriesLabel(game)}</ThemedText>
+          {live && game.live ? (
+            <LiveStatus live={game.live} />
+          ) : (
+            <ThemedText type="smallBold" style={{ color: live ? theme.danger : theme.textSecondary }}>
+              {live ? '● ' : ''}
+              {statusLine(game)}
+            </ThemedText>
+          )}
         </View>
-        <View style={styles.scores}>
-          {side('away')}
-          {side('home')}
+        <View style={styles.teams}>
+          <View style={styles.upCards}>
+            {upNext('away')}
+            {upNext('home')}
+          </View>
+          <View style={styles.scores}>
+            {side('away')}
+            {side('home')}
+          </View>
         </View>
-      </View>
-      <Baggers data={data} scores={scores} game={game} />
-    </Card>
+        <Baggers data={data} scores={scores} game={game} />
+      </Card>
+    </LiveGlow>
   );
 }
 
@@ -415,7 +426,6 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
   gridWide: { flexDirection: 'row', gap: Spacing.three, alignItems: 'flex-start' },
   column: { flex: 1, minWidth: 0, gap: Spacing.three },
-  liveCard: { borderWidth: 1.5 },
   finalScores: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   finalSide: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.two },
   finalAbbr: { fontSize: 17, lineHeight: 24, fontWeight: 600 },
