@@ -6,7 +6,7 @@ import { Button } from '@/components/button';
 import { GoogleSignInButton } from '@/components/google-sign-in-button';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { signInWithGoogleRedirect } from '@/lib/auth';
 import { appEnv, supabase } from '@/lib/supabase';
@@ -39,7 +39,7 @@ export default function SignInScreen() {
 const styles = StyleSheet.create({
   hero: { paddingTop: Spacing.six, paddingBottom: Spacing.four, gap: Spacing.two },
   dev: { gap: Spacing.two, marginTop: Spacing.four },
-  input: { minHeight: 44, borderWidth: 1, borderRadius: Spacing.two, paddingHorizontal: Spacing.three, fontSize: 16 },
+  input: { minHeight: 44, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: 16 },
 });
 
 /** Local development only: sign in as a seeded test manager (e.g. kyle@example.com). */
@@ -54,7 +54,7 @@ function DevSignIn() {
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
-        style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+        style={[styles.input, { color: theme.text, borderColor: theme.border, boxShadow: theme.sunken }]}
       />
       <Button
         label="Sign in as test user"

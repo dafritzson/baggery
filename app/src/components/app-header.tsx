@@ -9,7 +9,7 @@ import * as DropdownMenu from 'zeego/dropdown-menu';
 import { HeaderTabs } from '@/components/section-nav';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing, WideContentWidth } from '@/constants/theme';
+import { MaxContentWidth, Radius, Spacing, WideContentWidth } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
@@ -114,7 +114,7 @@ function YearPicker() {
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger className="menu-trigger menu-trigger-chip" aria-label={`Season ${year}, change season`}>
-        <View style={[styles.year, { backgroundColor: theme.backgroundElement }]}>
+        <View style={[styles.year, { backgroundColor: theme.backgroundElement, boxShadow: theme.raised }]}>
           <ThemedText type="smallBold" themeColor="textSecondary">{year} ▾</ThemedText>
         </View>
       </DropdownMenu.Trigger>
@@ -245,9 +245,9 @@ const styles = StyleSheet.create({
     minHeight: 52,
   },
   home: { marginLeft: -Spacing.one, padding: Spacing.one },
-  year: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Spacing.two },
-  badge: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Spacing.one },
+  year: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Radius.md },
+  badge: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Radius.sm },
   badgeText: { fontSize: 12, lineHeight: 16 },
-  toggle: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  toggle: { width: 32, height: 32, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
   avatar: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
 });

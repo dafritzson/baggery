@@ -7,7 +7,7 @@ import { PlayersList, availablePlayers } from '@/components/players-list';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing, WideContentWidth } from '@/constants/theme';
+import { Radius, Spacing, WideContentWidth } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { usePlayerColumns } from '@/lib/player-columns';
@@ -53,7 +53,7 @@ function ResearchWide({ data }: { data: SeasonData }) {
         <View style={[styles.list, { width: tableWidth ?? NAME_WIDTH + statsWidthFor(columns) + SCROLLBAR }]}>
           <PlayersList data={data} onSelect={setPicked} selectedId={selectedId} fill onTableWidth={setTableWidth} />
         </View>
-        <ThemedView style={[styles.panel, { borderColor: theme.border }]}>
+        <ThemedView style={[styles.panel, { borderColor: theme.border, boxShadow: theme.floating }]}>
           {selectedId !== null ? (
             <PlayerDetails key={selectedId} playerId={selectedId} />
           ) : (
@@ -77,6 +77,6 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
   },
   list: { flexShrink: 1 },
-  panel: { flex: 1, minWidth: 420, borderWidth: StyleSheet.hairlineWidth, borderRadius: Spacing.three, overflow: 'hidden' },
+  panel: { flex: 1, minWidth: 420, borderWidth: StyleSheet.hairlineWidth, borderRadius: Radius.lg, overflow: 'hidden' },
   empty: { padding: Spacing.three },
 });

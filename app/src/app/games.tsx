@@ -8,7 +8,7 @@ import { Card } from '@/components/card';
 import { PlayerName } from '@/components/player-name';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { type GameInfo, type Scores, useScores } from '@/lib/scores';
@@ -81,7 +81,10 @@ function DayChips({ days, day, today, onChange }: { days: string[]; day?: string
             onPress={() => onChange(d)}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
-            style={[styles.chip, { backgroundColor: active ? theme.accent : theme.backgroundElement }]}>
+            style={({ pressed }) => [
+              styles.chip,
+              { backgroundColor: active ? theme.accent : theme.backgroundElement, boxShadow: pressed ? theme.sunken : theme.raised },
+            ]}>
             <ThemedText type="smallBold" style={{ color: active ? theme.accentText : theme.text }}>{dayLabel(d, today)}</ThemedText>
           </Pressable>
         );
@@ -325,7 +328,7 @@ function GameCard({ data, scores, game, style }: { data: SeasonData; scores: Sco
 const styles = StyleSheet.create({
   chipRow: { flexGrow: 0 },
   chips: { gap: Spacing.one },
-  chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Spacing.four },
+  chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
   grid: { gap: Spacing.three },
   gridWide: { flexDirection: 'row', flexWrap: 'wrap' },
   cardWide: { width: '48.5%' },
@@ -333,7 +336,7 @@ const styles = StyleSheet.create({
   // Who's up (two small cards) on the left, the scores on the right.
   teams: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   upCards: { flex: 1, minWidth: 0, flexDirection: 'row', gap: Spacing.one + 2 },
-  upCard: { flex: 1, minWidth: 0, borderRadius: Spacing.two, paddingVertical: Spacing.one, paddingHorizontal: Spacing.one + 2 },
+  upCard: { flex: 1, minWidth: 0, borderRadius: Radius.md, paddingVertical: Spacing.one, paddingHorizontal: Spacing.one + 2 },
   upHead: { fontSize: 9, lineHeight: 12, textTransform: 'uppercase', letterSpacing: 0.4 },
   upRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   upLabel: { width: 14, fontSize: 9, lineHeight: 14 },
@@ -367,7 +370,7 @@ const styles = StyleSheet.create({
     width: '49%',
     paddingVertical: Spacing.one + 2,
     paddingHorizontal: Spacing.two,
-    borderRadius: Spacing.two + 2,
+    borderRadius: Radius.md,
   },
   playerSecondLine: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, minHeight: 18 },
   playerName: { fontSize: 13, lineHeight: 17 },

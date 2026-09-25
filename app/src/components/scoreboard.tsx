@@ -14,7 +14,7 @@ import { PlayerName } from '@/components/player-name';
 import { type GridRow, ScoreGrid } from '@/components/score-grid';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { type Scores, coreSpells } from '@/lib/scores';
@@ -40,7 +40,10 @@ export function RoundChips({ round, onChange }: { round: FantasyRound; onChange:
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
             onPress={() => onChange(r.round)}
-            style={[styles.chip, { backgroundColor: active ? theme.accent : theme.backgroundElement }]}>
+            style={({ pressed }) => [
+              styles.chip,
+              { backgroundColor: active ? theme.accent : theme.backgroundElement, boxShadow: pressed ? theme.sunken : theme.raised },
+            ]}>
             <ThemedText type="smallBold" style={{ color: active ? theme.accentText : theme.text }}>{r.label}</ThemedText>
           </Pressable>
         );
@@ -217,7 +220,7 @@ function SeriesTable({ data, block }: { data: SeasonData; block: SeriesBlock }) 
 
 const styles = StyleSheet.create({
   chips: { flexDirection: 'row', gap: Spacing.one, flexWrap: 'wrap' },
-  chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Spacing.four },
+  chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
   section: { gap: Spacing.three },
   sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: Spacing.two, flexWrap: 'wrap' },
   sectionTitle: { textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 12 },
@@ -226,7 +229,7 @@ const styles = StyleSheet.create({
   owner: { fontSize: 12, lineHeight: 14 },
   teamTitle: { fontSize: 24, lineHeight: 30 },
   totals: { flexDirection: 'row', gap: Spacing.two },
-  totalBox: { flex: 1, padding: Spacing.two, borderRadius: Spacing.two, alignItems: 'center', gap: Spacing.half },
+  totalBox: { flex: 1, padding: Spacing.two, borderRadius: Radius.md, alignItems: 'center', gap: Spacing.half },
   totalNumber: { fontSize: 28, lineHeight: 34, fontWeight: 700, fontVariant: ['tabular-nums'] },
   block: { gap: Spacing.two },
 });

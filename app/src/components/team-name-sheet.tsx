@@ -4,7 +4,7 @@ import { StyleSheet, TextInput, View } from 'react-native';
 import { Button } from '@/components/button';
 import { Sheet } from '@/components/sheet';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
@@ -49,7 +49,7 @@ export function TeamNameField({
           autoFocus={autoFocus}
           accessibilityLabel="Team name"
           onSubmitEditing={save}
-          style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border }]}
+          style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border, boxShadow: theme.sunken }]}
         />
         <Button label="🎲" variant="secondary" onPress={() => setName(suggest())} />
       </View>
@@ -84,5 +84,5 @@ export function TeamNameSheet({
 const styles = StyleSheet.create({
   field: { gap: Spacing.two },
   row: { flexDirection: 'row', gap: Spacing.two, alignItems: 'center' },
-  input: { flex: 1, minHeight: 48, borderWidth: 1, borderRadius: Spacing.two, paddingHorizontal: Spacing.three, fontSize: 16 },
+  input: { flex: 1, minHeight: 48, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: 16 },
 });

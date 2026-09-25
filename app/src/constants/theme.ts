@@ -26,6 +26,15 @@ export const Colors = {
     tintStrong: '#D2DDF3',
     /** Raised-tile look for tinted cards: a light top edge and a shaded bottom edge. */
     bevel: 'inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -2px 0 rgba(11, 61, 145, 0.10)',
+    /**
+     * 3D surfaces: raised (cards, tables, chips, buttons) casts a soft shadow with a lit top edge
+     * and a shaded bottom edge; sunken (inputs, toggle tracks, pressed buttons) is pushed in;
+     * floating (popups, side panels) sits higher.
+     */
+    raised:
+      '0 1px 2px rgba(16, 24, 40, 0.14), 0 2px 6px rgba(16, 24, 40, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(16, 24, 40, 0.08)',
+    sunken: 'inset 0 1px 3px rgba(16, 24, 40, 0.16), inset 0 -1px 0 rgba(255, 255, 255, 0.7)',
+    floating: '0 12px 32px rgba(16, 24, 40, 0.18), 0 2px 6px rgba(16, 24, 40, 0.08)',
     /** Standings totals, like the old scoring sheet: safe (blue), tied at the cut (lavender), out (red). */
     standingSafe: '#D3E2F4',
     standingTied: '#DCD5EC',
@@ -49,6 +58,11 @@ export const Colors = {
     tintHover: '#1D2A49',
     tintStrong: '#223257',
     bevel: 'inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -2px 0 rgba(0, 0, 0, 0.45)',
+    raised:
+      // On a black page a drop shadow barely shows, so the lit top edge does more of the work.
+      '0 1px 2px rgba(0, 0, 0, 0.7), 0 3px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 -1px 0 rgba(0, 0, 0, 0.5)',
+    sunken: 'inset 0 1px 3px rgba(0, 0, 0, 0.7), inset 0 -1px 0 rgba(255, 255, 255, 0.05)',
+    floating: '0 12px 32px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4)',
     standingSafe: '#1C3050',
     standingTied: '#30284A',
     standingOut: '#4A2228',
@@ -91,6 +105,19 @@ export const Spacing = {
   four: 24,
   five: 32,
   six: 64,
+} as const;
+
+/**
+ * Corner radii: squared-off, with just enough rounding to soften edges. Circles (avatars, dots)
+ * stay circles and don't use these.
+ */
+export const Radius = {
+  /** Tags, small buttons, cells. */
+  sm: 3,
+  /** Chips, inputs, segments, buttons. */
+  md: 4,
+  /** Cards, tables, panels, sheets. */
+  lg: 6,
 } as const;
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
