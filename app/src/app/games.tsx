@@ -89,6 +89,13 @@ function DayChips({ days, day, today, onChange }: { days: string[]; day?: string
   );
 }
 
+const BAGS = ['👜', '💼', '🎒', '🛍️', '👝', '💰', '🧳'];
+
+/** One bag emoji per total base, a mix of bags that stays the same for the same player and game. */
+function bagEmojis(tb: number, playerId: number, gamePk: number): string {
+  return Array.from({ length: tb }, (_, i) => BAGS[(playerId * 31 + gamePk * 17 + i * 3) % BAGS.length]).join('');
+}
+
 /** "Wild Card · Game 2", or "Division Series · Game 3". */
 function seriesLabel(game: GameInfo): string {
   const series = SERIES.find((s) => s.gameType === game.gameType);
@@ -167,7 +174,12 @@ function GameCard({ data, scores, game, style }: { data: SeasonData; scores: Sco
                 <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.owner}>
                   {mine ? 'You' : teamName(p.team)}
                 </ThemedText>
-                <ThemedText type="smallBold" style={styles.tb}>{p.tb === null ? '' : `${p.tb} TB`}</ThemedText>
+                <ThemedText
+                  type="small"
+                  style={styles.tb}
+                  accessibilityLabel={p.tb === null ? undefined : `${p.tb} total bases`}>
+                  {p.tb === null ? '' : p.tb === 0 ? '–' : bagEmojis(p.tb, p.id, game.gamePk)}
+                </ThemedText>
               </View>
             );
           })}
@@ -193,5 +205,6 @@ const styles = StyleSheet.create({
   players: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: Spacing.two, gap: Spacing.one },
   playerRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   owner: { flex: 1, textAlign: 'right' },
-  tb: { width: 44, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  // Room for a few bags per line; a big game wraps.
+  tb: { maxWidth: 120, flexShrink: 0, textAlign: 'right' },
 });
