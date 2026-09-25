@@ -30,6 +30,8 @@ export const Colors = {
     standingSafe: '#D3E2F4',
     standingTied: '#DCD5EC',
     standingOut: '#F3D0D0',
+    /** Your own players in lists: a mid blue that stands out without shouting. */
+    mine: '#B7CCF0',
   },
   dark: {
     text: '#ffffff',
@@ -50,6 +52,7 @@ export const Colors = {
     standingSafe: '#1C3050',
     standingTied: '#30284A',
     standingOut: '#4A2228',
+    mine: '#2A4574',
   },
 } as const;
 

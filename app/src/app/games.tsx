@@ -107,7 +107,7 @@ function bagEmojis(tb: number, playerId: number, gamePk: number): string {
 /** Room for about eight bags; a bigger game scrolls sideways instead of crowding the card. */
 const BAGS_MAX_WIDTH = 176;
 
-function Bags({ tb, playerId, gamePk, color }: { tb: number | null; playerId: number; gamePk: number; color?: string }) {
+function Bags({ tb, playerId, gamePk }: { tb: number | null; playerId: number; gamePk: number }) {
   const [width, setWidth] = useState<number | null>(null);
   if (tb === null) return null;
   return (
@@ -116,7 +116,7 @@ function Bags({ tb, playerId, gamePk, color }: { tb: number | null; playerId: nu
       showsHorizontalScrollIndicator
       onContentSizeChange={(w) => setWidth(w)}
       style={[styles.bags, width !== null && { width: Math.min(width, BAGS_MAX_WIDTH) }]}>
-      <ThemedText type="small" numberOfLines={1} style={color ? { color } : undefined} accessibilityLabel={`${tb} total bases`}>
+      <ThemedText type="small" numberOfLines={1} accessibilityLabel={`${tb} total bases`}>
         {tb === 0 ? '–' : bagEmojis(tb, playerId, gamePk)}
       </ThemedText>
     </ScrollView>
@@ -198,26 +198,25 @@ function GameCard({ data, scores, game, style }: { data: SeasonData; scores: Sco
                 key={p.id}
                 style={[
                   styles.playerCard,
-                  // Your players stand out: filled with the accent color.
-                  { backgroundColor: mine ? theme.accent : theme.background },
+                  { backgroundColor: mine ? theme.mine : theme.background },
                 ]}>
                 <View style={styles.playerText}>
                   <PlayerName
                     playerId={p.id}
                     type="smallBold"
                     numberOfLines={1}
-                    style={[styles.playerName, mine && { color: theme.accentText }]}>
+                    style={styles.playerName}>
                     {data.players.get(p.id)?.full_name ?? `Player ${p.id}`}
                   </PlayerName>
                   <ThemedText
                     type="small"
                     themeColor="textSecondary"
                     numberOfLines={1}
-                    style={[styles.owner, mine && { color: theme.accentText, opacity: 0.85 }]}>
+                    style={styles.owner}>
                     {mine ? 'You' : teamName(p.team)}
                   </ThemedText>
                 </View>
-                <Bags tb={p.tb} playerId={p.id} gamePk={game.gamePk} color={mine ? theme.accentText : undefined} />
+                <Bags tb={p.tb} playerId={p.id} gamePk={game.gamePk} />
               </View>
             );
           })}
