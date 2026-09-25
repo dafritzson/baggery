@@ -17,7 +17,7 @@ import {
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { shortDate } from '@/lib/format';
 
@@ -305,7 +305,7 @@ function StatMenu({ value, onChange }: { value: ChartStat; onChange: (s: ChartSt
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger className="menu-trigger menu-trigger-chip" aria-label={`Stat: ${current.name}, change stat`}>
-        <View style={[styles.menuChip, { backgroundColor: theme.backgroundElement }]}>
+        <View style={[styles.menuChip, { backgroundColor: theme.backgroundElement, boxShadow: theme.raised }]}>
           <ThemedText type="smallBold" style={styles.toggleText}>{current.label} ▾</ThemedText>
         </View>
       </DropdownMenu.Trigger>
@@ -340,14 +340,14 @@ function Toggle<T>({
 }) {
   const theme = useTheme();
   return (
-    <ThemedView type="backgroundElement" style={styles.toggle}>
+    <ThemedView type="backgroundElement" elevation="sunken" style={styles.toggle}>
       {options.map((o) => (
         <Pressable
           key={o.label}
           onPress={() => onChange(o.value)}
           accessibilityRole="button"
           accessibilityState={{ selected: value === o.value }}
-          style={[styles.toggleItem, value === o.value && { backgroundColor: theme.background }]}>
+          style={[styles.toggleItem, value === o.value && { backgroundColor: theme.segment, boxShadow: theme.raised }]}>
           <ThemedText type="smallBold" themeColor={value === o.value ? 'text' : 'textSecondary'} style={styles.toggleText}>
             {o.label}
           </ThemedText>
@@ -400,12 +400,12 @@ const styles = StyleSheet.create({
   wrap: { gap: Spacing.two },
   controls: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two },
   controlGroup: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  menuChip: { paddingHorizontal: Spacing.two, paddingVertical: 4, borderRadius: Spacing.two },
-  toggle: { flexDirection: 'row', borderRadius: Spacing.two, padding: 2 },
-  toggleItem: { paddingHorizontal: Spacing.two, paddingVertical: 2, borderRadius: Spacing.one + 2 },
+  menuChip: { paddingHorizontal: Spacing.two, paddingVertical: 4, borderRadius: Radius.md },
+  toggle: { flexDirection: 'row', borderRadius: Radius.md, padding: 2 },
+  toggleItem: { paddingHorizontal: Spacing.two, paddingVertical: 2, borderRadius: Radius.sm },
   toggleText: { fontSize: 13 },
   readout: { fontSize: 13, lineHeight: 18 },
-  plot: { height: HEIGHT, borderRadius: Spacing.two, overflow: 'hidden' },
+  plot: { height: HEIGHT, borderRadius: Radius.md, overflow: 'hidden' },
   targets: { position: 'absolute', flexDirection: 'row' },
   target: { flex: 1 },
   note: { fontSize: 12, lineHeight: 16 },

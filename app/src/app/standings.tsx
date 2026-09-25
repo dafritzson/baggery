@@ -8,7 +8,7 @@ import { Columns } from '@/components/columns';
 import { RoundChips, StandingsTable, TeamScoreboard } from '@/components/scoreboard';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { useScores } from '@/lib/scores';
@@ -63,7 +63,7 @@ export default function StandingsScreen() {
   }
   return (
     <Screen width="wide">
-      <View style={[styles.toggle, { backgroundColor: theme.backgroundElement }]} accessibilityRole="tablist">
+      <View style={[styles.toggle, { backgroundColor: theme.backgroundElement, boxShadow: theme.sunken }]} accessibilityRole="tablist">
         {(['standings', 'team'] as const).map((v) => {
           const active = view === v;
           return (
@@ -72,7 +72,7 @@ export default function StandingsScreen() {
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
               onPress={() => setView(v)}
-              style={[styles.toggleItem, active && { backgroundColor: theme.background }]}>
+              style={[styles.toggleItem, active && { backgroundColor: theme.segment, boxShadow: theme.raised }]}>
               <ThemedText type="smallBold" numberOfLines={1} themeColor={active ? 'text' : 'textSecondary'}>
                 {v === 'standings' ? 'Standings' : team ? (team.id === data.myTeam?.id ? 'My team' : teamName(team)) : 'Team'}
               </ThemedText>
@@ -87,6 +87,6 @@ export default function StandingsScreen() {
 
 const styles = StyleSheet.create({
   stack: { gap: Spacing.three },
-  toggle: { flexDirection: 'row', borderRadius: Spacing.three, padding: 3 },
-  toggleItem: { flex: 1, alignItems: 'center', paddingVertical: Spacing.two, borderRadius: Spacing.three - 2 },
+  toggle: { flexDirection: 'row', borderRadius: Radius.lg, padding: 3 },
+  toggleItem: { flex: 1, alignItems: 'center', paddingVertical: Spacing.two, borderRadius: Radius.lg },
 });

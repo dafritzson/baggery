@@ -1,7 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 type Variant = 'primary' | 'secondary' | 'danger';
@@ -34,7 +34,11 @@ export function Button({
       style={({ pressed }) => [
         styles.button,
         compact && styles.compact,
-        { backgroundColor: background, opacity: inactive ? 0.5 : pressed ? 0.8 : 1 },
+        {
+          backgroundColor: background,
+          opacity: inactive ? 0.5 : 1,
+          boxShadow: pressed && !inactive ? theme.sunken : theme.raised,
+        },
       ]}>
       {loading ? (
         <ActivityIndicator color={color} />
@@ -51,10 +55,10 @@ const styles = StyleSheet.create({
   button: {
     minHeight: 48,
     paddingHorizontal: Spacing.four,
-    borderRadius: Spacing.three,
+    borderRadius: Radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  compact: { minHeight: 36, paddingHorizontal: Spacing.three, borderRadius: Spacing.two },
+  compact: { minHeight: 36, paddingHorizontal: Spacing.three, borderRadius: Radius.md },
   label: { fontWeight: 700 },
 });

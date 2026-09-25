@@ -15,7 +15,7 @@ import { Screen } from '@/components/screen';
 import { Sheet } from '@/components/sheet';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { formatLockTime, mlbTeamAbbr, playerLine, playerName } from '@/lib/format';
@@ -273,12 +273,12 @@ function Segmented({ value, onChange }: { value: Tab; onChange: (t: Tab) => void
     ['rosters', 'Rosters'],
   ];
   return (
-    <ThemedView type="backgroundElement" style={styles.segmented}>
+    <ThemedView type="backgroundElement" elevation="sunken" style={styles.segmented}>
       {tabs.map(([key, label]) => (
         <Pressable
           key={key}
           onPress={() => onChange(key)}
-          style={[styles.segment, value === key && { backgroundColor: theme.background }]}>
+          style={[styles.segment, value === key && { backgroundColor: theme.segment, boxShadow: theme.raised }]}>
           <ThemedText type="smallBold" themeColor={value === key ? 'text' : 'textSecondary'}>{label}</ThemedText>
         </Pressable>
       ))}
@@ -449,7 +449,7 @@ function PickCard({
       accessibilityRole="button"
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
-      style={[styles.pickCard, { backgroundColor: hovered && playerId !== null ? theme.tintHover : theme.tint, boxShadow: theme.bevel }]}>
+      style={[styles.pickCard, { backgroundColor: hovered && playerId !== null ? theme.tintHover : theme.tint, boxShadow: theme.raised }]}>
       <View style={styles.pickCardTop}>
         <ThemedText type="smallBold" numberOfLines={1} style={styles.pickPlayer}>
           {playerId !== null ? playerName(data, playerId) : 'Yielded'}
@@ -751,7 +751,7 @@ function DraftMenu({
 }
 
 const styles = StyleSheet.create({
-  clock: { padding: Spacing.three, borderRadius: Spacing.three, gap: Spacing.one },
+  clock: { padding: Spacing.three, borderRadius: Radius.lg, gap: Spacing.one },
   clockHeadline: { fontSize: 24, lineHeight: 30 },
   clockBar: {
     flexDirection: 'row',
@@ -759,21 +759,21 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.three,
+    borderRadius: Radius.lg,
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  moreButton: { width: 36, height: 32, borderRadius: Spacing.two, alignItems: 'center', justifyContent: 'center' },
+  moreButton: { width: 36, height: 32, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 40 },
-  segmented: { flexDirection: 'row', padding: Spacing.half, borderRadius: Spacing.three },
-  segment: { flex: 1, alignItems: 'center', paddingVertical: Spacing.two, borderRadius: Spacing.two + 2 },
+  segmented: { flexDirection: 'row', padding: Spacing.half, borderRadius: Radius.lg },
+  segment: { flex: 1, alignItems: 'center', paddingVertical: Spacing.two, borderRadius: Radius.md },
   boardRow: { flexDirection: 'row', gap: Spacing.one, marginBottom: Spacing.one },
   boardCell: { width: 108, paddingHorizontal: Spacing.one },
-  boardPick: { minHeight: 64, borderRadius: Spacing.two, padding: Spacing.two, borderWidth: 2, borderColor: 'transparent' },
-  dropRow: { borderWidth: 2, borderRadius: Spacing.two, padding: Spacing.two },
+  boardPick: { minHeight: 64, borderRadius: Radius.md, padding: Spacing.two, borderWidth: 2, borderColor: 'transparent' },
+  dropRow: { borderWidth: 2, borderRadius: Radius.md, padding: Spacing.two },
   buttonRow: { flexDirection: 'row', gap: Spacing.two },
   sideRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  picksPanel: { borderRadius: Spacing.three, overflow: 'hidden' },
+  picksPanel: { borderRadius: Radius.lg, overflow: 'hidden' },
   picksTitle: { textTransform: 'uppercase', letterSpacing: 0.5, padding: Spacing.three, paddingBottom: Spacing.two },
   picksEmpty: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.three },
   // About 6 picks tall; scroll for the rest.

@@ -3,7 +3,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, View, type ViewStyle } fro
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export interface PlayerRow {
@@ -275,7 +275,7 @@ export function PlayerTable({
 }
 
 const styles = StyleSheet.create({
-  table: { flexDirection: 'row', borderRadius: Spacing.three, overflow: 'hidden' },
+  table: { flexDirection: 'row', borderRadius: Radius.lg, overflow: 'hidden' },
   // Web: one box that scrolls both ways (RN's overflow types don't include 'auto').
   box: { overflow: 'auto' as ViewStyle['overflow'], alignItems: 'flex-start' },
   ruler: { position: 'absolute', left: 0, right: 0, top: 0, height: 0 },

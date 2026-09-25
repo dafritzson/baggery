@@ -5,7 +5,7 @@ import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { COLUMNS, type ColumnKey, DEFAULT_COLUMNS, type PlayerRow, PlayerTable } from '@/components/player-table';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { useOpenPlayer } from '@/lib/player';
@@ -105,7 +105,7 @@ export function PlayersList({
           placeholder="Search players"
           placeholderTextColor={theme.textSecondary}
           autoCorrect={false}
-          style={[styles.search, { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border }]}
+          style={[styles.search, { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border, boxShadow: theme.sunken }]}
         />
         {query !== '' && (
           <Pressable
@@ -221,7 +221,10 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.chip, { backgroundColor: active ? theme.accent : theme.backgroundElement }]}>
+      style={({ pressed }) => [
+        styles.chip,
+        { backgroundColor: active ? theme.accent : theme.backgroundElement, boxShadow: pressed ? theme.sunken : theme.raised },
+      ]}>
       <ThemedText type="smallBold" style={{ color: active ? theme.accentText : theme.text }}>{label}</ThemedText>
     </Pressable>
   );
@@ -231,9 +234,9 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   // Takes the height left in a `fill` list, and no more.
   shrink: { flexShrink: 1, minHeight: 0 },
-  columnsButton: { width: 28, height: 28, borderRadius: Spacing.one + 2, alignItems: 'center', justifyContent: 'center' },
+  columnsButton: { width: 28, height: 28, borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center' },
   // Room on the right for the clear button.
-  search: { minHeight: 44, borderRadius: Spacing.two, borderWidth: 1, paddingLeft: Spacing.three, paddingRight: 44, fontSize: 16 },
+  search: { minHeight: 44, borderRadius: Radius.md, borderWidth: 1, paddingLeft: Spacing.three, paddingRight: 44, fontSize: 16 },
   clear: {
     position: 'absolute',
     right: Spacing.three,
@@ -249,5 +252,5 @@ const styles = StyleSheet.create({
   // A ScrollView shrinks by default; in a `fill` list the tall table would squash the pills.
   chipRow: { flexGrow: 0, flexShrink: 0 },
   chips: { gap: Spacing.one },
-  chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Spacing.four },
+  chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
 });

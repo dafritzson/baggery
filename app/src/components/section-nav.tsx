@@ -4,7 +4,7 @@ import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 import { useSeason } from '@/lib/season';
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.one,
     padding: Spacing.one,
-    borderRadius: 999,
+    borderRadius: Radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
   },
   bottomTab: {
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     minWidth: 76,
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
-    borderRadius: 999,
+    borderRadius: Radius.md,
   },
   bottomLabel: { fontSize: 11, lineHeight: 14 },
 });

@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export interface GridColumn {
@@ -122,7 +122,7 @@ export function ScoreGrid({
 }
 
 const styles = StyleSheet.create({
-  grid: { flexDirection: 'row', borderRadius: Spacing.three, overflow: 'hidden' },
+  grid: { flexDirection: 'row', borderRadius: Radius.lg, overflow: 'hidden' },
   labels: { borderRightWidth: StyleSheet.hairlineWidth },
   scroll: { flex: 1 },
   scrollContent: { flexGrow: 1 },

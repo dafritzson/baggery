@@ -24,8 +24,16 @@ export const Colors = {
     tint: '#E9EFFB',
     tintHover: '#DDE7F9',
     tintStrong: '#D2DDF3',
-    /** Raised-tile look for tinted cards: a light top edge and a shaded bottom edge. */
-    bevel: 'inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -2px 0 rgba(11, 61, 145, 0.10)',
+    /** The selected option in a segmented toggle: lighter than its sunken track. */
+    segment: '#ffffff',
+    /**
+     * 3D surfaces, all soft shadows: raised (cards, tables, chips, buttons) casts a close shadow
+     * plus a wide, faint one; sunken (inputs, toggle tracks, pressed buttons) has a soft shadow
+     * inside; floating (popups, side panels) sits higher.
+     */
+    raised: '0 1px 2px rgba(16, 24, 40, 0.08), 0 4px 12px rgba(16, 24, 40, 0.10)',
+    sunken: 'inset 0 2px 4px rgba(16, 24, 40, 0.10)',
+    floating: '0 16px 40px rgba(16, 24, 40, 0.18), 0 4px 12px rgba(16, 24, 40, 0.08)',
     /** Standings totals, like the old scoring sheet: safe (blue), tied at the cut (lavender), out (red). */
     standingSafe: '#D3E2F4',
     standingTied: '#DCD5EC',
@@ -35,7 +43,8 @@ export const Colors = {
   },
   dark: {
     text: '#ffffff',
-    background: '#000000',
+    // Near-black rather than black, so the raised/floating shadows below still read.
+    background: '#111113',
     backgroundElement: '#212225',
     backgroundSelected: '#2E3135',
     textSecondary: '#B0B4BA',
@@ -48,7 +57,10 @@ export const Colors = {
     tint: '#16213A',
     tintHover: '#1D2A49',
     tintStrong: '#223257',
-    bevel: 'inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -2px 0 rgba(0, 0, 0, 0.45)',
+    segment: '#2E3135',
+    raised: '0 1px 2px rgba(0, 0, 0, 0.8), 0 4px 14px rgba(0, 0, 0, 0.7)',
+    sunken: 'inset 0 2px 5px rgba(0, 0, 0, 0.6)',
+    floating: '0 16px 40px rgba(0, 0, 0, 0.8), 0 4px 12px rgba(0, 0, 0, 0.6)',
     standingSafe: '#1C3050',
     standingTied: '#30284A',
     standingOut: '#4A2228',
@@ -91,6 +103,19 @@ export const Spacing = {
   four: 24,
   five: 32,
   six: 64,
+} as const;
+
+/**
+ * Corner radii: squared-off, with just enough rounding to soften edges. Circles (avatars, dots)
+ * stay circles and don't use these.
+ */
+export const Radius = {
+  /** Tags, small buttons, cells. */
+  sm: 3,
+  /** Chips, inputs, segments, buttons. */
+  md: 4,
+  /** Cards, tables, panels, sheets. */
+  lg: 6,
 } as const;
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;

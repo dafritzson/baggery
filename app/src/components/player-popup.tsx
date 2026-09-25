@@ -26,7 +26,7 @@ import {
 import { StatChart } from '@/components/stat-chart';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { shortDate } from '@/lib/format';
@@ -95,7 +95,7 @@ export function PlayerPopup({
           style={[
             styles.panel,
             wide ? styles.panelWide : styles.panelCompact,
-            { backgroundColor: theme.background },
+            { backgroundColor: theme.background, boxShadow: theme.floating },
             !wide && { transform: [{ translateY: drag }] },
           ]}>
           {playerId !== null && (
@@ -483,14 +483,14 @@ function Section({ title, action, children }: { title: string; action?: ReactNod
 function WindowToggle({ value, onChange }: { value: number; onChange: (n: (typeof WINDOWS)[number]) => void }) {
   const theme = useTheme();
   return (
-    <ThemedView type="backgroundElement" style={styles.toggle}>
+    <ThemedView type="backgroundElement" elevation="sunken" style={styles.toggle}>
       {WINDOWS.map((n) => (
         <Pressable
           key={n}
           onPress={() => onChange(n)}
           accessibilityRole="button"
           accessibilityState={{ selected: value === n }}
-          style={[styles.toggleItem, value === n && { backgroundColor: theme.background }]}>
+          style={[styles.toggleItem, value === n && { backgroundColor: theme.segment, boxShadow: theme.raised }]}>
           <ThemedText type="smallBold" themeColor={value === n ? 'text' : 'textSecondary'} style={styles.toggleText}>
             Last {n}
           </ThemedText>
@@ -569,8 +569,8 @@ const styles = StyleSheet.create({
   backdropWide: { justifyContent: 'center', padding: Spacing.four },
   backdropCompact: { justifyContent: 'flex-end' },
   panel: { width: '100%', overflow: 'hidden' },
-  panelWide: { maxWidth: 760, maxHeight: '90%', borderRadius: Spacing.three },
-  panelCompact: { maxHeight: '92%', borderTopLeftRadius: Spacing.four, borderTopRightRadius: Spacing.four },
+  panelWide: { maxWidth: 760, maxHeight: '90%', borderRadius: Radius.lg },
+  panelCompact: { maxHeight: '92%', borderTopLeftRadius: Radius.lg, borderTopRightRadius: Radius.lg },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -585,17 +585,17 @@ const styles = StyleSheet.create({
   headerText: { flex: 1, gap: Spacing.half },
   name: { fontSize: 20, lineHeight: 26, fontWeight: 700 },
   statusRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.two, marginTop: Spacing.half },
-  status: { paddingHorizontal: Spacing.two, paddingVertical: 1, borderRadius: Spacing.one },
+  status: { paddingHorizontal: Spacing.two, paddingVertical: 1, borderRadius: Radius.sm },
   statusText: { fontSize: 12, lineHeight: 18 },
   close: { fontSize: 18, lineHeight: 22, paddingHorizontal: Spacing.one },
   body: { padding: Spacing.three, gap: Spacing.four, paddingBottom: Spacing.five },
   section: { gap: Spacing.two },
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two, minHeight: 28 },
   sectionTitle: { textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 13 },
-  toggle: { flexDirection: 'row', borderRadius: Spacing.two, padding: 2 },
-  toggleItem: { paddingHorizontal: Spacing.two, paddingVertical: 2, borderRadius: Spacing.one + 2 },
+  toggle: { flexDirection: 'row', borderRadius: Radius.md, padding: 2 },
+  toggleItem: { paddingHorizontal: Spacing.two, paddingVertical: 2, borderRadius: Radius.sm },
   toggleText: { fontSize: 13 },
-  table: { flexDirection: 'row', borderRadius: Spacing.two, overflow: 'hidden' },
+  table: { flexDirection: 'row', borderRadius: Radius.md, overflow: 'hidden' },
   labelColumn: { borderRightWidth: StyleSheet.hairlineWidth },
   tableRow: { height: ROW },
   tableHead: { borderBottomWidth: StyleSheet.hairlineWidth },
