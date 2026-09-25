@@ -264,6 +264,32 @@ describe('live stats poller', () => {
     expect(wc!.every((g) => g.games_in_series === 3 && g.series_game_number! <= 3)).toBe(true);
   });
 
+  it("broadcasts a poll's changes to open apps in one message", async () => {
+    const kyle = clients.get('Kyle')!;
+    const received: { games?: { game_pk: number; detailed_state: string }[]; reload?: boolean }[] = [];
+    const channel = kyle.channel('scores', { config: { private: true } }).on('broadcast', { event: 'changes' }, ({ payload }) => received.push(payload));
+    await new Promise<void>((resolve) => channel.subscribe((s) => s === 'SUBSCRIBED' && resolve()));
+
+    // Knock one game's row out of date, then reload: the poll puts it back and broadcasts that.
+    const { data: game } = await admin.from('mlb_games').select('game_pk').eq('season_year', 2025).eq('game_type', 'W').eq('series_game_number', 7).single();
+    expect((await admin.from('mlb_games').update({ detailed_state: 'Stale' }).eq('game_pk', game!.game_pk)).error).toBeNull();
+    expect((await call('Daniel', 'poll-games', { seasonId: season2025 })).error).toBeUndefined();
+
+    for (let i = 0; i < 50 && !received.some((m) => m.games?.some((g) => g.game_pk === game!.game_pk)); i++) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    kyle.removeChannel(channel);
+    const message = received.find((m) => m.games?.some((g) => g.game_pk === game!.game_pk));
+    if (!message) {
+      // What the database sent, and any send error it logged, to make a failure explain itself.
+      const db = 'supabase_db_baggery';
+      const sent = execSync(`docker exec ${db} psql -U postgres -tAc "select topic, event, private, left(payload::text, 120) from realtime.messages order by inserted_at desc limit 5"`, { encoding: 'utf8' });
+      const logs = execSync(`docker logs ${db} 2>&1 | grep -i 'scores broadcast' | tail -3 || true`, { encoding: 'utf8' });
+      console.log({ received, sent, logs });
+    }
+    expect(message?.games?.find((g) => g.game_pk === game!.game_pk)?.detailed_state).toBe('Final');
+  });
+
   it('is readable by signed-in users', async () => {
     const { count } = await clients.get('Kyle')!.from('player_game_stats').select('*', { count: 'exact', head: true });
     expect(count).toBeGreaterThan(500);

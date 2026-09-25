@@ -80,29 +80,73 @@ function upsert<T>(list: T[], item: T, same: (a: T) => boolean): T[] {
   return i === -1 ? [...list, item] : list.map((x, j) => (j === i ? item : x));
 }
 
-/** Folds one realtime change into the scores, from the row it carries, so it costs no refetch. */
-function applyChange(scores: Scores, table: string, row: Row, rostered: Set<number>): Scores {
-  if (table === 'mlb_games') {
-    if (row.series_game_number === null) return scores;
-    return { ...scores, games: upsert(scores.games, toGame(row), (g) => g.gamePk === row.game_pk) };
+/** What poll-games broadcasts after each poll (private.flush_score_changes). */
+interface ScoreChanges {
+  games?: Row[];
+  stats?: Row[];
+  /** Too much changed (or a row was deleted) to send; reload everything. */
+  reload?: boolean;
+}
+
+/** Folds one poll's changed rows into the scores, so a live game costs no refetch. */
+function applyChanges(scores: Scores, changes: ScoreChanges, year: number, rostered: Set<number>): Scores {
+  let { games, stats, lines } = scores;
+  for (const row of changes.games ?? []) {
+    if (row.season_year !== year || row.series_game_number === null) continue;
+    games = upsert(games, toGame(row), (g) => g.gamePk === row.game_pk);
   }
-  let next = scores;
-  if (rostered.has(row.mlb_player_id)) {
-    const stat = { gamePk: row.game_pk, playerId: row.mlb_player_id, tb: row.tb };
-    next = { ...next, stats: upsert(next.stats, stat, (s) => s.gamePk === stat.gamePk && s.playerId === stat.playerId) };
+  const live = new Set(games.filter((g) => g.status === 'Live').map((g) => g.gamePk));
+  for (const row of changes.stats ?? []) {
+    if (rostered.has(row.mlb_player_id)) {
+      const stat = { gamePk: row.game_pk, playerId: row.mlb_player_id, tb: row.tb };
+      stats = upsert(stats, stat, (s) => s.gamePk === stat.gamePk && s.playerId === stat.playerId);
+    }
+    if (live.has(row.game_pk)) {
+      const line = toLine(row);
+      lines = upsert(lines, line, (l) => l.gamePk === line.gamePk && l.playerId === line.playerId);
+    }
   }
-  if (scores.games.some((g) => g.gamePk === row.game_pk && g.status === 'Live')) {
-    const line = toLine(row);
-    next = { ...next, lines: upsert(next.lines, line, (l) => l.gamePk === line.gamePk && l.playerId === line.playerId) };
+  return { games, stats, lines };
+}
+
+/**
+ * One subscription to the "scores" broadcast, shared by every useScores (Games and Standings can
+ * both be mounted, and a second channel on the same topic would replace the first). Listeners
+ * get each poll's changes, and { reload: true } after a reconnect, when changes may have been
+ * missed.
+ */
+const scoreListeners = new Set<(changes: ScoreChanges) => void>();
+let scoreChannel: ReturnType<typeof supabase.channel> | null = null;
+
+function listenForScores(listener: (changes: ScoreChanges) => void): () => void {
+  scoreListeners.add(listener);
+  if (!scoreChannel) {
+    let subscribed = false;
+    scoreChannel = supabase
+      // Private: only signed-in users may listen (a policy on realtime.messages).
+      .channel('scores', { config: { private: true } })
+      .on('broadcast', { event: 'changes' }, ({ payload }) => {
+        for (const l of scoreListeners) l(payload as ScoreChanges);
+      })
+      .subscribe((status) => {
+        if (status !== 'SUBSCRIBED') return;
+        if (subscribed) for (const l of scoreListeners) l({ reload: true });
+        subscribed = true;
+      });
   }
-  return next;
+  return () => {
+    scoreListeners.delete(listener);
+    if (scoreListeners.size === 0 && scoreChannel) {
+      supabase.removeChannel(scoreChannel);
+      scoreChannel = null;
+    }
+  };
 }
 
 /**
  * The season's postseason games and the rostered players' TB in them, kept live. The whole
  * season loads once (and again after a reconnect, or when the rostered players change); after
- * that, each realtime change is applied from the row it carries instead of reloading everything,
- * which keeps a live game from costing a full reload per open app every few seconds.
+ * that, poll-games broadcasts each poll's changed rows in one message, which is applied as is.
  */
 export function useScores(data: SeasonData | null): { scores: Scores | null; refetch: () => Promise<void> } {
   const year = data?.season.year;
@@ -110,7 +154,7 @@ export function useScores(data: SeasonData | null): { scores: Scores | null; ref
   const playerKey = data ? [...new Set(data.spells.map((s) => s.mlb_player_id))].sort().join(',') : '';
   const [scores, setScores] = useState<Scores | null>(null);
   const latest = useRef(0);
-  // For the realtime handler, which outlives renders.
+  // For the broadcast listener, which outlives renders.
   const current = useRef<Scores | null>(null);
   useEffect(() => {
     current.current = scores;
@@ -146,32 +190,19 @@ export function useScores(data: SeasonData | null): { scores: Scores | null; ref
       if (reload) clearTimeout(reload);
       reload = setTimeout(refetch, 300);
     };
-    const onChange = (table: string) => (payload: { eventType: string; new: Row }) => {
-      // A deleted row doesn't say enough to apply; rare, so reload.
-      if (payload.eventType === 'DELETE') return scheduleReload();
-      const row = payload.new;
-      if (row.season_year !== undefined && row.season_year !== year) return;
-      // A game that just started: reload once for the lines of anyone who batted before this app heard.
-      const started =
-        table === 'mlb_games' && row.status === 'Live' && current.current?.games.find((g) => g.gamePk === row.game_pk)?.status !== 'Live';
-      setScores((s) => (s ? applyChange(s, table, row, rostered) : s));
-      if (started) scheduleReload();
-    };
     refetch();
-    let subscribed = false;
-    const channel = supabase
-      .channel(`scores-${Date.now()}-${Math.random()}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'mlb_games' }, onChange('mlb_games'))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'player_game_stats' }, onChange('player_game_stats'))
-      // After a reconnect, reload everything: changes made while disconnected weren't sent.
-      .subscribe((status) => {
-        if (status !== 'SUBSCRIBED') return;
-        if (subscribed) scheduleReload();
-        subscribed = true;
-      });
+    const stop = listenForScores((changes) => {
+      if (changes.reload) return scheduleReload();
+      // A game that just started: reload once for the lines of anyone who batted before this app heard.
+      const started = (changes.games ?? []).some(
+        (row) => row.status === 'Live' && current.current?.games.find((g) => g.gamePk === row.game_pk)?.status !== 'Live',
+      );
+      setScores((s) => (s ? applyChanges(s, changes, year, rostered) : s));
+      if (started) scheduleReload();
+    });
     return () => {
       if (reload) clearTimeout(reload);
-      supabase.removeChannel(channel);
+      stop();
     };
   }, [year, playerKey, refetch]);
 
