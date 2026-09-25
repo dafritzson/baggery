@@ -91,7 +91,8 @@ async function saveGame(gamePk: number): Promise<number> {
  */
 async function poll(year: number, all: boolean) {
   const [{ due: scheduleDue }] = await sql`select private.schedule_due() as due`;
-  if (all || scheduleDue) await syncSchedule(year, all);
+  // Postseason games on the schedule, when it was read this time.
+  const games = all || scheduleDue ? await syncSchedule(year, all) : null;
 
   const due = all
     ? await sql`select game_pk from mlb_games where season_year = ${year} and status in ('Live', 'Final')`
@@ -110,7 +111,7 @@ async function poll(year: number, all: boolean) {
     const counts = await Promise.all(pending.splice(0, 4).map(saveGame));
     batted += counts.reduce((a, b) => a + b, 0);
   }
-  return { year, schedule: all || scheduleDue, boxscores: due.length, battingLines: batted };
+  return { year, games, boxscores: due.length, battingLines: batted };
 }
 
 /**
@@ -118,7 +119,7 @@ async function poll(year: number, all: boolean) {
  * so open apps don't refetch for nothing. A live game keeps the score its linescore gave (read
  * every few seconds) over the schedule's, which can lag behind.
  */
-async function syncSchedule(year: number, all: boolean) {
+async function syncSchedule(year: number, all: boolean): Promise<number> {
   const teams = await knownTeamIds(year);
   const games = scheduleGames(await mlb(`/schedule?sportId=1&season=${year}&gameType=F,D,L,W`), year, teams);
   if (games.length) {
@@ -154,6 +155,7 @@ async function syncSchedule(year: number, all: boolean) {
              and (mlb_games.home_score, mlb_games.away_score) is distinct from (excluded.home_score, excluded.away_score))`;
   }
   await sql`update private.poller set schedule_synced_at = now()`;
+  return games.length;
 }
 
 /** Holds a short lease so overlapping cron calls don't poll at the same time. */
