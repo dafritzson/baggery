@@ -91,9 +91,36 @@ function DayChips({ days, day, today, onChange }: { days: string[]; day?: string
 
 const BAGS = ['👜', '💼', '🎒', '🛍️', '👝', '💰', '🧳'];
 
-/** One bag emoji per total base, a mix of bags that stays the same for the same player and game. */
+/**
+ * One bag emoji per total base, each picked at random. Seeded by player, game and position, so a
+ * row doesn't reshuffle every time the live scores refresh.
+ */
 function bagEmojis(tb: number, playerId: number, gamePk: number): string {
-  return Array.from({ length: tb }, (_, i) => BAGS[(playerId * 31 + gamePk * 17 + i * 3) % BAGS.length]).join('');
+  return Array.from({ length: tb }, (_, i) => {
+    let h = (playerId ^ Math.imul(gamePk, 0x9e3779b1) ^ Math.imul(i + 1, 0x85ebca6b)) >>> 0;
+    h = Math.imul(h ^ (h >>> 16), 0x7feb352d) >>> 0;
+    h = Math.imul(h ^ (h >>> 15), 0x846ca68b) >>> 0;
+    return BAGS[((h ^ (h >>> 16)) >>> 0) % BAGS.length];
+  }).join('');
+}
+
+/** Room for about six bags; a bigger game scrolls sideways instead of crowding the row. */
+const BAGS_MAX_WIDTH = 128;
+
+function Bags({ tb, playerId, gamePk }: { tb: number | null; playerId: number; gamePk: number }) {
+  const [width, setWidth] = useState<number | null>(null);
+  if (tb === null) return null;
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator
+      onContentSizeChange={(w) => setWidth(w)}
+      style={[styles.bags, width !== null && { width: Math.min(width, BAGS_MAX_WIDTH) }]}>
+      <ThemedText type="small" numberOfLines={1} accessibilityLabel={`${tb} total bases`}>
+        {tb === 0 ? '–' : bagEmojis(tb, playerId, gamePk)}
+      </ThemedText>
+    </ScrollView>
+  );
 }
 
 /** "Wild Card · Game 2", or "Division Series · Game 3". */
@@ -174,12 +201,7 @@ function GameCard({ data, scores, game, style }: { data: SeasonData; scores: Sco
                 <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.owner}>
                   {mine ? 'You' : teamName(p.team)}
                 </ThemedText>
-                <ThemedText
-                  type="small"
-                  style={styles.tb}
-                  accessibilityLabel={p.tb === null ? undefined : `${p.tb} total bases`}>
-                  {p.tb === null ? '' : p.tb === 0 ? '–' : bagEmojis(p.tb, p.id, game.gamePk)}
-                </ThemedText>
+                <Bags tb={p.tb} playerId={p.id} gamePk={game.gamePk} />
               </View>
             );
           })}
@@ -205,6 +227,5 @@ const styles = StyleSheet.create({
   players: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: Spacing.two, gap: Spacing.one },
   playerRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   owner: { flex: 1, textAlign: 'right' },
-  // Room for a few bags per line; a big game wraps.
-  tb: { maxWidth: 120, flexShrink: 0, textAlign: 'right' },
+  bags: { maxWidth: BAGS_MAX_WIDTH, flexGrow: 0, flexShrink: 0 },
 });
