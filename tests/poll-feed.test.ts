@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boxscoreBatting, linescoreLive, scheduleGames } from '../supabase/functions/poll-games/feed.ts';
+import { boxscoreBatting, linescoreLive, linescoreRuns, scheduleGames } from '../supabase/functions/poll-games/feed.ts';
 
 const team = (id: number, score?: number) => ({ team: { id }, score });
 
@@ -9,6 +9,7 @@ function game(gamePk: number, overrides: object = {}) {
     gamePk,
     gameType: 'D',
     gameDate: '2025-10-04T22:08:00Z',
+    officialDate: '2025-10-04',
     status: { abstractGameState: 'Final', detailedState: 'Final' },
     teams: { away: team(141, 3), home: team(119, 5) },
     seriesGameNumber: 1,
@@ -27,6 +28,8 @@ describe('schedule feed', () => {
       season_year: 2025,
       game_type: 'D',
       start_time: '2025-10-04T22:08:00Z',
+      start_time_tbd: false,
+      official_date: '2025-10-04',
       status: 'Final',
       detailed_state: 'Final',
       home_team_id: 119,
@@ -36,6 +39,27 @@ describe('schedule feed', () => {
       series_game_number: 1,
       games_in_series: 5,
     });
+  });
+
+  it('flags games with no start time yet', () => {
+    const [row] = scheduleGames(
+      {
+        dates: [
+          {
+            games: [
+              game(4, {
+                gameDate: '2025-09-30T07:33:00Z',
+                officialDate: '2025-09-30',
+                status: { abstractGameState: 'Preview', detailedState: 'Scheduled', startTimeTBD: true },
+              }),
+            ],
+          },
+        ],
+      },
+      2025,
+      known,
+    );
+    expect(row).toMatchObject({ start_time_tbd: true, official_date: '2025-09-30' });
   });
 
   it('skips regular-season games and games with teams not set yet', () => {
@@ -97,6 +121,11 @@ describe('box score feed', () => {
 });
 
 describe('linescore feed', () => {
+  it('reads the runs so far', () => {
+    expect(linescoreRuns({ teams: { home: { runs: 2 }, away: { runs: 3 } } })).toEqual({ home: 2, away: 3 });
+    expect(linescoreRuns({ teams: { home: {}, away: {} } })).toBeNull();
+  });
+
   it('reads the inning, count, runners and who is up', () => {
     const live = linescoreLive({
       currentInning: 7,

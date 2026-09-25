@@ -13,6 +13,10 @@ export interface GameInfo extends ScoreGame {
   awayScore: number | null;
   /** MLB detailedState: "Scheduled", "In Progress", "Final", "Postponed", ... */
   detailedState: string | null;
+  /** No start time set yet (`start` is MLB's 3:33 AM ET placeholder). */
+  startTimeTbd: boolean;
+  /** The game's date as MLB lists it, e.g. "2026-09-29". */
+  officialDate: string | null;
   /** Inning, count, runners and who's up, while live (and the final state after). */
   live: LiveState | null;
 }
@@ -56,7 +60,7 @@ export function useScores(data: SeasonData | null): { scores: Scores | null; ref
     const fetchId = ++latest.current;
     const { data: games } = await supabase
       .from('mlb_games')
-      .select('game_pk, game_type, series_game_number, start_time, status, detailed_state, home_team_id, away_team_id, home_score, away_score, live')
+      .select('game_pk, game_type, series_game_number, start_time, start_time_tbd, official_date, status, detailed_state, home_team_id, away_team_id, home_score, away_score, live')
       .eq('season_year', year);
     const gamePks = (games ?? []).map((g) => g.game_pk as number);
     const playerIds = playerKey ? playerKey.split(',').map(Number) : [];
@@ -77,6 +81,8 @@ export function useScores(data: SeasonData | null): { scores: Scores | null; ref
           gameType: g.game_type,
           seriesGameNumber: g.series_game_number,
           start: g.start_time,
+          startTimeTbd: g.start_time_tbd,
+          officialDate: g.official_date,
           status: g.status,
           homeTeamId: g.home_team_id,
           awayTeamId: g.away_team_id,

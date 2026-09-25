@@ -22,6 +22,14 @@ function dayKey(iso: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/**
+ * The day a game belongs to: MLB's official date, so a game with no start time yet (listed at a
+ * 3:33 AM ET placeholder) or a late West Coast game stays on its day. Local day as a fallback.
+ */
+function gameDay(game: GameInfo): string {
+  return game.officialDate ?? dayKey(game.start);
+}
+
 function dayLabel(key: string, today: string): string {
   if (key === today) return 'Today';
   const [y, m, d] = key.split('-').map(Number);
@@ -48,10 +56,10 @@ export default function GamesScreen() {
   if (!data || !scores) return <Screen width="wide"><ThemedText>No season set up yet.</ThemedText></Screen>;
 
   const today = dayKey(new Date().toISOString());
-  const days = [...new Set(scores.games.map((g) => dayKey(g.start)))].sort();
+  const days = [...new Set(scores.games.map(gameDay))].sort();
   const day = picked && days.includes(picked) ? picked : defaultDay(days, today);
   const games = scores.games
-    .filter((g) => day && dayKey(g.start) === day)
+    .filter((g) => day && gameDay(g) === day)
     // Live games first, then the ones still to come, then the finished ones; by start time within each.
     .sort((a, b) => (STATUS_ORDER[a.status] ?? 1) - (STATUS_ORDER[b.status] ?? 1) || a.start.localeCompare(b.start));
 
@@ -157,7 +165,11 @@ function seriesLabel(game: GameInfo): string {
 
 function statusLine(game: GameInfo): string {
   if (game.status === 'Preview' && game.detailedState !== 'Postponed') {
-    return new Date(game.start).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    if (game.startTimeTbd) return 'Time TBD';
+    // Eastern and Pacific, like a TV listing.
+    const at = (timeZone: string) =>
+      new Date(game.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone });
+    return `${at('America/New_York')} ET · ${at('America/Los_Angeles')} PT`;
   }
   // "F/10" for extra innings (or a shortened game), like a box score.
   if (game.status === 'Final' && game.detailedState === 'Final' && game.live && game.live.inning !== 9) {

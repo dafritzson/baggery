@@ -12,7 +12,8 @@ architecture: [docs/PLAN.md](docs/PLAN.md). Ideas not yet decided on: [docs/IDEA
   transaction), `sync-pool` (builds the draft pool from the MLB Stats API) and `player-stats`
   (a player's season, game log and past seasons for the player popup, from the MLB Stats API) and
   `poll-games` (live stats: mirrors postseason games and box scores into `mlb_games` and
-  `player_game_stats`; pg_cron calls it every 10 seconds while games are on).
+  `player_game_stats`; pg_cron calls it every 10 seconds while a game is live, and the schedule and
+  finished games only every 10 minutes otherwise).
 - `supabase/functions/_shared/core/`: pure game logic (draft, scoring), shared by the
   functions and the app (`@core/...`). No dependencies; imports use `.ts` extensions.
 - `tests/`: Vitest unit tests for the core.
