@@ -205,3 +205,71 @@ describe('player stats', () => {
     expect(error).not.toBeNull();
   });
 });
+
+describe('live stats poller', () => {
+  let season2025: string;
+
+  beforeAll(async () => {
+    const { data: s } = await admin.from('seasons').select('league_id').eq('id', SEASON_ID).single();
+    const { data, error } = await admin.from('seasons').insert({ league_id: s!.league_id, year: 2025, status: 'complete' }).select('id').single();
+    if (error) throw error;
+    season2025 = data.id;
+  });
+
+  it('only lets the commissioner reload a postseason', async () => {
+    expect((await call('Kyle', 'poll-games', { seasonId: season2025 })).error).toMatch(/commissioner/);
+    const anon = createClient(url, publishableKey, { auth: { persistSession: false } });
+    expect((await anon.functions.invoke('poll-games', { body: { seasonId: season2025 } })).error).not.toBeNull();
+    const cron = await fetch(`${url}/functions/v1/poll-games`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-poller-secret': 'guess' },
+      body: '{}',
+    });
+    expect(cron.status).toBe(403);
+  });
+
+  it("loads the 2025 postseason's games and box scores", async () => {
+    const result = (await call('Daniel', 'poll-games', { seasonId: season2025 })) as { games?: number; battingLines?: number };
+    expect(result.games).toBeGreaterThan(30);
+    expect(result.battingLines).toBeGreaterThan(500);
+
+    // The World Series went 7 games, numbered 1 to 7.
+    const { data: ws } = await admin
+      .from('mlb_games')
+      .select('game_pk, status, series_game_number, games_in_series, final_seen_at')
+      .eq('season_year', 2025)
+      .eq('game_type', 'W')
+      .order('series_game_number');
+    expect(ws!.map((g) => g.series_game_number)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(ws!.every((g) => g.status === 'Final' && g.games_in_series === 7 && g.final_seen_at)).toBe(true);
+
+    // Freddie Freeman's walk-off home run in the 18th inning of Game 3.
+    const { data: freeman } = await admin
+      .from('player_game_stats')
+      .select('hr, tb, ab')
+      .eq('game_pk', ws![2].game_pk)
+      .eq('mlb_player_id', 518692)
+      .single();
+    expect(freeman!.hr).toBeGreaterThanOrEqual(1);
+    expect(freeman!.tb).toBeGreaterThanOrEqual(4);
+
+    // Wild Card series are best of 3.
+    const { data: wc } = await admin.from('mlb_games').select('series_game_number, games_in_series').eq('season_year', 2025).eq('game_type', 'F');
+    expect(wc!.length).toBeGreaterThanOrEqual(8);
+    expect(wc!.every((g) => g.games_in_series === 3 && g.series_game_number! <= 3)).toBe(true);
+  });
+
+  it('is readable by signed-in users', async () => {
+    const { count } = await clients.get('Kyle')!.from('player_game_stats').select('*', { count: 'exact', head: true });
+    expect(count).toBeGreaterThan(500);
+  });
+
+  it('points the cron job at itself on setup', async () => {
+    const res = await fetch(`${url}/functions/v1/poll-games`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ setup: true }),
+    });
+    expect(await res.json()).toEqual({ ok: true });
+  });
+});
