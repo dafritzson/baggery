@@ -243,6 +243,11 @@ describe('live stats poller', () => {
     expect(ws!.map((g) => g.series_game_number)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(ws!.every((g) => g.status === 'Final' && g.games_in_series === 7 && g.final_seen_at)).toBe(true);
 
+    // Each game keeps its final linescore: Game 3 went 18 innings.
+    const { data: game3 } = await admin.from('mlb_games').select('live').eq('game_pk', ws![2].game_pk).single();
+    expect(game3!.live).toMatchObject({ inning: 18 });
+    expect(ws!.every((g) => g.status === 'Final')).toBe(true);
+
     // Freddie Freeman's walk-off home run in the 18th inning of Game 3.
     const { data: freeman } = await admin
       .from('player_game_stats')

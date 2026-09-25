@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import type { LiveState } from '@core/live.ts';
 import { SERIES } from '@core/scoreboard.ts';
 
 import { Card } from '@/components/card';
@@ -104,8 +105,8 @@ function bagEmojis(tb: number, playerId: number, gamePk: number): string {
   }).join('');
 }
 
-/** Room for about eight bags; a bigger game scrolls sideways instead of crowding the card. */
-const BAGS_MAX_WIDTH = 176;
+/** Room for about four bags; a bigger game scrolls sideways instead of crowding the card. */
+const BAGS_MAX_WIDTH = 72;
 
 function Bags({ tb, playerId, gamePk }: { tb: number | null; playerId: number; gamePk: number }) {
   const [width, setWidth] = useState<number | null>(null);
@@ -133,7 +134,61 @@ function statusLine(game: GameInfo): string {
   if (game.status === 'Preview' && game.detailedState !== 'Postponed') {
     return new Date(game.start).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   }
+  // "F/10" for extra innings (or a shortened game), like a box score.
+  if (game.status === 'Final' && game.detailedState === 'Final' && game.live && game.live.inning !== 9) {
+    return `F/${game.live.inning}`;
+  }
   return game.detailedState ?? game.status;
+}
+
+/** "▲7", "▼7", "Mid 7", "End 7". */
+function inningLabel(live: LiveState): string {
+  if (live.inningState === 'Top') return `▲${live.inning}`;
+  if (live.inningState === 'Bottom') return `▼${live.inning}`;
+  return `${live.inningState === 'Middle' ? 'Mid' : 'End'} ${live.inning}`;
+}
+
+/** Runners on base as a little diamond: filled squares for occupied bases. */
+function Diamond({ bases }: { bases: [boolean, boolean, boolean] }) {
+  const theme = useTheme();
+  const base = (on: boolean, position: object) => (
+    <View
+      style={[
+        styles.base,
+        position,
+        on ? { backgroundColor: theme.text, borderColor: theme.text } : { borderColor: theme.textSecondary },
+      ]}
+    />
+  );
+  return (
+    <View style={styles.diamond} accessibilityLabel={`Runners: ${['first', 'second', 'third'].filter((_, i) => bases[i]).join(', ') || 'none'}`}>
+      {base(bases[1], styles.second)}
+      {base(bases[2], styles.third)}
+      {base(bases[0], styles.first)}
+    </View>
+  );
+}
+
+/** Top right of a live game: inning, runners, count and outs. */
+function LiveStatus({ live }: { live: LiveState }) {
+  const theme = useTheme();
+  const between = live.inningState === 'Middle' || live.inningState === 'End';
+  return (
+    <View style={styles.liveStatus}>
+      <ThemedText type="smallBold" style={{ color: theme.danger }}>{inningLabel(live)}</ThemedText>
+      {!between && (
+        <>
+          <Diamond bases={live.bases} />
+          <ThemedText type="small" style={styles.count}>{`${live.balls}-${live.strikes}`}</ThemedText>
+          <View style={styles.outs} accessibilityLabel={`${live.outs} out`}>
+            {[0, 1, 2].map((i) => (
+              <View key={i} style={[styles.out, { borderColor: theme.textSecondary }, i < live.outs && { backgroundColor: theme.textSecondary }]} />
+            ))}
+          </View>
+        </>
+      )}
+    </View>
+  );
 }
 
 /** Who owned the player when the game started (or owns him now, before it starts). */
@@ -150,15 +205,55 @@ function ownerOf(data: SeasonData, playerId: number, game: GameInfo): string | u
 function GameCard({ data, scores, game, style }: { data: SeasonData; scores: Scores; game: GameInfo; style?: object }) {
   const theme = useTheme();
   const live = game.status === 'Live';
-  const final = game.status === 'Final';
-  const side = (teamId: number, score: number | null, other: number | null) => {
-    const team = data.mlbTeams.get(teamId);
-    const won = final && score !== null && other !== null && score > other;
+  // Who's on a fantasy roster now, for highlighting them in the due-up lines.
+  const currentOwner = new Map(data.spells.filter((s) => s.to_at === null).map((s) => [s.mlb_player_id, s.fantasy_team_id]));
+  /**
+   * A small card per team listing who's up, one name per line: the batting team's batter, on
+   * deck and in the hole (tinted blue), and the fielding team's next three (plain).
+   */
+  const upNext = (which: 'away' | 'home') => {
+    const state = game.live;
+    if (!live || !state) return null;
+    const batting = state.battingSide === which;
+    const up = batting ? state.batting : state.dueUp;
+    const labels = batting ? ['AB', 'OD', 'IH'] : ['1', '2', '3'];
+    const abbr = data.mlbTeams.get(which === 'away' ? game.awayTeamId : game.homeTeamId)?.abbreviation ?? '';
+    return (
+      <View style={[styles.upCard, { backgroundColor: batting ? theme.tint : theme.background }]}>
+        <ThemedText type="smallBold" style={[styles.upHead, { color: batting ? theme.accent : theme.textSecondary }]}>
+          {abbr} {batting ? 'at bat' : 'due up'}
+        </ThemedText>
+        {up.map((p, i) => {
+          const owner = p ? currentOwner.get(p.id) : undefined;
+          const mine = owner !== undefined && owner === data.myTeam?.id;
+          return (
+            <View key={i} style={styles.upRow}>
+              <ThemedText type="small" themeColor="textSecondary" style={styles.upLabel}>{labels[i]}</ThemedText>
+              <ThemedText
+                type={owner ? 'smallBold' : 'small'}
+                numberOfLines={1}
+                style={[styles.upName, mine && [styles.upMine, { backgroundColor: theme.mine }]]}>
+                {p ? p.name.split(' ').slice(1).join(' ') || p.name : '—'}
+              </ThemedText>
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
+  const side = (which: 'away' | 'home') => {
+    const teamId = which === 'away' ? game.awayTeamId : game.homeTeamId;
+    const score = which === 'away' ? game.awayScore : game.homeScore;
+    const other = which === 'away' ? game.homeScore : game.awayScore;
+    const leading = game.status !== 'Preview' && score !== null && other !== null && score > other;
     return (
       <View style={styles.scoreRow}>
-        <ThemedText type="default" style={[styles.teamAbbr, won && styles.bold]}>{team?.abbreviation ?? '—'}</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.teamName}>{team?.name ?? ''}</ThemedText>
-        <ThemedText type="default" style={[styles.score, won && styles.bold]}>{game.status === 'Preview' ? '' : (score ?? '')}</ThemedText>
+        <ThemedText type="default" style={[styles.teamAbbr, leading && styles.bold]}>
+          {data.mlbTeams.get(teamId)?.abbreviation ?? '—'}
+        </ThemedText>
+        <ThemedText type="default" style={[styles.score, leading && styles.bold]}>
+          {game.status === 'Preview' ? '' : (score ?? '')}
+        </ThemedText>
       </View>
     );
   };
@@ -182,13 +277,25 @@ function GameCard({ data, scores, game, style }: { data: SeasonData; scores: Sco
     <Card style={style}>
       <View style={styles.cardHead}>
         <ThemedText type="small" themeColor="textSecondary">{seriesLabel(game)}</ThemedText>
-        <ThemedText type="smallBold" style={{ color: live ? theme.danger : theme.textSecondary }}>
-          {live ? '● ' : ''}
-          {statusLine(game)}
-        </ThemedText>
+        {live && game.live ? (
+          <LiveStatus live={game.live} />
+        ) : (
+          <ThemedText type="smallBold" style={{ color: live ? theme.danger : theme.textSecondary }}>
+            {live ? '● ' : ''}
+            {statusLine(game)}
+          </ThemedText>
+        )}
       </View>
-      {side(game.awayTeamId, game.awayScore, game.homeScore)}
-      {side(game.homeTeamId, game.homeScore, game.awayScore)}
+      <View style={styles.teams}>
+        <View style={styles.upCards}>
+          {upNext('away')}
+          {upNext('home')}
+        </View>
+        <View style={styles.scores}>
+          {side('away')}
+          {side('home')}
+        </View>
+      </View>
       {players.length > 0 && (
         <View style={[styles.players, { borderTopColor: theme.border }]}>
           {players.map((p) => {
@@ -196,27 +303,16 @@ function GameCard({ data, scores, game, style }: { data: SeasonData; scores: Sco
             return (
               <View
                 key={p.id}
-                style={[
-                  styles.playerCard,
-                  { backgroundColor: mine ? theme.mine : theme.background },
-                ]}>
-                <View style={styles.playerText}>
-                  <PlayerName
-                    playerId={p.id}
-                    type="smallBold"
-                    numberOfLines={1}
-                    style={styles.playerName}>
-                    {data.players.get(p.id)?.full_name ?? `Player ${p.id}`}
-                  </PlayerName>
-                  <ThemedText
-                    type="small"
-                    themeColor="textSecondary"
-                    numberOfLines={1}
-                    style={styles.owner}>
+                style={[styles.playerCard, { backgroundColor: mine ? theme.mine : theme.background }]}>
+                <PlayerName playerId={p.id} type="smallBold" numberOfLines={1} style={styles.playerName}>
+                  {data.players.get(p.id)?.full_name ?? `Player ${p.id}`}
+                </PlayerName>
+                <View style={styles.playerSecondLine}>
+                  <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.owner}>
                     {mine ? 'You' : teamName(p.team)}
                   </ThemedText>
+                  <Bags tb={p.tb} playerId={p.id} gamePk={game.gamePk} />
                 </View>
-                <Bags tb={p.tb} playerId={p.id} gamePk={game.gamePk} />
               </View>
             );
           })}
@@ -234,22 +330,47 @@ const styles = StyleSheet.create({
   gridWide: { flexDirection: 'row', flexWrap: 'wrap' },
   cardWide: { width: '48.5%' },
   cardHead: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.two },
-  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  teamAbbr: { width: 48, fontWeight: 600 },
-  teamName: { flex: 1 },
-  score: { fontSize: 22, lineHeight: 28, fontVariant: ['tabular-nums'], fontWeight: 600 },
+  // Who's up (two small cards) on the left, the scores on the right.
+  teams: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  upCards: { flex: 1, minWidth: 0, flexDirection: 'row', gap: Spacing.one + 2 },
+  upCard: { flex: 1, minWidth: 0, borderRadius: Spacing.two, paddingVertical: Spacing.one, paddingHorizontal: Spacing.one + 2 },
+  upHead: { fontSize: 9, lineHeight: 12, textTransform: 'uppercase', letterSpacing: 0.4 },
+  upRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  upLabel: { width: 14, fontSize: 9, lineHeight: 14 },
+  upName: { flexShrink: 1, fontSize: 11, lineHeight: 14 },
+  upMine: { paddingHorizontal: 3, borderRadius: 3, overflow: 'hidden' },
+  scores: { marginLeft: 'auto', gap: Spacing.half },
+  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 28 },
+  teamAbbr: { width: 40, fontWeight: 600, textAlign: 'right' },
+  score: { width: 28, textAlign: 'right', fontSize: 20, lineHeight: 26, fontVariant: ['tabular-nums'], fontWeight: 600 },
+  liveStatus: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  diamond: { width: 26, height: 19 },
+  base: { position: 'absolute', width: 7, height: 7, borderWidth: 1.5, transform: [{ rotate: '45deg' }] },
+  second: { left: 9.5, top: 1.5 },
+  third: { left: 2, top: 9 },
+  first: { left: 17, top: 9 },
+  count: { fontVariant: ['tabular-nums'] },
+  outs: { flexDirection: 'row', gap: 3 },
+  out: { width: 6, height: 6, borderRadius: 3, borderWidth: 1 },
   bold: { fontWeight: 800 },
-  players: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: Spacing.two + 2, gap: Spacing.one + 2 },
-  playerCard: {
+  // Two columns of mini cards.
+  players: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: Spacing.two + 2,
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: Spacing.one + 2,
+  },
+  // Name on top; fantasy team and bags below, so the name gets the full width.
+  playerCard: {
+    width: '49%',
     paddingVertical: Spacing.one + 2,
-    paddingHorizontal: Spacing.two + 2,
+    paddingHorizontal: Spacing.two,
     borderRadius: Spacing.two + 2,
   },
-  playerText: { flex: 1, minWidth: 0 },
+  playerSecondLine: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, minHeight: 18 },
   playerName: { fontSize: 13, lineHeight: 17 },
-  owner: { fontSize: 11, lineHeight: 14 },
+  owner: { flex: 1, minWidth: 0, fontSize: 11, lineHeight: 14 },
   bags: { maxWidth: BAGS_MAX_WIDTH, flexGrow: 0, flexShrink: 0 },
 });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import type { LiveState } from '@core/live.ts';
 import type { ScoreGame, ScoreStat } from '@core/scoreboard.ts';
 import type { RosterSpell } from '@core/scoring.ts';
 
@@ -12,6 +13,8 @@ export interface GameInfo extends ScoreGame {
   awayScore: number | null;
   /** MLB detailedState: "Scheduled", "In Progress", "Final", "Postponed", ... */
   detailedState: string | null;
+  /** Inning, count, runners and who's up, while live (and the final state after). */
+  live: LiveState | null;
 }
 
 export interface Scores {
@@ -39,7 +42,7 @@ export function useScores(data: SeasonData | null): { scores: Scores | null; ref
     const fetchId = ++latest.current;
     const { data: games } = await supabase
       .from('mlb_games')
-      .select('game_pk, game_type, series_game_number, start_time, status, detailed_state, home_team_id, away_team_id, home_score, away_score')
+      .select('game_pk, game_type, series_game_number, start_time, status, detailed_state, home_team_id, away_team_id, home_score, away_score, live')
       .eq('season_year', year);
     const gamePks = (games ?? []).map((g) => g.game_pk as number);
     const playerIds = playerKey ? playerKey.split(',').map(Number) : [];
@@ -62,6 +65,7 @@ export function useScores(data: SeasonData | null): { scores: Scores | null; ref
           homeScore: g.home_score,
           awayScore: g.away_score,
           detailedState: g.detailed_state,
+          live: g.live,
         })),
       stats: (stats ?? []).map((s) => ({ gamePk: s.game_pk, playerId: s.mlb_player_id, tb: s.tb })),
     });

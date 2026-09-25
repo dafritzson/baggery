@@ -9,7 +9,7 @@
 import { requireCommissioner, requireUser } from '../_shared/auth.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
-import { boxscoreBatting, scheduleGames } from './feed.ts';
+import { boxscoreBatting, linescoreLive, scheduleGames } from './feed.ts';
 
 const MLB = 'https://statsapi.mlb.com/api/v1';
 const LEAGUES: Record<number, 'AL' | 'NL'> = { 103: 'AL', 104: 'NL' };
@@ -41,8 +41,16 @@ async function knownTeamIds(year: number): Promise<Set<number>> {
   return new Set(rows.map((r) => r.id as number));
 }
 
-async function saveBoxscore(gamePk: number): Promise<number> {
-  const { rows, players } = boxscoreBatting(gamePk, await mlb(`/game/${gamePk}/boxscore`));
+/** Saves a game's box score (everyone's batting line) and its live state (inning, bases, due up). */
+async function saveGame(gamePk: number): Promise<number> {
+  const [boxscore, linescore] = await Promise.all([mlb(`/game/${gamePk}/boxscore`), mlb(`/game/${gamePk}/linescore`)]);
+  const live = linescoreLive(linescore);
+  if (live) {
+    await sql`
+      update mlb_games set live = ${sql.json(JSON.parse(JSON.stringify(live)))}
+      where game_pk = ${gamePk} and live is distinct from ${sql.json(JSON.parse(JSON.stringify(live)))}`;
+  }
+  const { rows, players } = boxscoreBatting(gamePk, boxscore);
   if (!rows.length) return 0;
   await sql.begin(async (tx) => {
     await tx`insert into mlb_players ${tx(players, 'id', 'full_name')} on conflict (id) do nothing`;
@@ -103,7 +111,7 @@ async function poll(year: number, all: boolean) {
   // A few at a time, to be gentle with the MLB API.
   const pending = due.map((r) => r.game_pk as number);
   while (pending.length) {
-    const counts = await Promise.all(pending.splice(0, 4).map(saveBoxscore));
+    const counts = await Promise.all(pending.splice(0, 4).map(saveGame));
     batted += counts.reduce((a, b) => a + b, 0);
   }
   return { year, games: games.length, boxscores: due.length, battingLines: batted };

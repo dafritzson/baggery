@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boxscoreBatting, scheduleGames } from '../supabase/functions/poll-games/feed.ts';
+import { boxscoreBatting, linescoreLive, scheduleGames } from '../supabase/functions/poll-games/feed.ts';
 
 const team = (id: number, score?: number) => ({ team: { id }, score });
 
@@ -93,5 +93,45 @@ describe('box score feed', () => {
       ab: 4, h: 2, doubles: 1, triples: 0, hr: 1, bb: 1, hbp: 0, sf: 0, tb: 7, r: 2, rbi: 3,
     });
     expect(rows[1]).toMatchObject({ mlb_player_id: 3, mlb_team_id: 119, ab: 5, hbp: 1, sf: 1, tb: 0 });
+  });
+});
+
+describe('linescore feed', () => {
+  it('reads the inning, count, runners and who is up', () => {
+    const live = linescoreLive({
+      currentInning: 7,
+      inningState: 'Bottom',
+      isTopInning: false,
+      balls: 2,
+      strikes: 1,
+      outs: 1,
+      offense: {
+        batter: { id: 1, fullName: 'Shohei Ohtani' },
+        onDeck: { id: 2, fullName: 'Mookie Betts' },
+        inHole: { id: 3, fullName: 'Freddie Freeman' },
+        second: { id: 4, fullName: 'Will Smith' },
+        third: { id: 5, fullName: 'Max Muncy' },
+      },
+      defense: { batter: { id: 6, fullName: 'Kyle Schwarber' }, onDeck: { id: 7, fullName: 'Bryce Harper' } },
+    });
+    expect(live).toEqual({
+      inning: 7,
+      inningState: 'Bottom',
+      battingSide: 'home',
+      outs: 1,
+      balls: 2,
+      strikes: 1,
+      bases: [false, true, true],
+      batting: [
+        { id: 1, name: 'Shohei Ohtani' },
+        { id: 2, name: 'Mookie Betts' },
+        { id: 3, name: 'Freddie Freeman' },
+      ],
+      dueUp: [{ id: 6, name: 'Kyle Schwarber' }, { id: 7, name: 'Bryce Harper' }, null],
+    });
+  });
+
+  it('has nothing before the first pitch', () => {
+    expect(linescoreLive({ innings: [], teams: {} })).toBeNull();
   });
 });
