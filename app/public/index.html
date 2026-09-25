@@ -16,6 +16,13 @@
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B3D91" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
     <title>%WEB_TITLE%</title>
+    <!--
+      The home plate from the header. Browsers that take SVG icons use the crisp one; the rest fall
+      back to the favicon.ico Expo builds from assets/images/favicon.png. apple-touch-icon is the
+      iOS Home Screen icon.
+    -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
     <style id="expo-reset">
       /* These styles make the body full-height */

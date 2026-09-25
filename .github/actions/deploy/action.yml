@@ -66,6 +66,9 @@ runs:
         EXPO_PUBLIC_APP_ENV: ${{ inputs.target }}
       run: |
         npx expo export --platform web
+        # Staging's icons (the plate outlined in the staging badge's red) replace the defaults, so
+        # a staging tab is easy to tell from production.
+        if [ -d "env-icons/$EXPO_PUBLIC_APP_ENV" ]; then cp "env-icons/$EXPO_PUBLIC_APP_ENV"/* dist/; fi
         # Vercel Build Output API: static files plus an SPA fallback to index.html.
         mkdir -p .vercel/output
         cp -r dist .vercel/output/static
