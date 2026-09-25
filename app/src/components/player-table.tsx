@@ -47,8 +47,8 @@ const COLUMNS: Column[] = [
   { key: 'rdtb', label: 'RDTB', width: 52, value: () => null, pending: true },
 ];
 
-/** Name column width on narrow screens; wider tables give the extra room to names. */
-const NAME_WIDTH = 156;
+/** Longest the name column gets, as a share of the table, so some stats always show beside it. */
+const MAX_NAME_SHARE = 0.65;
 export const STATS_WIDTH = COLUMNS.reduce((sum, c) => sum + c.width, 0) + Spacing.two;
 const ROW_HEIGHT = 36;
 
@@ -74,7 +74,10 @@ export function PlayerTable({
 }) {
   const theme = useTheme();
   const [tableWidth, setTableWidth] = useState(0);
-  const nameWidth = Math.max(NAME_WIDTH, tableWidth - STATS_WIDTH);
+  // Wide enough for the longest name, and wider when the table has room to spare.
+  const nameColumnWidth = tableWidth
+    ? { minWidth: Math.max(0, tableWidth - STATS_WIDTH), maxWidth: tableWidth * MAX_NAME_SHARE }
+    : null;
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'tb', desc: true });
   const [pressedId, setPressedId] = useState<number | null>(null);
 
@@ -113,7 +116,7 @@ export function PlayerTable({
       type="backgroundElement"
       style={styles.table}
       onLayout={(e) => setTableWidth(e.nativeEvent.layout.width)}>
-      <View style={[styles.nameColumn, { width: nameWidth, borderRightColor: theme.border }]}>
+      <View style={[styles.nameColumn, nameColumnWidth, { borderRightColor: theme.border }]}>
         <Pressable onPress={() => sortBy('name')} style={[styles.header, styles.nameCell, { borderBottomColor: theme.border }]}>
           <ThemedText type="smallBold" themeColor={sort.key === 'name' ? 'text' : 'textSecondary'} style={styles.headerText}>
             Name{arrow('name')}
