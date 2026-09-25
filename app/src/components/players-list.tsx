@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
+import { expectedTb, regressedSlg, regressedTb } from '@core/stats.ts';
+
 import { type PlayerRow, PlayerTable } from '@/components/player-table';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -15,17 +17,23 @@ export function availablePlayers(data: SeasonData): (PlayerRow & { mlbTeamId: nu
     .filter((p) => p.on_postseason_roster && !taken.has(p.mlb_player_id) && !data.mlbTeams.get(p.mlb_team_id)?.eliminated)
     .map((p) => {
       const team = data.mlbTeams.get(p.mlb_team_id);
+      const bye = team?.has_bye ?? false;
+      const tb = p.regular_season_tb;
+      const g = p.games_played;
       return {
         id: p.mlb_player_id,
         mlbTeamId: p.mlb_team_id,
         name: data.players.get(p.mlb_player_id)?.full_name ?? `Player ${p.mlb_player_id}`,
         team: team?.abbreviation ?? '',
         wins: team?.wins ?? null,
-        bye: team?.has_bye ?? false,
+        bye,
         pa: p.plate_appearances,
         slg: p.slg,
         opsPlus: p.ops_plus,
-        tb: p.regular_season_tb,
+        tb,
+        rdslg: p.at_bats === null ? null : regressedSlg(tb, p.at_bats),
+        tbExpected: g === null ? null : expectedTb(tb, g, bye),
+        rdtb: g === null ? null : regressedTb(tb, g, bye),
       };
     });
 }
