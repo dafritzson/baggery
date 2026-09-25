@@ -67,12 +67,15 @@ export function PlayersList({
   onSelect,
   selectedId,
   fill = false,
+  onTableWidth,
 }: {
   data: SeasonData;
   onSelect?: (playerId: number) => void;
   selectedId?: number | null;
   /** Fill the parent's height, scrolling the table inside it rather than with the page. */
   fill?: boolean;
+  /** The width the table needs for every chosen column, e.g. to size the list around it. */
+  onTableWidth?: (width: number) => void;
 }) {
   const theme = useTheme();
   const openPlayer = useOpenPlayer();
@@ -127,7 +130,7 @@ export function PlayersList({
       {shown.length > 0 &&
         (fill && !contained ? (
           <ScrollView style={styles.fill}>
-            <PlayerTable rows={shown} onSelect={onSelect ?? openPlayer} selectedId={selectedId} columns={columns} headerAction={columnsMenu} />
+            <PlayerTable rows={shown} onSelect={onSelect ?? openPlayer} selectedId={selectedId} columns={columns} headerAction={columnsMenu} onNaturalWidth={onTableWidth} />
           </ScrollView>
         ) : (
           <PlayerTable
@@ -137,6 +140,7 @@ export function PlayersList({
             columns={columns}
             headerAction={columnsMenu}
             contained={contained}
+            onNaturalWidth={onTableWidth}
             style={contained ? (fill ? styles.shrink : { maxHeight: Math.max(320, height - 200) }) : undefined}
           />
         ))}
