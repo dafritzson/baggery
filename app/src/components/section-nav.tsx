@@ -27,6 +27,12 @@ const SECTIONS: Section[] = [
     matches: (p) => p === '/' || p.startsWith('/draft'),
   },
   {
+    label: 'Standings',
+    href: '/standings',
+    icon: { ios: 'trophy', android: 'leaderboard', web: 'leaderboard' },
+    matches: (p) => p.startsWith('/standings'),
+  },
+  {
     label: 'Games',
     href: '/games',
     icon: { ios: 'baseball', android: 'sports_baseball', web: 'sports_baseball' },
@@ -139,7 +145,7 @@ const styles = StyleSheet.create({
   bottomTab: {
     alignItems: 'center',
     gap: Spacing.half,
-    minWidth: 84,
+    minWidth: 76,
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
     borderRadius: 999,
