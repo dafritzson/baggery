@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 import Svg, { Path, Polygon, Polyline, Rect } from 'react-native-svg';
 
-import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 /** The diamond in a 100×100 box, counter-clockwise like a runner: home, first, second, third. */
@@ -23,6 +22,8 @@ const RAMP = 0.8;
 /** How far behind the head the tail runs, in seconds; at full speed that's this share of a lap. */
 const TRAIL = 0.45;
 const TOP_SPEED = LAP / LAP_TIME;
+/** Loads quicker than this (switching tabs, say) show nothing rather than a flash of the loader. */
+const SHOW_AFTER_MS = 400;
 
 /** Distance run after `t` seconds: speeding up evenly from a standstill, then steady. */
 function distanceRun(t: number): number {
@@ -50,16 +51,26 @@ function runnerPoints(tail: number, head: number): string {
 }
 
 /**
- * Loading indicator: a line runs the bases from home plate. It starts as a dot and stretches to
- * full length as it picks up speed (the tail trails the head by a fixed time), then keeps circling.
+ * Loading indicator, centered on the page: a line runs the bases from home plate. It starts as a
+ * dot and stretches to full length as it picks up speed (the tail trails the head by a fixed time),
+ * then keeps circling. It only appears if loading takes a moment.
  */
-export function Loader({ size = 56 }: { size?: number }) {
+export function Loader({ size = 112 }: { size?: number }) {
   const theme = useTheme();
   const reducedMotion = useReducedMotion();
+  const { height } = useWindowDimensions();
+  // Tall enough that, starting under the header, its middle is about the middle of the screen.
+  const box = { minHeight: height * 0.6 };
+  const [shown, setShown] = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
-    if (reducedMotion) return;
+    const timer = setTimeout(() => setShown(true), SHOW_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!shown || reducedMotion) return;
     let frame = 0;
     let start: number | null = null;
     const tick = (now: number) => {
@@ -69,7 +80,9 @@ export function Loader({ size = 56 }: { size?: number }) {
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [reducedMotion]);
+  }, [shown, reducedMotion]);
+
+  if (!shown) return <View style={[styles.wrap, box]} />;
 
   // Reduced motion: a still runner rounding first.
   const head = reducedMotion ? SIDE * 1.3 : distanceRun(elapsed);
@@ -77,7 +90,7 @@ export function Loader({ size = 56 }: { size?: number }) {
   const outline = `M${BASES.map(([x, y]) => `${x},${y}`).join(' L')} Z`;
 
   return (
-    <View style={styles.wrap} accessible accessibilityRole="progressbar" accessibilityLabel="Loading">
+    <View style={[styles.wrap, box]} accessible accessibilityRole="progressbar" accessibilityLabel="Loading">
       <Svg width={size} height={size} viewBox="0 0 100 100">
         <Path d={outline} fill="none" stroke={theme.textSecondary} strokeOpacity={0.45} strokeWidth={3} strokeLinejoin="round" />
         {BASES.slice(1).map(([x, y]) => (
@@ -113,6 +126,5 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: Spacing.six,
   },
 });
