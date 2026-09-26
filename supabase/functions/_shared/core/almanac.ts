@@ -321,3 +321,70 @@ export function almanac(input: AlmanacInput, top = 10): Almanac {
     playersByManager,
   };
 }
+
+/** One round both managers played: their bags, and who scored more. */
+export interface RoundDuel {
+  year: number;
+  round: FantasyRound;
+  a: number;
+  b: number;
+  /** 'a', 'b', or null for a tie. */
+  winner: 'a' | 'b' | null;
+}
+
+/** Two managers compared. There are no direct matchups in the format, so they meet two ways. */
+export interface HeadToHead {
+  a: ManagerCareer;
+  b: ManagerCareer;
+  /** Seasons both played: who finished higher. */
+  seasons: { year: number; a: TeamSeason; b: TeamSeason; winner: 'a' | 'b' | null }[];
+  /** Rounds both were alive in: who scored more. */
+  rounds: RoundDuel[];
+  record: { seasons: { a: number; b: number }; rounds: { a: number; b: number; ties: number } };
+  /** Players both have rostered, with the bags each got from them, the most combined first. */
+  sharedPlayers: { playerId: PlayerId; a: number; b: number; aYears: number[]; bYears: number[] }[];
+}
+
+export function headToHead(al: Almanac, aKey: string, bKey: string): HeadToHead | null {
+  const a = al.careers.find((c) => c.key === aKey);
+  const b = al.careers.find((c) => c.key === bKey);
+  if (!a || !b || aKey === bKey) return null;
+  const pick = (x: number, y: number, lowerWins: boolean): 'a' | 'b' | null =>
+    x === y ? null : (x < y) === lowerWins ? 'a' : 'b';
+
+  const seasons: HeadToHead['seasons'] = [];
+  const rounds: RoundDuel[] = [];
+  for (const ta of al.teamSeasons.filter((t) => t.managerKey === aKey)) {
+    const tb = al.teamSeasons.find((t) => t.managerKey === bKey && t.year === ta.year);
+    if (!tb) continue;
+    seasons.push({ year: ta.year, a: ta, b: tb, winner: pick(ta.place, tb.place, true) });
+    for (const ra of ta.rounds) {
+      const rb = tb.rounds.find((r) => r.round === ra.round);
+      if (rb) rounds.push({ year: ta.year, round: ra.round, a: ra.tb, b: rb.tb, winner: pick(ra.tb, rb.tb, false) });
+    }
+  }
+  seasons.sort((x, y) => x.year - y.year);
+  rounds.sort((x, y) => x.year - y.year || x.round - y.round);
+
+  const pa = al.playersByManager.get(aKey) ?? [];
+  const pb = al.playersByManager.get(bKey) ?? [];
+  const sharedPlayers = pa
+    .flatMap((x) => {
+      const y = pb.find((p) => p.playerId === x.playerId);
+      return y ? [{ playerId: x.playerId, a: x.tb, b: y.tb, aYears: x.years, bYears: y.years }] : [];
+    })
+    .sort((x, y) => y.a + y.b - (x.a + x.b));
+
+  const count = (list: { winner: 'a' | 'b' | null }[], w: 'a' | 'b' | null) => list.filter((x) => x.winner === w).length;
+  return {
+    a,
+    b,
+    seasons,
+    rounds,
+    record: {
+      seasons: { a: count(seasons, 'a'), b: count(seasons, 'b') },
+      rounds: { a: count(rounds, 'a'), b: count(rounds, 'b'), ties: count(rounds, null) },
+    },
+    sharedPlayers,
+  };
+}

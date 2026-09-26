@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { type AlmanacInput, type AlmanacStat, almanac } from '../supabase/functions/_shared/core/almanac.ts';
+import { type AlmanacInput, type AlmanacStat, almanac, headToHead } from '../supabase/functions/_shared/core/almanac.ts';
 import type { GameType } from '../supabase/functions/_shared/core/types.ts';
 
 const START: Record<GameType, string> = {
@@ -93,5 +93,22 @@ describe('almanac', () => {
     expect(a.redrafts).toEqual([
       { managerKey: 'a', year: 2021, draftNumber: 2, add: 4, drop: 1, addedTb: 15, droppedTb: 3 },
     ]);
+  });
+});
+
+describe('headToHead', () => {
+  const a = almanac(input());
+
+  it('compares the seasons and rounds both managers played', () => {
+    const h = headToHead(a, 'a', 'b')!;
+    expect(h.seasons.map((s) => [s.year, s.winner])).toEqual([[2021, 'a']]);
+    // Round 1: Bill 8 beat Alex 7; round 2: Alex 6 beat Bill 3. Bill wasn't in round 3.
+    expect(h.rounds.map((r) => [r.round, r.a, r.b, r.winner])).toEqual([[1, 7, 8, 'b'], [2, 6, 3, 'a']]);
+    expect(h.record).toEqual({ seasons: { a: 1, b: 0 }, rounds: { a: 1, b: 1, ties: 0 } });
+  });
+
+  it('needs two different managers who have played', () => {
+    expect(headToHead(a, 'a', 'a')).toBeNull();
+    expect(headToHead(a, 'a', 'nobody')).toBeNull();
   });
 });

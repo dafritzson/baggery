@@ -241,9 +241,11 @@ const LOOKS = {
 const styles = StyleSheet.create({
   headerTabs: { flexDirection: 'row', alignSelf: 'stretch', gap: Spacing.three, marginLeft: Spacing.three },
   headerTab: { justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', paddingBottom: Spacing.three },
+  // Kept inside the screen's side margins: with five sections, the tabs shrink to fit a phone.
+  bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', paddingBottom: Spacing.three, paddingHorizontal: Spacing.two },
   bottomPill: {
     flexDirection: 'row',
+    maxWidth: '100%',
     gap: Spacing.one,
     padding: 5,
     borderRadius: 999,
@@ -253,9 +255,10 @@ const styles = StyleSheet.create({
   bottomTab: {
     alignItems: 'center',
     gap: Spacing.half,
-    minWidth: 76,
+    flexShrink: 1,
+    minWidth: 64,
     paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.three,
+    paddingHorizontal: 6,
     borderRadius: 999,
   },
   bottomLabel: { fontSize: 11, lineHeight: 14 },
