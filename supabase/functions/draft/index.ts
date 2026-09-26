@@ -29,6 +29,8 @@ interface DraftRow {
   id: string;
   season_id: string;
   year: number;
+  /** The season's status: a finished season's drafts are history and can't be changed. */
+  season_status: 'setup' | 'active' | 'complete';
   number: number;
   kind: 'initial' | 'redraft';
   status: 'scheduled' | 'live' | 'complete';
@@ -49,7 +51,7 @@ interface Ctx {
 
 async function load(tx: Tx, draftId: string): Promise<Ctx> {
   const [draft] = await tx<DraftRow[]>`
-    select d.id, d.season_id, s.year, d.number, d.kind, d.status, d.pick_order, d.rounds, d.locks_at
+    select d.id, d.season_id, s.year, s.status as season_status, d.number, d.kind, d.status, d.pick_order, d.rounds, d.locks_at
     from drafts d join seasons s on s.id = d.season_id
     where d.id = ${draftId}
     for update of d`;
@@ -256,6 +258,7 @@ serve(async (req) => {
       }
       case 'undo': {
         commissionerOnly();
+        if (ctx.draft.season_status === 'complete') throw new UserError('That season is over, so its drafts can’t be changed.');
         const [last] = await tx`
           delete from draft_actions where draft_id = ${ctx.draft.id}
           and action_number = (select max(action_number) from draft_actions where draft_id = ${ctx.draft.id})
