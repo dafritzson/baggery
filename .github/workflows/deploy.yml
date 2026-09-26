@@ -14,6 +14,8 @@ jobs:
     concurrency:
       group: deploy-staging
       cancel-in-progress: false
+    outputs:
+      url: ${{ steps.vercel.outputs.url }}
     environment:
       name: staging
       url: ${{ steps.vercel.outputs.url }}
@@ -54,6 +56,28 @@ jobs:
                 gh run cancel "$id"
               fi
             done
+
+  notify:
+    # Comment on the merged PR with the staging URL and a link to this run, where "Review
+    # deployments" approves production. The comment is a notification in the GitHub app.
+    needs: staging
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Comment on the merged PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          STAGING_URL: ${{ needs.staging.outputs.url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          pr=$(gh api "repos/$GH_REPO/commits/$GITHUB_SHA/pulls" --jq '.[0].number // empty')
+          if [ -z "$pr" ]; then echo "No PR for $GITHUB_SHA"; exit 0; fi
+          gh pr comment "$pr" --body "Deployed to staging: $STAGING_URL
+
+          **Production is waiting for approval:** [open the deploy run]($RUN_URL), tap **Review deployments**, tick **production**, then **Approve and deploy**."
 
   production:
     needs: staging
