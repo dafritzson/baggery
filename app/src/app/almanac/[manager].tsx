@@ -1,11 +1,12 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import type { ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { TeamSeason } from '@core/almanac.ts';
 
 import { AboveAverageChart, managerColor } from '@/components/almanac-charts';
-import { BackButton } from '@/components/back-button';
+import { BackButton, goBack } from '@/components/back-button';
 import { Card } from '@/components/card';
 import { FinishChart, RadarChart } from '@/components/duel';
 import { ordinal } from '@/components/manager-link';
@@ -30,7 +31,7 @@ export default function ManagerScreen() {
 
   return (
     <Screen>
-      <BackButton label="Almanac" to="/almanac" />
+      {!(data && key && data.almanac.careers.some((c) => c.key === key)) && <BackButton label="Almanac" to="/almanac" />}
       {error && <ThemedText themeColor="danger">{error}</ThemedText>}
       {!data && !error && <ThemedText themeColor="textSecondary">Loading every season…</ThemedText>}
       {data && !key && <ThemedText>No manager called {manager}.</ThemedText>}
@@ -86,6 +87,14 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
       {/* A trading card: their color, initial, trophies and headline numbers. */}
       <View style={[styles.hero, { backgroundColor: color, boxShadow: `0 10px 28px ${color}55` }]}>
         <View style={styles.heroTop}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to the Almanac"
+            hitSlop={12}
+            onPress={() => goBack('/almanac')}
+            style={({ pressed }) => [styles.heroBack, pressed && { opacity: 0.6 }]}>
+            <SymbolView name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back_ios_new' }} size={16} tintColor="#fff" />
+          </Pressable>
           <View style={styles.heroInitial}>
             <ThemedText style={[styles.heroInitialText, { color }]}>{name[0]}</ThemedText>
           </View>
@@ -262,6 +271,7 @@ const styles = StyleSheet.create({
   compare: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, alignItems: 'baseline' },
   hero: { borderRadius: Radius.lg, padding: Spacing.three, gap: Spacing.three },
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  heroBack: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.18)', alignItems: 'center', justifyContent: 'center', marginRight: -Spacing.one },
   heroInitial: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   heroInitialText: { fontSize: 32, lineHeight: 40, fontWeight: '800' },
   heroName: { color: '#fff', fontSize: 30, lineHeight: 36, fontWeight: '800' },
