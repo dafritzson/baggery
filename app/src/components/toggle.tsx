@@ -42,6 +42,6 @@ export function Toggle<T>({
 const styles = StyleSheet.create({
   toggle: { flexDirection: 'row', borderRadius: Radius.md, padding: 2 },
   item: { paddingHorizontal: Spacing.two, paddingVertical: 2, borderRadius: Radius.sm },
-  itemLarge: { paddingHorizontal: Spacing.three - 4, paddingVertical: Spacing.one },
+  itemLarge: { paddingVertical: Spacing.one },
   text: { fontSize: 13 },
 });

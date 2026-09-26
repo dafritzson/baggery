@@ -14,9 +14,9 @@ export function gameDay(game: GameInfo): string {
   return game.officialDate ?? dayKey(game.start);
 }
 
-/** "Wed, 9/30", or "Today · Tue, 9/29". */
+/** "Wed, 9/30", or "Today · 9/29" (short enough for the Games tab's chip beside its toggle on phones). */
 export function dayLabel(key: string, today: string): string {
   const [y, m, d] = key.split('-').map(Number);
-  const date = new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
-  return key === today ? `Today · ${date}` : date;
+  if (key === today) return `Today · ${m}/${d}`;
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
 }

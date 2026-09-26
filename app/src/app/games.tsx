@@ -109,9 +109,10 @@ export default function GamesScreen() {
                 onChange={showDay}
               />
             )}
+            {/* The chip says "Championship", not "Championship Series", to fit beside the toggle on phones. */}
             {view === 'round' && round && (
               <MenuChip
-                label={SERIES.find((r) => r.gameType === round)?.name ?? ''}
+                label={round === 'L' ? 'Championship' : (SERIES.find((r) => r.gameType === round)?.name ?? '')}
                 title="round"
                 options={rounds.map((r) => ({ value: r.gameType, label: r.name }))}
                 value={round}
@@ -509,7 +510,7 @@ function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; gam
 
 const styles = StyleSheet.create({
   controls: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.two },
-  chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
+  chip: { paddingHorizontal: Spacing.two + 4, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
   column: { gap: Spacing.three },
   row: { flexDirection: 'row', gap: Spacing.three },
   cell: { flex: 1, minWidth: 0 },
