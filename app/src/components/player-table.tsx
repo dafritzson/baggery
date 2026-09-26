@@ -1,10 +1,13 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
+import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { type Range, thresholds } from '@/lib/column-filters';
 
 export interface PlayerRow {
   id: number;
@@ -50,7 +53,12 @@ export interface Column {
   format?: (value: number) => string;
   /** Shown until someone picks their own columns. */
   default?: boolean;
+  /** A yes/no column (value 1 or 0): filtered by these two choices rather than by bounds. */
+  flag?: { yes: string; no: string };
 }
+
+/** Bounds per column, from the filter menus in the header. */
+export type ColumnFilters = Partial<Record<ColumnKey, Range>>;
 
 /** ".688", or "1.000" and up. */
 function formatRate(value: number): string {
@@ -72,7 +80,7 @@ const rate = (key: ColumnKey, label: string, title: string, width = 52): Column 
 
 export const COLUMNS: Column[] = [
   { ...count('wins', 'Wins', 'Team wins', 50), default: true },
-  { key: 'bye', label: 'Bye', title: 'Team has a Wild Card bye', width: 44, value: (r) => (r.bye ? 1 : 0), format: (v) => (v ? '✓' : ''), default: true },
+  { key: 'bye', label: 'Bye', title: 'Team has a Wild Card bye', width: 44, value: (r) => (r.bye ? 1 : 0), format: (v) => (v ? '✓' : ''), default: true, flag: { yes: 'Bye', no: 'No bye' } },
   count('g', 'G', 'Games'),
   { ...count('pa', 'PA', 'Plate appearances', 44), default: true },
   count('ab', 'AB', 'At-bats', 44),
@@ -126,6 +134,9 @@ export function PlayerTable({
   columns: visible = DEFAULT_COLUMNS,
   contained = false,
   headerAction,
+  filters,
+  onFiltersChange,
+  filterSource = rows,
   onNaturalWidth,
   style,
 }: {
@@ -145,6 +156,14 @@ export function PlayerTable({
    * wide the name column gets.
    */
   headerAction?: ReactNode;
+  /**
+   * With `onFiltersChange`, each stat column gets a small filter menu in its header's corner. The
+   * table doesn't filter its rows itself: pass the ones that pass.
+   */
+  filters?: ColumnFilters;
+  onFiltersChange?: (filters: ColumnFilters) => void;
+  /** The rows the filter menus take their round numbers from (e.g. before filtering); `rows` if not given. */
+  filterSource?: PlayerRow[];
   style?: ViewStyle;
   /** The width the table needs to show every chosen column without scrolling sideways. */
   onNaturalWidth?: (width: number) => void;
@@ -162,6 +181,11 @@ export function PlayerTable({
   const nameColumnWidth = tableWidth && !box ? { maxWidth: tableWidth * MAX_NAME_SHARE } : null;
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'tb', desc: true });
   const [pressedId, setPressedId] = useState<number | null>(null);
+  // The bounds each filter menu offers, from every row it could filter.
+  const bounds = useMemo(
+    () => new Map(COLUMNS.map((c) => [c.key, c.flag ? [] : thresholds(filterSource.map(c.value))])),
+    [filterSource],
+  );
 
   const sorted = useMemo(() => {
     const column = COLUMNS.find((c) => c.key === sort.key);
@@ -204,15 +228,30 @@ export function PlayerTable({
     <View style={styles.stats}>
       <View style={[styles.header, styles.cells, { borderBottomColor: theme.border }, box && [sticky({ top: 0 }, 1), fill]]}>
         {columns.map((c) => (
-          <Pressable key={c.key} onPress={() => sortBy(c.key)} style={[styles.cell, { minWidth: c.width, flexGrow: c.width, flexBasis: c.width }]}>
-            <ThemedText
-              type="smallBold"
-              numberOfLines={1}
-              themeColor={sort.key === c.key ? 'text' : 'textSecondary'}
-              style={styles.headerText}>
-              {c.label}{arrow(c.key)}
-            </ThemedText>
-          </Pressable>
+          <View key={c.key} style={{ minWidth: c.width, flexGrow: c.width, flexBasis: c.width }}>
+            <Pressable onPress={() => sortBy(c.key)} style={styles.cell}>
+              <ThemedText
+                type="smallBold"
+                numberOfLines={1}
+                themeColor={sort.key === c.key || filters?.[c.key] ? 'text' : 'textSecondary'}
+                style={[styles.headerText, onFiltersChange && styles.headerTextUnderFilter]}>
+                {c.label}{arrow(c.key)}
+              </ThemedText>
+            </Pressable>
+            {onFiltersChange && (
+              <FilterMenu
+                column={c}
+                bounds={bounds.get(c.key) ?? []}
+                range={filters?.[c.key]}
+                onChange={(range) => {
+                  const next = { ...filters };
+                  if (range) next[c.key] = range;
+                  else delete next[c.key];
+                  onFiltersChange(next);
+                }}
+              />
+            )}
+          </View>
         ))}
       </View>
       {sorted.map((r, i) => (
@@ -274,6 +313,83 @@ export function PlayerTable({
   );
 }
 
+/**
+ * A column's filter: a small funnel in the header's top right corner, filled in when it's on. The
+ * menu offers round bounds ("At least 300", "At most 300"), or for a yes/no column its two answers.
+ */
+function FilterMenu({
+  column: c,
+  bounds,
+  range,
+  onChange,
+}: {
+  column: Column;
+  bounds: number[];
+  range: Range | undefined;
+  /** Undefined clears the filter. */
+  onChange: (range: Range | undefined) => void;
+}) {
+  const theme = useTheme();
+  const format = (v: number) => (c.format ? c.format(v) : String(v));
+  // Sets one bound (or clears it when it's already the one set), keeping the other.
+  const set = (side: 'min' | 'max', value: number) => {
+    const next = { min: range?.min ?? null, max: range?.max ?? null, [side]: range?.[side] === value ? null : value };
+    onChange(next.min === null && next.max === null ? undefined : next);
+  };
+  if (!c.flag && !bounds.length) return null;
+  const item = (key: string, title: string, on: boolean, onSelect: () => void) => (
+    <DropdownMenu.CheckboxItem key={key} className="menu-item" value={on ? 'on' : 'off'} onValueChange={onSelect}>
+      <DropdownMenu.ItemTitle>{title}</DropdownMenu.ItemTitle>
+      <DropdownMenu.ItemIndicator className="menu-check">✓</DropdownMenu.ItemIndicator>
+    </DropdownMenu.CheckboxItem>
+  );
+  return (
+    <View style={styles.filter}>
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger className="menu-trigger menu-trigger-chip" aria-label={`Filter ${c.title}`}>
+          <View style={styles.filterButton}>
+            <FunnelIcon color={range ? theme.accent : theme.textSecondary} filled={!!range} />
+          </View>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content className="menu-content menu-content-narrow menu-content-scroll" align="end" sideOffset={4} collisionPadding={8}>
+          <DropdownMenu.Label className="menu-label menu-label-heading">{c.title}</DropdownMenu.Label>
+          {c.flag
+            ? [item('yes', c.flag.yes, range?.min === 1, () => onChange(range?.min === 1 ? undefined : { min: 1, max: null })),
+               item('no', c.flag.no, range?.max === 0, () => onChange(range?.max === 0 ? undefined : { min: null, max: 0 }))]
+            : [
+                ...bounds.map((b) => item(`min${b}`, `At least ${format(b)}`, range?.min === b, () => set('min', b))),
+                <DropdownMenu.Separator key="sep" className="menu-separator" />,
+                ...bounds.map((b) => item(`max${b}`, `At most ${format(b)}`, range?.max === b, () => set('max', b))),
+              ]}
+          {range && (
+            <>
+              <DropdownMenu.Separator className="menu-separator" />
+              <DropdownMenu.Item key="clear" className="menu-item" onSelect={() => onChange(undefined)}>
+                <DropdownMenu.ItemTitle>Clear filter</DropdownMenu.ItemTitle>
+              </DropdownMenu.Item>
+            </>
+          )}
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+    </View>
+  );
+}
+
+/** A funnel: "filter". */
+function FunnelIcon({ color, filled }: { color: string; filled: boolean }) {
+  return (
+    <Svg width={9} height={9} viewBox="0 0 10 10">
+      <Path
+        d="M1 1.5h8L6 5.2V8.5L4 9.3V5.2Z"
+        stroke={color}
+        strokeWidth={1.2}
+        strokeLinejoin="round"
+        fill={filled ? color : 'none'}
+      />
+    </Svg>
+  );
+}
+
 const styles = StyleSheet.create({
   table: { flexDirection: 'row', borderRadius: Radius.lg, overflow: 'hidden' },
   // Web: one box that scrolls both ways (RN's overflow types don't include 'auto').
@@ -284,6 +400,10 @@ const styles = StyleSheet.create({
   header: { height: ROW_HEIGHT, borderBottomWidth: StyleSheet.hairlineWidth },
   row: { height: ROW_HEIGHT },
   headerText: { fontSize: 13 },
+  // Clear of the filter funnel in the corner above it.
+  headerTextUnderFilter: { marginTop: 6 },
+  filter: { position: 'absolute', top: 0, right: 0 },
+  filterButton: { width: 16, height: 14, alignItems: 'center', justifyContent: 'center' },
   nameHeader: { flexDirection: 'row', alignItems: 'center', paddingLeft: Spacing.one },
   nameSort: { flex: 1, alignSelf: 'stretch' },
   nameSortAfterAction: { paddingLeft: Spacing.one },

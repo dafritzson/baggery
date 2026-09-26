@@ -3,11 +3,12 @@ import { Platform, Pressable, ScrollView, StyleSheet, TextInput, View, useWindow
 import Svg, { Circle, Path } from 'react-native-svg';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
-import { COLUMNS, type ColumnKey, DEFAULT_COLUMNS, type PlayerRow, PlayerTable } from '@/components/player-table';
+import { COLUMNS, type Column, type ColumnFilters, type ColumnKey, DEFAULT_COLUMNS, type PlayerRow, PlayerTable } from '@/components/player-table';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
+import { type Range, filterRows } from '@/lib/column-filters';
 import { useOpenPlayer } from '@/lib/player';
 import { usePlayerColumns } from '@/lib/player-columns';
 import { projection } from '@/lib/projections';
@@ -153,6 +154,7 @@ export function PlayersList({
   const contained = Platform.OS === 'web' && wide;
   const [query, setQuery] = useState('');
   const [teamFilter, setTeamFilter] = useState<number | null>(null);
+  const [filters, setFilters] = useState<ColumnFilters>({});
 
   const shownBoard = useMemo(() => board ?? currentBoard(data), [board, data]);
   const available = useMemo(() => availablePlayers(data, shownBoard), [data, shownBoard]);
@@ -160,7 +162,20 @@ export function PlayersList({
   const shown = available.filter(
     (p) => (teamFilter === null || p.mlbTeamId === teamFilter) && (!q || p.name.toLowerCase().includes(q)),
   );
-  const columnsMenu = <ColumnsMenu value={columns} onChange={setColumns} />;
+  // Only the filters on columns in view: hiding a column drops its filter rather than hiding players for a reason you can't see.
+  const active = COLUMNS.filter((c) => columns.includes(c.key) && filters[c.key]);
+  const filtered = filterRows(shown, active.map((c) => ({ value: c.value, range: filters[c.key]! })));
+  const tableProps = {
+    rows: filtered,
+    onSelect: onSelect ?? openPlayer,
+    selectedId,
+    columns,
+    headerAction: <ColumnsMenu value={columns} onChange={setColumns} />,
+    filters,
+    onFiltersChange: setFilters,
+    filterSource: available,
+    onNaturalWidth: onTableWidth,
+  };
   const mlbTeams = [...data.mlbTeams.values()]
     .filter((t) => shownBoard.teamIds.has(t.id))
     .sort((a, b) => a.abbreviation.localeCompare(b.abbreviation));
@@ -196,28 +211,42 @@ export function PlayersList({
       {data.pool.length === 0 && (
         <ThemedText themeColor="textSecondary">The player pool is empty. The commissioner needs to sync it from MLB.</ThemedText>
       )}
+      {active.length > 0 && (
+        <View style={styles.filterLine}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.filterSummary} numberOfLines={1}>
+            {filtered.length} of {shown.length} · {active.map((c) => describeFilter(c, filters[c.key]!)).join(' · ')}
+          </ThemedText>
+          <Pressable onPress={() => setFilters({})} hitSlop={8} accessibilityRole="button">
+            <ThemedText type="smallBold" themeColor="accent">Clear filters</ThemedText>
+          </Pressable>
+        </View>
+      )}
+      {/* Kept while filters hide every row, so their menus in its header can undo them. */}
       {shown.length > 0 &&
         (fill && !contained ? (
           <ScrollView style={styles.fill}>
-            <PlayerTable rows={shown} onSelect={onSelect ?? openPlayer} selectedId={selectedId} columns={columns} headerAction={columnsMenu} onNaturalWidth={onTableWidth} />
+            <PlayerTable {...tableProps} />
           </ScrollView>
         ) : (
           <PlayerTable
-            rows={shown}
-            onSelect={onSelect ?? openPlayer}
-            selectedId={selectedId}
-            columns={columns}
-            headerAction={columnsMenu}
+            {...tableProps}
             contained={contained}
-            onNaturalWidth={onTableWidth}
             style={contained ? (fill ? styles.shrink : { maxHeight: Math.max(320, height - 200) }) : undefined}
           />
         ))}
-      {shown.length === 0 && data.pool.length > 0 && (
+      {filtered.length === 0 && data.pool.length > 0 && (
         <ThemedText type="small" themeColor="textSecondary">No matching players.</ThemedText>
       )}
     </View>
   );
+}
+
+/** "PA ≥ 300", "SLG .400–.500", "Bye". */
+function describeFilter(c: Column, range: Range): string {
+  if (c.flag) return range.min === 1 ? c.flag.yes : c.flag.no;
+  const format = (v: number) => (c.format ? c.format(v) : String(v));
+  if (range.min !== null && range.max !== null) return `${c.label} ${format(range.min)}–${format(range.max)}`;
+  return range.min !== null ? `${c.label} ≥ ${format(range.min)}` : `${c.label} ≤ ${format(range.max!)}`;
 }
 
 /** A small icon in the table's header with a checklist of its columns; stays open while you tick. */
@@ -320,6 +349,8 @@ const styles = StyleSheet.create({
   clearText: { fontSize: 12, lineHeight: 14 },
   // A ScrollView shrinks by default; in a `fill` list the tall table would squash the pills.
   chipRow: { flexGrow: 0, flexShrink: 0 },
+  filterLine: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  filterSummary: { flexShrink: 1 },
   chips: { gap: Spacing.one },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
 });
