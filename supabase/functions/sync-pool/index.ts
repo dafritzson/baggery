@@ -1,7 +1,8 @@
 // Rebuilds a season's draft pool from the MLB Stats API: every hitter on the active
 // roster of a postseason team, with regular-season stats (TB for autodraft; PA, AB, games, SLG,
 // OPS+ and the other counts for the draft room) and each team's wins and Wild Card bye.
-// Commissioner only.
+// Commissioner only. For an imported past season it fills the pool for the Draft and Research
+// tabs from that year's end-of-season rosters, for the postseason teams the import stored.
 //
 // POST { seasonId, teamIds?: number[] }  (teamIds overrides the clinched-teams lookup)
 
@@ -103,9 +104,14 @@ interface PoolPlayer {
   season: Counts;
 }
 
-async function activeHitters(teamId: number, year: number): Promise<PoolPlayer[]> {
+/**
+ * A team's active hitters, today or on `date` (YYYY-MM-DD). Without a date, a past season's
+ * "active" roster is everyone who was active at any point that year, so past seasons pass one.
+ */
+async function activeHitters(teamId: number, year: number, date: string | null): Promise<PoolPlayer[]> {
   const data = await mlb(
-    `/teams/${teamId}/roster?rosterType=active&season=${year}&hydrate=person(stats(type=season,season=${year},group=hitting))`,
+    `/teams/${teamId}/roster?rosterType=active&season=${year}${date ? `&date=${date}` : ''}` +
+      `&hydrate=person(stats(type=season,season=${year},group=hitting))`,
   );
   // deno-lint-ignore no-explicit-any
   return data.roster
@@ -135,9 +141,20 @@ serve(async (req) => {
   if (!seasonId) throw new UserError('seasonId is required.');
   await requireCommissioner(seasonId, userId);
 
-  const [season] = await sql`select year, status from seasons where id = ${seasonId}`;
+  const [season] = await sql`
+    select year, status, imported_at, year = (select max(year) from seasons s where s.league_id = seasons.league_id) as latest
+    from seasons where id = ${seasonId}`;
   if (!season) throw new UserError('Season not found.', 404);
   const year: number = season.year;
+  // An imported season already knows its postseason teams.
+  const importedTeamIds = season.imported_at
+    ? (await sql`select mlb_team_id from season_mlb_teams where season_id = ${seasonId}`).map((r) => r.mlb_team_id as number)
+    : [];
+  // Its rosters as they were the day before the Wild Card started, when Draft 1 was made.
+  const [draft1] = season.imported_at
+    ? await sql`select to_char(locks_at - interval '1 day', 'YYYY-MM-DD') as day from drafts where season_id = ${seasonId} and number = 1`
+    : [];
+  const rosterDate: string | null = draft1?.day ?? null;
 
   const teamsData = await mlb(`/teams?sportId=1&season=${year}`);
   // deno-lint-ignore no-explicit-any
@@ -152,10 +169,19 @@ serve(async (req) => {
   const table = await standings(year, leagueOf);
   const standingOf = new Map(table.map((t) => [t.teamId, t]));
   const byes = byeTeamIds(table);
-  const playoffTeamIds = teamIds?.length ? teamIds : table.filter((t) => t.clinched).map((t) => t.teamId);
+  const playoffTeamIds = teamIds?.length
+    ? teamIds
+    : importedTeamIds.length
+      ? importedTeamIds
+      : table.filter((t) => t.clinched).map((t) => t.teamId);
   if (!playoffTeamIds.length) throw new UserError('No teams have clinched a postseason spot yet.');
 
-  const players = (await Promise.all(playoffTeamIds.map((id) => activeHitters(id, year)))).flat();
+  // One entry per player, in case a player turns up on two teams' rosters.
+  const players = [
+    ...new Map(
+      (await Promise.all(playoffTeamIds.map((id) => activeHitters(id, year, rosterDate)))).flat().map((p) => [p.id, p]),
+    ).values(),
+  ];
   const leagues = await leagueLines(year, leagueOf);
   const leagueTotals = (teamId: number) => {
     const league = leagueOf.get(teamId);
@@ -164,9 +190,13 @@ serve(async (req) => {
   const wildCardStart = await firstPitch(year, 'F');
 
   await sql.begin(async (tx) => {
+    // Every season shares mlb_teams, so only the latest season's names are kept: a past year
+    // mustn't turn the Guardians back into the Indians.
     await tx`
       insert into mlb_teams ${tx(mlbTeams, 'id', 'name', 'abbreviation', 'league')}
-      on conflict (id) do update set name = excluded.name, abbreviation = excluded.abbreviation, league = excluded.league`;
+      on conflict (id) do ${season.latest
+        ? tx`update set name = excluded.name, abbreviation = excluded.abbreviation, league = excluded.league`
+        : tx`nothing`}`;
 
     // Before the season starts, the field can still change. After that, teams only get eliminated.
     if (season.status === 'setup') {
