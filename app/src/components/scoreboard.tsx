@@ -99,7 +99,7 @@ export function StandingsTable({
           {started && (
             <ThemedText type="small" themeColor="textSecondary" style={styles.rank}>{tied ? `T${s.rank}` : s.rank}</ThemedText>
           )}
-          {!compact && <View style={styles.badge}><OwnerBadge teamId={team.id} owner={owner} mine={mine} /></View>}
+          {!compact && <View style={styles.badge}><OwnerBadge teamId={team.id} owner={owner} photo={team.user_id ? data.photos.get(team.user_id) : null} mine={mine} /></View>}
           <TeamLabel name={teamName(team)} owner={owner} mine={mine} />
         </>
       ),
@@ -176,7 +176,7 @@ export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; sco
     <View style={styles.team}>
       {/* As tall as the round chips' row beside it, so both columns' tables start level. */}
       <View style={styles.teamHead}>
-        {!compact && <OwnerBadge teamId={team.id} owner={owner} mine={mine} size={36} />}
+        {!compact && <OwnerBadge teamId={team.id} owner={owner} photo={team.user_id ? data.photos.get(team.user_id) : null} mine={mine} size={36} />}
         <View style={styles.teamLabel}>
           <ThemedText numberOfLines={1} style={styles.teamTitle}>{teamName(team)}</ThemedText>
           <ThemedText numberOfLines={1} themeColor="textSecondary" style={styles.owner}>

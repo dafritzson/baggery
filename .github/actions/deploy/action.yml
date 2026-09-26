@@ -50,6 +50,8 @@ runs:
       run: |
         npx supabase link --project-ref "$PROJECT_REF"
         npx supabase db push
+        # Storage buckets declared in config.toml (profile photos).
+        npx supabase seed buckets --project-ref "$PROJECT_REF"
         if find supabase/functions -mindepth 1 -maxdepth 1 -type d ! -name '_*' | grep -q .; then
           npx supabase functions deploy --project-ref "$PROJECT_REF"
         fi

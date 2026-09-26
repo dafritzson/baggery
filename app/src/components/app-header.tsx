@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, Ellipse, LinearGradient, Path, Stop } from 'react-native-svg';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
+import { OwnerBadge } from '@/components/owner-badge';
 import { HeaderTabs } from '@/components/section-nav';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -179,10 +180,11 @@ function AccountButton() {
   const theme = useTheme();
   const { session } = useAuth();
   const { data, requestedYear } = useSeason();
-  const [imageFailed, setImageFailed] = useState(false);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const user = session?.user;
   const meta = user?.user_metadata ?? {};
-  const avatarUrl: string | undefined = meta.avatar_url ?? meta.picture;
+  // The same photo as everywhere else in the app (uploaded in Settings, else Google's).
+  const avatarUrl: string | undefined = (user && data?.photos.get(user.id)) ?? meta.avatar_url ?? meta.picture;
   // "Daniel Fritzson" → "DF"; without a name, the email's first letter.
   const fullName: string | undefined = meta.full_name ?? meta.name;
   const initials = fullName
@@ -194,9 +196,13 @@ function AccountButton() {
         .join('')
     : (user?.email?.[0] ?? '?').toUpperCase();
 
+  const myTeam = data?.myTeam;
   const avatar =
-    avatarUrl && !imageFailed ? (
-      <Image source={avatarUrl} style={styles.avatar} onError={() => setImageFailed(true)} />
+    avatarUrl && failedUrl !== avatarUrl ? (
+      <Image source={avatarUrl} style={styles.avatar} onError={() => setFailedUrl(avatarUrl)} />
+    ) : myTeam && user ? (
+      // No photo: the same colored initial the Standings show for your team.
+      <OwnerBadge teamId={myTeam.id} owner={data?.owners.get(user.id) ?? fullName ?? user.email ?? '?'} size={32} />
     ) : (
       <View style={[styles.avatar, { backgroundColor: theme.accent }]}>
         <ThemedText type="smallBold" style={{ color: theme.accentText }}>{initials}</ThemedText>

@@ -7,7 +7,7 @@ Game rules: [RULES.md](RULES.md).
 | Layer | Choice |
 |---|---|
 | App | Expo (React Native + Expo Router, TypeScript) in `app/`. It ships as a web app now and an iOS app later. |
-| Backend | Supabase: Postgres, Auth (email code + Google), Realtime, Edge Functions (Deno), cron |
+| Backend | Supabase: Postgres, Auth (email code + Google), Realtime, Edge Functions (Deno), cron, Storage (profile photos, public `avatars` bucket, 5 MB) |
 | Game logic | Pure TypeScript in `supabase/functions/_shared/core/`, shared by the Edge Functions and the app, with unit tests in `tests/` |
 | Web hosting | Vercel, deployed from GitHub Actions |
 | Stats | MLB Stats API (`statsapi.mlb.com`), polled every ~10s while games are live |
