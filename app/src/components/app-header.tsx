@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { LinearGradient as Gradient } from 'expo-linear-gradient';
 import { router, usePathname } from 'expo-router';
 import { createContext, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
@@ -45,6 +46,7 @@ export function AppHeader() {
           <AccountButton />
         </View>
       </SafeAreaView>
+      <PastSeasonBanner />
     </ThemedView>
   );
 }
@@ -87,6 +89,26 @@ function HomePlate() {
       {/* Top face. */}
       <Path d="M4 3 H24 V10 L14 17 L4 10 Z" fill="url(#plate-top)" {...outline} />
     </Svg>
+  );
+}
+
+/**
+ * A thin, colorful strip under the header while an earlier season is picked, so it's clear the
+ * screen isn't this year's. Not on the Almanac, which covers every season.
+ */
+function PastSeasonBanner() {
+  const pathname = usePathname();
+  const { data, years } = useSeason();
+  const year = data?.season.year;
+  if (!year || !years[0] || year === years[0] || pathname.startsWith('/almanac')) return null;
+  return (
+    <Gradient
+      colors={['#F59E0B', '#EC4899', '#8B5CF6']}
+      start={{ x: 0, y: 0.5 }}
+      end={{ x: 1, y: 0.5 }}
+      style={styles.pastSeason}>
+      <ThemedText type="smallBold" style={styles.pastSeasonText}>{year} Stats</ThemedText>
+    </Gradient>
   );
 }
 
@@ -252,6 +274,8 @@ const styles = StyleSheet.create({
   },
   home: { marginLeft: -Spacing.one, padding: Spacing.one },
   year: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Radius.md },
+  pastSeason: { alignItems: 'center', paddingVertical: 1 },
+  pastSeasonText: { color: '#ffffff', fontSize: 11, lineHeight: 14, letterSpacing: 0.6 },
   badge: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Radius.sm },
   badgeText: { fontSize: 12, lineHeight: 16 },
   toggle: { width: 32, height: 32, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
