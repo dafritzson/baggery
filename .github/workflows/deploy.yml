@@ -77,9 +77,15 @@ jobs:
         run: |
           pr=$(gh api "repos/$GH_REPO/commits/$GITHUB_SHA/pulls" --jq '.[0].number // empty')
           if [ -z "$pr" ]; then echo "No PR for $GITHUB_SHA"; exit 0; fi
+          # The run URL goes in a code block: the GitHub app opens links in-app, where the approval
+          # button isn't available, and makes them hard to copy. Code blocks copy easily.
           gh pr comment "$pr" --body "@$OWNER Deployed to staging: $STAGING_URL
 
-          **Production is waiting for approval:** [open the deploy run]($RUN_URL), tap **Review deployments**, tick **production**, then **Approve and deploy**."
+          **Production is waiting for approval.** Copy this link into your browser, tap **Review deployments**, tick **production**, then **Approve and deploy**:
+
+          \`\`\`
+          $RUN_URL
+          \`\`\`"
 
   production:
     needs: staging
