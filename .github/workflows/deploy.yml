@@ -14,6 +14,8 @@ jobs:
     concurrency:
       group: deploy-staging
       cancel-in-progress: false
+    outputs:
+      url: ${{ steps.vercel.outputs.url }}
     environment:
       name: staging
       url: ${{ steps.vercel.outputs.url }}
@@ -32,10 +34,58 @@ jobs:
           vercel-project-id: ${{ vars.VERCEL_PROJECT_ID }}
           vercel-alias: ${{ vars.VERCEL_STAGING_ALIAS }}
 
+  supersede:
+    # A production job waiting for approval holds the deploy-production slot, so a newer one would
+    # queue behind it and couldn't be approved until the old one was. Once this run's staging deploy
+    # is done, cancel older runs still waiting for approval, so only the newest one waits. Deploys
+    # already running (approved) are left alone.
+    needs: staging
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel older deploys waiting for approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh run list --workflow deploy.yml --status waiting --json databaseId --jq '.[].databaseId' |
+            while read -r id; do
+              if [ "$id" -lt "${{ github.run_id }}" ]; then
+                echo "Cancelling superseded run $id"
+                gh run cancel "$id"
+              fi
+            done
+
+  notify:
+    # Comment on the merged PR with the staging URL and a link to this run, where "Review
+    # deployments" approves production. The comment is a notification in the GitHub app.
+    needs: staging
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Comment on the merged PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          # Mentioned so the comment is a push notification (Direct Mentions) on any PR.
+          OWNER: ${{ github.repository_owner }}
+          STAGING_URL: ${{ needs.staging.outputs.url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          pr=$(gh api "repos/$GH_REPO/commits/$GITHUB_SHA/pulls" --jq '.[0].number // empty')
+          if [ -z "$pr" ]; then echo "No PR for $GITHUB_SHA"; exit 0; fi
+          gh pr comment "$pr" --body "@$OWNER Deployed to staging: $STAGING_URL
+
+          **Production is waiting for approval:** [open the deploy run]($RUN_URL), tap **Review deployments**, tick **production**, then **Approve and deploy**."
+
   production:
     needs: staging
     runs-on: ubuntu-latest
-    # Only the newest production deploy waits for approval; older pending ones are superseded.
+    # One production deploy at a time. Older ones still waiting for approval are cancelled by
+    # `supersede`, so this never queues behind a stale deploy for long.
     concurrency:
       group: deploy-production
       cancel-in-progress: false
