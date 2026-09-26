@@ -119,17 +119,21 @@ const LIVE_TABLES = [
   'season_player_pool',
 ] as const;
 
-/** The season for `year` (the latest when unset or missing), plus every year that has a season. */
+/**
+ * The season for `year` (the latest when unset or missing), plus every year that has a season.
+ * Null when a query failed, so a network blip isn't mistaken for "no season".
+ */
 async function fetchSeason(
   userId: string | undefined,
   year: number | undefined,
-): Promise<{ data: SeasonData | null; years: number[] }> {
-  const { data: seasons } = await supabase
+): Promise<{ data: SeasonData | null; years: number[] } | null> {
+  const { data: seasons, error } = await supabase
     .from('seasons')
     .select('id, year, status, league_id, survivors_after_round')
     .order('year', { ascending: false });
-  const years = (seasons ?? []).map((s) => s.year as number);
-  const season = (year && seasons?.find((s) => s.year === year)) || seasons?.[0];
+  if (error) return null;
+  const years = seasons.map((s) => s.year as number);
+  const season = (year && seasons.find((s) => s.year === year)) || seasons[0];
   if (!season) return { data: null, years };
 
   const [teams, drafts, spells, pool, seasonTeams, members, profiles] = await Promise.all([
@@ -149,12 +153,14 @@ async function fetchSeason(
     supabase.from('league_members').select('user_id, role').eq('league_id', season.league_id),
     supabase.from('profiles').select('id, display_name, avatar_path, google_avatar_url'),
   ]);
+  if ([teams, drafts, spells, pool, seasonTeams, members, profiles].some((r) => r.error)) return null;
   const draftIds = (drafts.data ?? []).map((d) => d.id);
-  const { data: actions } = await supabase
+  const { data: actions, error: actionsError } = await supabase
     .from('draft_actions')
     .select('*')
     .in('draft_id', draftIds)
     .order('action_number');
+  if (actionsError) return null;
 
   const players = new Map<number, Player>();
   const poolRows: PoolEntry[] = [];
@@ -261,8 +267,22 @@ function useLiveSeason(): SeasonState {
   const refetch = useCallback(async () => {
     // Reloads can overlap; only the newest one may land, so an older one can't overwrite it.
     const fetchId = ++latestFetch.current;
-    const next = await fetchSeason(userId, requestedYear);
+    let next = await fetchSeason(userId, requestedYear);
+    // Seasons are only visible to signed-in users, so none while signed in usually means the
+    // request went out before the sign-in was renewed (opening the app after a while). A failed
+    // query gets the same treatment: keep what's shown (or "Loading…") and try again, backing off
+    // over about a minute. An empty list is believed after a few tries. Capped so a lasting
+    // server error can't have every open app re-download the season forever (docs/LIMITS.md).
+    for (let tries = 0; tries < 6 && (!next || (userId && next.years.length === 0 && tries < 3)); tries++) {
+      await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** tries));
+      if (fetchId !== latestFetch.current) return;
+      next = await fetchSeason(userId, requestedYear);
+    }
     if (fetchId !== latestFetch.current) return;
+    if (!next) {
+      setLoading(false);
+      return;
+    }
     // A link to a year with no season (not imported yet, say) shows the latest one instead.
     if (requestedYear && next.data && next.data.season.year !== requestedYear) router.setParams({ year: undefined });
     setData(next.data);
@@ -284,6 +304,8 @@ function useLiveSeason(): SeasonState {
     channel.subscribe();
     return () => {
       if (timer.current) clearTimeout(timer.current);
+      // Stops a retry loop that's still waiting.
+      latestFetch.current++;
       supabase.removeChannel(channel);
     };
   }, [refetch]);
