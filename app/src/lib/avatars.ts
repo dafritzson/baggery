@@ -40,9 +40,10 @@ export async function uploadPhoto(userId: string): Promise<string | null> {
     return "Couldn't read that photo. Try another one.";
   }
 
-  // A new name each time, so browsers never show a cached old photo.
+  // A new name each time, so a file never changes: browsers and the CDN may keep it for a year,
+  // and a new photo shows up at once because it's a new address.
   const path = `${userId}/${Date.now()}.${contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg'}`;
-  const upload = await supabase.storage.from(BUCKET).upload(path, body, { contentType });
+  const upload = await supabase.storage.from(BUCKET).upload(path, body, { contentType, cacheControl: '31536000' });
   if (upload.error) return upload.error.message;
   const saved = await supabase.from('profiles').update({ avatar_path: path }).eq('id', userId);
   if (saved.error) return saved.error.message;
