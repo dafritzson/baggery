@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { ThemedText } from '@/components/themed-text';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { GOOGLE_CLIENT_ID } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
@@ -57,7 +56,6 @@ async function makeNonce(): Promise<{ raw: string; hashed: string }> {
 export function GoogleSignInButton() {
   const container = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
-  const scheme = useColorScheme();
 
   useEffect(() => {
     let cancelled = false;
@@ -80,7 +78,9 @@ export function GoogleSignInButton() {
         });
         window.google.accounts.id.renderButton(container.current, {
           type: 'standard',
-          theme: scheme === 'dark' ? 'filled_black' : 'outline',
+          // Google's standard white button in either theme: on the dark card, Google's black one
+          // barely shows.
+          theme: 'outline',
           size: 'large',
           shape: 'pill',
           text: 'signin_with',
@@ -93,7 +93,7 @@ export function GoogleSignInButton() {
     return () => {
       cancelled = true;
     };
-  }, [scheme]);
+  }, []);
 
   return (
     <>
