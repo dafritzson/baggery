@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { BagAlertsCard } from '@/components/bag-alerts-card';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { ImportSeasonCard } from '@/components/import-season-card';
@@ -19,7 +20,10 @@ import { useSeason } from '@/lib/season';
 import { supabase } from '@/lib/supabase';
 import { suggestTeamName, teamName } from '@/lib/teams';
 
-/** Your settings: your photo, your team name for the season being viewed, and (commissioner) past seasons and their managers. */
+/**
+ * Your settings: your photo, your team name for the season being viewed, bag alerts on this device,
+ * and (commissioner) past seasons and their managers.
+ */
 export default function SettingsScreen() {
   const { data, loading, refetch } = useSeason();
   const [saved, setSaved] = useState(false);
@@ -64,6 +68,7 @@ export default function SettingsScreen() {
           </>
         )}
       </Card>
+      <BagAlertsCard />
       <ImportSeasonCard />
       <PastManagersCard />
     </Screen>

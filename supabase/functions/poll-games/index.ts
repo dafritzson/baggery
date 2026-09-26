@@ -5,6 +5,7 @@
 //                            games. The cron job calls every 10 seconds while there's something to
 //                            fetch (private.poll_due): live games every call, the schedule every
 //                            minute while games are on (10 otherwise), finished games every 10.
+//                            Then sends the bag alerts that are due (alerts.ts).
 // POST { setup: true }       from the deploy: records this function's URL for the cron job.
 // POST { seasonId }          commissioner: reloads every game of that season's postseason.
 
@@ -12,6 +13,7 @@ import { requireCommissioner, requireUser } from '../_shared/auth.ts';
 import { autoCloseRounds } from '../_shared/close-round.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
+import { sendBagAlerts } from './alerts.ts';
 import { boxscoreBatting, linescoreLive, linescoreRuns, scheduleGames } from './feed.ts';
 
 const MLB = 'https://statsapi.mlb.com/api/v1';
@@ -211,7 +213,14 @@ serve(async (req) => {
         } catch (e) {
           console.error('auto-close', e);
         }
-        return { ...result, closedRounds };
+        // Push notifications for the bags this poll (or an earlier one, after a spoiler delay) found.
+        let bagAlerts = 0;
+        try {
+          bagAlerts = await sendBagAlerts();
+        } catch (e) {
+          console.error('bag alerts', e);
+        }
+        return { ...result, closedRounds, bagAlerts };
       }),
     );
   }

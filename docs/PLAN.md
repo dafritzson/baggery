@@ -60,7 +60,8 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
 | 3 | Before DS redraft | Redrafts (drop+add, yield, lock at first pitch), eliminations, standings-based order, autodraft |
 | 3.5 | Done | 2020–2025 history imported from the Google Sheets (Settings → Past seasons) |
 | 3.6 | Now | Almanac tab: champions, records, careers, head-to-head, scouting stats and badges (`core/almanac.ts`). Next: more stats |
-| 4 | Later | Bag notifications (with optional spoiler delay), chat, money tracker, iOS app via EAS |
+| 3.7 | Now | Bag alerts: web push when a hitter gets a bag (Settings → Bag alerts; Android browsers, iPhone from the Home Screen), with a spoiler delay |
+| 4 | Later | Chat, money tracker, iOS app via EAS |
 
 ## iOS app notes
 
@@ -79,3 +80,8 @@ Things to change when the iOS app (phase 4) gets built, because the web can only
   the tapped game morphs into its card, using the browser's View Transitions
   (`app/src/lib/zoom.web.ts` and `global.css`). Native just switches (`zoom.ts`); animate it
   there with Reanimated, e.g. a shared element transition from the game square to its card.
+- **Bag alerts.** They're web push (`app/src/lib/push.web.ts`, `app/public/sw.js`); native offers
+  none (`push.ts`). On iOS, register with `expo-notifications` and save the Expo push token next
+  to `push_subscriptions`, then have `poll-games/alerts.ts` send those through Expo's push
+  service. The queue (`private.bag_alerts`) and the alert text (`core/bag-alerts.ts`) stay as
+  they are.
