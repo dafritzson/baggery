@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { Loader } from '@/components/loader';
 import { PlayerDetails } from '@/components/player-popup';
 import { statsWidthFor } from '@/components/player-table';
 import { PlayersList, availablePlayers } from '@/components/players-list';
@@ -25,7 +26,7 @@ export default function ResearchScreen() {
   if (wide && data) return <ResearchWide data={data} />;
   return (
     <Screen width="wide">
-      {loading && <ThemedText themeColor="textSecondary">Loading…</ThemedText>}
+      {loading && <Loader />}
       {!loading && !data && <ThemedText>No season set up yet.</ThemedText>}
       {data && <PlayersList data={data} />}
     </Screen>

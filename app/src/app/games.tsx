@@ -8,6 +8,7 @@ import { SERIES } from '@core/scoreboard.ts';
 import type { GameType } from '@core/types.ts';
 
 import { Card } from '@/components/card';
+import { Loader } from '@/components/loader';
 import { YouTag } from '@/components/owner-badge';
 import { PlayerName } from '@/components/player-name';
 import { PostseasonView, RoundView } from '@/components/schedule';
@@ -55,7 +56,7 @@ export default function GamesScreen() {
   const [view, setView] = useState<Zoom>('day');
 
   if (loading || (data && !scores)) {
-    return <Screen width="wide"><ThemedText themeColor="textSecondary">Loading…</ThemedText></Screen>;
+    return <Screen width="wide"><Loader /></Screen>;
   }
   if (!data || !scores) return <Screen width="wide"><ThemedText>No season set up yet.</ThemedText></Screen>;
 
