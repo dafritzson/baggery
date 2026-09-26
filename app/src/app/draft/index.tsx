@@ -15,7 +15,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { formatLockTime, playerLine } from '@/lib/format';
 import { type Draft, type SeasonData, type Team, currentRosters, useSeason } from '@/lib/season';
 import { callFunction, supabase } from '@/lib/supabase';
-import { ownerName, suggestTeamName, teamName } from '@/lib/teams';
+import { ownerLine, ownerName, suggestTeamName, teamName } from '@/lib/teams';
 
 const DRAFT_NAMES: Record<number, string> = {
   1: 'Draft 1 · before the Wild Card',
@@ -34,7 +34,7 @@ export default function DraftsScreen() {
       {!loading && !data && (
         <ThemedText>{requestedYear ? `There's no ${requestedYear} season.` : 'No season set up yet.'}</ThemedText>
       )}
-      {data && !data.myTeam && <ClaimTeam data={data} onClaimed={refetch} />}
+      {data && !data.myTeam && data.season.status !== 'complete' && <ClaimTeam data={data} onClaimed={refetch} />}
       {data &&
         (wide ? (
           <Columns
@@ -161,7 +161,7 @@ function TeamsCard({ data }: { data: SeasonData }) {
     <Card title="Teams">
       {data.teams.map((team) => {
         const roster = rosters.get(team.id) ?? [];
-        const owner = ownerName(data, team);
+        const owner = ownerLine(data, team);
         const mine = team.id === data.myTeam?.id;
         const canRename = data.isCommissioner && !mine && !!team.user_id;
         return (
@@ -170,7 +170,7 @@ function TeamsCard({ data }: { data: SeasonData }) {
               <ThemedText type="smallBold" style={{ flexShrink: 1 }}>
                 {teamName(team)}{' '}
                 <ThemedText type="small" themeColor="textSecondary">
-                  {owner ?? 'open spot'}
+                  {owner?.toLowerCase() ?? ''}
                   {mine ? ' · you' : ''}
                   {team.user_id && data.commissionerIds.has(team.user_id) ? ' · commish' : ''}
                 </ThemedText>
@@ -223,8 +223,10 @@ function CommissionerCard({ data }: { data: SeasonData }) {
       </ThemedText>
       <Button label="Sync player pool from MLB" onPress={sync} loading={syncing} />
       {message && <ThemedText type="small">{message}</ThemedText>}
-      <ThemedText type="smallBold" style={{ marginTop: Spacing.two }}>Who claimed which spot</ThemedText>
-      {data.teams.map((t) => (
+      {data.season.status !== 'complete' && (
+        <ThemedText type="smallBold" style={{ marginTop: Spacing.two }}>Who claimed which spot</ThemedText>
+      )}
+      {data.season.status !== 'complete' && data.teams.map((t) => (
         <View key={t.id} style={styles.assignRow}>
           <ThemedText type="small" style={{ flex: 1 }}>
             {t.slot}. {teamName(t)}: {t.user_id ? ownerName(data, t) ?? 'signed up' : '—'}

@@ -1,4 +1,4 @@
-import { useGlobalSearchParams } from 'expo-router';
+import { router, useGlobalSearchParams } from 'expo-router';
 import { createContext, createElement, type ReactNode, use, useCallback, useEffect, useRef, useState } from 'react';
 
 import type { DraftAction } from '@core/draft.ts';
@@ -117,7 +117,7 @@ const LIVE_TABLES = [
   'season_player_pool',
 ] as const;
 
-/** The season for `year` (the latest when unset), plus every year that has a season. */
+/** The season for `year` (the latest when unset or missing), plus every year that has a season. */
 async function fetchSeason(
   userId: string | undefined,
   year: number | undefined,
@@ -127,7 +127,7 @@ async function fetchSeason(
     .select('id, year, status, league_id, survivors_after_round')
     .order('year', { ascending: false });
   const years = (seasons ?? []).map((s) => s.year as number);
-  const season = year ? seasons?.find((s) => s.year === year) : seasons?.[0];
+  const season = (year && seasons?.find((s) => s.year === year)) || seasons?.[0];
   if (!season) return { data: null, years };
 
   const [teams, drafts, spells, pool, seasonTeams, members, profiles] = await Promise.all([
@@ -261,6 +261,8 @@ function useLiveSeason(): SeasonState {
     const fetchId = ++latestFetch.current;
     const next = await fetchSeason(userId, requestedYear);
     if (fetchId !== latestFetch.current) return;
+    // A link to a year with no season (not imported yet, say) shows the latest one instead.
+    if (requestedYear && next.data && next.data.season.year !== requestedYear) router.setParams({ year: undefined });
     setData(next.data);
     setYears(next.years);
     setLoading(false);

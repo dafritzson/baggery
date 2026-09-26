@@ -20,7 +20,7 @@ import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { type Scores, coreSpells } from '@/lib/scores';
 import type { SeasonData } from '@/lib/season';
-import { ownerName, teamName } from '@/lib/teams';
+import { ownerLine, teamName } from '@/lib/teams';
 
 /** Height of the round chips' row and the team panel's header, which sit side by side. */
 const CHIPS_ROW = 40;
@@ -88,7 +88,7 @@ export function StandingsTable({
 
   const rows: GridRow[] = standings.map((s, i) => {
     const team = byId.get(s.teamId)!;
-    const owner = ownerName(data, team);
+    const owner = ownerLine(data, team);
     const mine = team.id === data.myTeam?.id;
     const tied = standings.some((o) => o !== s && o.rank === s.rank);
     return {
@@ -139,13 +139,13 @@ export function StandingsTable({
   );
 }
 
-/** Team name over the owner's name (or "Open spot"), with a YOU tag on my team. */
+/** Team name over the owner line (see ownerLine), with a YOU tag on my team. */
 function TeamLabel({ name, owner, mine }: { name: string; owner: string | null; mine: boolean }) {
   return (
     <View style={styles.teamLabel}>
       <ThemedText numberOfLines={1} style={styles.teamName}>{name}</ThemedText>
       <View style={styles.ownerLine}>
-        <ThemedText numberOfLines={1} themeColor="textSecondary" style={styles.owner}>{owner ?? 'Open spot'}</ThemedText>
+        {owner && <ThemedText numberOfLines={1} themeColor="textSecondary" style={styles.owner}>{owner}</ThemedText>}
         {mine && <YouTag />}
       </View>
     </View>
@@ -169,16 +169,14 @@ export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; sco
     if (out !== null && round > out) return false;
     return i === 0 || scores.games.some((g) => g.gameType === b.gameType);
   });
-  const owner = ownerName(data, team);
   const mine = team.id === data.myTeam?.id;
+  const owner = [ownerLine(data, team), mine ? 'You' : null].filter(Boolean).join(' · ');
 
   const photo = team.user_id ? data.photos.get(team.user_id) : null;
   const label = (
     <View style={styles.teamLabel}>
       <ThemedText numberOfLines={1} style={styles.teamTitle}>{teamName(team)}</ThemedText>
-      <ThemedText numberOfLines={1} themeColor="textSecondary" style={styles.owner}>
-        {owner ?? 'Open spot'}{mine ? ' · You' : ''}
-      </ThemedText>
+      {owner !== '' && <ThemedText numberOfLines={1} themeColor="textSecondary" style={styles.owner}>{owner}</ThemedText>}
     </View>
   );
   const totalsStrip = (
