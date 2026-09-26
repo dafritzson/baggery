@@ -116,6 +116,13 @@ enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
 file_size_limit = "50MiB"
 
+# Profile photos (see migrations/*_profile_photos.sql). The deploy creates it on hosted
+# projects with `supabase seed buckets`.
+[storage.buckets.avatars]
+public = true
+file_size_limit = "5MiB"
+allowed_mime_types = ["image/jpeg", "image/png", "image/webp"]
+
 # Uncomment to configure local storage buckets
 # [storage.buckets.images]
 # public = false

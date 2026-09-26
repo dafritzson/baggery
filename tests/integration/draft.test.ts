@@ -211,6 +211,47 @@ describe('draft 1', () => {
   });
 });
 
+describe('profile photos', () => {
+  // A 1x1 PNG.
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==', 'base64');
+  const idOf = async (name: string) => (await clients.get(name)!.auth.getUser()).data.user!.id;
+
+  it('keeps the Google photo from sign-in', async () => {
+    const email = 'photo@example.com';
+    const picture = 'https://lh3.googleusercontent.com/a/example';
+    const { data } = await admin.auth.admin.createUser({ email, email_confirm: true, user_metadata: { full_name: 'Pat Photo', avatar_url: picture } });
+    const { data: profile } = await admin.from('profiles').select('google_avatar_url').eq('id', data.user!.id).single();
+    expect(profile!.google_avatar_url).toBe(picture);
+
+    // A later sign-in with a new Google photo follows along.
+    await admin.auth.admin.updateUserById(data.user!.id, { user_metadata: { avatar_url: `${picture}2` } });
+    const { data: after } = await admin.from('profiles').select('google_avatar_url').eq('id', data.user!.id).single();
+    expect(after!.google_avatar_url).toBe(`${picture}2`);
+    await admin.auth.admin.deleteUser(data.user!.id);
+  });
+
+  it('lets people upload to their own folder only, and point their profile only at it', async () => {
+    const kyle = clients.get('Kyle')!;
+    const kyleId = await idOf('Kyle');
+    const alexId = await idOf('Alex');
+    const bucket = kyle.storage.from('avatars');
+
+    expect((await bucket.upload(`${kyleId}/1.png`, png, { contentType: 'image/png' })).error).toBeNull();
+    expect((await bucket.upload(`${alexId}/1.png`, png, { contentType: 'image/png' })).error).not.toBeNull();
+    // Anyone can see it through the bucket's public URL.
+    expect((await fetch(bucket.getPublicUrl(`${kyleId}/1.png`).data.publicUrl)).status).toBe(200);
+
+    expect((await kyle.from('profiles').update({ avatar_path: `${kyleId}/1.png` }).eq('id', kyleId)).error).toBeNull();
+    expect((await kyle.from('profiles').update({ avatar_path: `${alexId}/1.png` }).eq('id', kyleId)).error).not.toBeNull();
+    expect((await kyle.from('profiles').update({ avatar_path: 'https://example.com/x.png' }).eq('id', kyleId)).error).not.toBeNull();
+
+    // Removing the upload: clear the path, delete the file.
+    expect((await kyle.from('profiles').update({ avatar_path: null }).eq('id', kyleId)).error).toBeNull();
+    expect((await bucket.remove([`${kyleId}/1.png`])).error).toBeNull();
+    expect((await admin.storage.from('avatars').list(kyleId)).data).toHaveLength(0);
+  });
+});
+
 describe('player stats', () => {
   it("returns a hitter's season, game log and past seasons from the MLB API", async () => {
     const { data, error } = await clients.get('Kyle')!.functions.invoke('player-stats', { body: { playerId: 592450, season: 2025 } });

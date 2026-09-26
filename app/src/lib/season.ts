@@ -4,6 +4,7 @@ import { createContext, createElement, type ReactNode, use, useCallback, useEffe
 import type { DraftAction } from '@core/draft.ts';
 
 import { useAuth } from '@/lib/auth';
+import { photoUrl } from '@/lib/avatars';
 import { supabase } from '@/lib/supabase';
 
 export interface Team {
@@ -101,6 +102,8 @@ export interface SeasonData {
   myTeam: Team | null;
   /** First names of everyone with a profile, by user id. */
   owners: Map<string, string>;
+  /** Photo URLs by user id (uploaded, else Google), for those who have one. */
+  photos: Map<string, string>;
   /** User ids of the league's commissioners. */
   commissionerIds: Set<string>;
   isCommissioner: boolean;
@@ -142,7 +145,7 @@ async function fetchSeason(
       .select('eliminated, wins, has_bye, team:mlb_teams(id, name, abbreviation)')
       .eq('season_id', season.id),
     supabase.from('league_members').select('user_id, role').eq('league_id', season.league_id),
-    supabase.from('profiles').select('id, display_name'),
+    supabase.from('profiles').select('id, display_name, avatar_path, google_avatar_url'),
   ]);
   const draftIds = (drafts.data ?? []).map((d) => d.id);
   const { data: actions } = await supabase
@@ -189,6 +192,12 @@ async function fetchSeason(
   const myTeam = teamRows.find((t) => t.user_id === userId) ?? null;
   const commissionerIds = new Set((members.data ?? []).filter((m) => m.role === 'commissioner').map((m) => m.user_id as string));
   const owners = new Map((profiles.data ?? []).map((p) => [p.id as string, (p.display_name as string).split(' ')[0]]));
+  const photos = new Map(
+    (profiles.data ?? []).flatMap((p) => {
+      const url = photoUrl(p);
+      return url ? [[p.id as string, url] as const] : [];
+    }),
+  );
   const data: SeasonData = {
     season,
     teams: teamRows,
@@ -201,6 +210,7 @@ async function fetchSeason(
     poolByPlayer: new Map(poolRows.map((p) => [p.mlb_player_id, p])),
     myTeam,
     owners,
+    photos,
     commissionerIds,
     isCommissioner: !!userId && commissionerIds.has(userId),
   };

@@ -68,7 +68,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx supabase start -x imgproxy,vector,logflare,studio,storage-api,mailpit
+      - run: npx supabase start -x imgproxy,vector,logflare,studio,mailpit
       - name: Serve Edge Functions
         run: |
           npx supabase functions serve > functions.log 2>&1 &
