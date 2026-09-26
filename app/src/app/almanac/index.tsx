@@ -56,7 +56,8 @@ function League({ data }: { data: AlmanacData }) {
     <>
       <Card title="Champions">
         <View style={styles.pennants}>
-          {a.champions.map((c) => (
+          {/* Oldest first, so the years read left to right, top to bottom. */}
+          {[...a.champions].sort((x, y) => x.year - y.year).map((c) => (
             <Pennant
               key={c.year}
               year={c.year}
@@ -138,7 +139,6 @@ function League({ data }: { data: AlmanacData }) {
               title: `Round ${r.round}, ${r.year}`,
               tags: [],
               manager: who(r.managerKey),
-              value: r.tb,
               label: `${r.tb} bags`,
               onPress: () => openManager(data, r.managerKey),
             }))}
@@ -152,7 +152,6 @@ function League({ data }: { data: AlmanacData }) {
             title: player(g.playerId),
             tags: [`${g.year} ${seriesGame(g.gameType, g.seriesGameNumber)}`],
             manager: who(g.managerKey),
-            value: g.tb,
             label: `${g.tb} bags`,
           }))}
         />
@@ -166,7 +165,6 @@ function League({ data }: { data: AlmanacData }) {
             title: player(p.playerId),
             tags: [`${p.year}`],
             manager: who(p.managerKey),
-            value: p.tb,
             label: `${p.tb} bags`,
           }))}
         />
@@ -180,7 +178,6 @@ function League({ data }: { data: AlmanacData }) {
             title: `${data.managers.get(c.through.managerKey)} ${c.through.tb}, ${data.managers.get(c.out.managerKey)} ${c.out.tb}`,
             tags: [`${c.year}`, `Round ${c.round}`, `${data.managers.get(c.out.managerKey)} out`],
             manager: who(c.through.managerKey),
-            value: null,
             label: c.margin === 0 ? 'Tiebreak' : `By ${c.margin}`,
           }))}
         />
@@ -196,7 +193,6 @@ function League({ data }: { data: AlmanacData }) {
             title: `${player(m.add)} for ${player(m.drop)}`,
             tags: [`${m.year} Draft ${m.draftNumber}`, `${m.addedTb} vs ${m.droppedTb}`],
             manager: who(m.managerKey),
-            value: m.addedTb - m.droppedTb,
             label: `+${m.addedTb - m.droppedTb}`,
           }))}
         />

@@ -6,6 +6,9 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
+/** Back in history when there is some, else straight to `to` (e.g. after opening a shared link). */
+export const goBack = (to: Href) => (router.canGoBack() ? router.back() : router.replace(to));
+
 /**
  * Back to a parent page: a pill big enough to hit with a thumb. Goes back in history when there
  * is some, else straight to `to` (e.g. after opening a shared link).
@@ -17,7 +20,7 @@ export function BackButton({ label, to }: { label: string; to: Href }) {
       accessibilityRole="button"
       accessibilityLabel={`Back to ${label}`}
       hitSlop={10}
-      onPress={() => (router.canGoBack() ? router.back() : router.replace(to))}
+      onPress={() => goBack(to)}
       style={({ pressed }) => [styles.button, { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement }]}>
       <SymbolView name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back_ios_new' }} size={16} tintColor={theme.accent} />
       <ThemedText type="smallBold" style={{ color: theme.accent }}>{label}</ThemedText>

@@ -165,8 +165,6 @@ const styles = StyleSheet.create({
   lbTag: { borderRadius: 999, paddingHorizontal: Spacing.two, paddingVertical: 1 },
   lbTagManager: { color: '#fff', fontSize: 11, lineHeight: 16, fontWeight: '800' },
   lbTagText: { fontSize: 11, lineHeight: 16 },
-  lbTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
-  lbFill: { height: 6, borderRadius: 3 },
   leaderRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   leaderName: { width: 64 },
   leaderTrack: { flex: 1, height: 14, borderRadius: 7, overflow: 'hidden' },
@@ -244,8 +242,6 @@ export interface LeaderboardRow {
   tags: string[];
   /** Who it belongs to: their name and color. */
   manager?: { name: string; color: string };
-  /** Sizes the bar; null for no bar. */
-  value: number | null;
   /** What's shown on the right, e.g. "58 bags". */
   label: string;
   onPress?: () => void;
@@ -254,12 +250,11 @@ export interface LeaderboardRow {
 const MEDALS = ['🥇', '🥈', '🥉'];
 
 /**
- * A ranked list: medals for the top three, each row in its manager's color with a bar sized to
- * its value. The leader's row is larger.
+ * A ranked list: medals for the top three, each row in its manager's color. The leader's row is
+ * larger.
  */
 export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
   const theme = useTheme();
-  const most = Math.max(1, ...rows.map((r) => Math.abs(r.value ?? 0)));
   return (
     <View style={{ gap: Spacing.two }}>
       {rows.map((r, i) => {
@@ -291,11 +286,6 @@ export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
                   </View>
                 ))}
               </View>
-              {r.value !== null && (
-                <View style={[styles.lbTrack, { backgroundColor: theme.background }]}>
-                  <View style={[styles.lbFill, { width: `${(Math.abs(r.value) / most) * 100}%`, backgroundColor: color }]} />
-                </View>
-              )}
             </View>
           </Pressable>
         );
