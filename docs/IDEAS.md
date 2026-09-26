@@ -41,3 +41,9 @@ slugging and keeps each player's real at-bats per game (lineup spot, platoon, be
 E[G] treats every game as 50/50. It could use team strength (e.g. regular-season win %) and home
 field (the higher Wild Card seed hosts every game) for each team's chance to advance and
 expected series length.
+
+## Games tab calendar
+
+Raised 2026-09-25. The Games tab picks a day from a dropdown. A calendar could replace it: open
+on today's games, then zoom out to the week or the whole month to see the full postseason
+schedule, with smooth zoom animations between day, week and month.

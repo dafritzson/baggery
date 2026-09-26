@@ -1,5 +1,6 @@
 import { type ReactNode, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import type { LiveState } from '@core/live.ts';
 import { SERIES } from '@core/scoreboard.ts';
@@ -30,10 +31,11 @@ function gameDay(game: GameInfo): string {
   return game.officialDate ?? dayKey(game.start);
 }
 
+/** "Wed, 9/30", or "Today · Tue, 9/29". */
 function dayLabel(key: string, today: string): string {
-  if (key === today) return 'Today';
   const [y, m, d] = key.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
+  const date = new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
+  return key === today ? `Today · ${date}` : date;
 }
 
 const STATUS_ORDER: Record<string, number> = { Live: 0, Preview: 1, Final: 2 };
@@ -69,7 +71,7 @@ export default function GamesScreen() {
         <ThemedText themeColor="textSecondary">Games show up here once the postseason schedule is out.</ThemedText>
       ) : (
         <>
-          <DayChips days={days} day={day} today={today} onChange={setPicked} />
+          <DayMenu games={scores.games} days={days} day={day} today={today} onChange={setPicked} />
           {wide ? (
             // Rows of two that fill the width; both cards in a row are as tall as the taller one.
             <View style={styles.column}>
@@ -99,27 +101,48 @@ export default function GamesScreen() {
   );
 }
 
-function DayChips({ days, day, today, onChange }: { days: string[]; day?: string; today: string; onChange: (day: string) => void }) {
+/** The day being shown, as a chip that opens a list of every day with games. */
+function DayMenu({
+  games,
+  days,
+  day,
+  today,
+  onChange,
+}: {
+  games: GameInfo[];
+  days: string[];
+  day?: string;
+  today: string;
+  onChange: (day: string) => void;
+}) {
   const theme = useTheme();
+  const count = (d: string) => games.filter((g) => gameDay(g) === d).length;
+  // The list is long by the World Series, so open it scrolled to the day being shown (web).
+  const scrollToPicked = (open: boolean) => {
+    if (!open || Platform.OS !== 'web') return;
+    requestAnimationFrame(() => document.querySelector('.day-menu [data-state="checked"]')?.scrollIntoView({ block: 'center' }));
+  };
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} contentContainerStyle={styles.chips}>
-      {days.map((d) => {
-        const active = d === day;
-        return (
-          <Pressable
-            key={d}
-            onPress={() => onChange(d)}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: active }}
-            style={({ pressed }) => [
-              styles.chip,
-              { backgroundColor: active ? theme.accent : theme.backgroundElement, boxShadow: pressed ? theme.sunken : theme.raised },
-            ]}>
-            <ThemedText type="smallBold" style={{ color: active ? theme.accentText : theme.text }}>{dayLabel(d, today)}</ThemedText>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
+    <View style={styles.dayRow}>
+      <DropdownMenu.Root onOpenChange={scrollToPicked}>
+        <DropdownMenu.Trigger className="menu-trigger menu-trigger-chip" aria-label={`Showing ${day ? dayLabel(day, today) : 'no day'}, change day`}>
+          <View style={[styles.dayChip, { backgroundColor: theme.backgroundElement, boxShadow: theme.raised }]}>
+            <ThemedText type="smallBold">{day ? dayLabel(day, today) : 'Pick a day'} ▾</ThemedText>
+          </View>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content className="menu-content menu-content-scroll day-menu" align="start" sideOffset={6} collisionPadding={8}>
+          {days.map((d) => {
+            const n = count(d);
+            return (
+              <DropdownMenu.CheckboxItem key={d} className="menu-item" value={d === day ? 'on' : 'off'} onValueChange={() => onChange(d)}>
+                <DropdownMenu.ItemTitle>{`${dayLabel(d, today)} · ${n} ${n === 1 ? 'game' : 'games'}`}</DropdownMenu.ItemTitle>
+                <DropdownMenu.ItemIndicator className="menu-check">✓</DropdownMenu.ItemIndicator>
+              </DropdownMenu.CheckboxItem>
+            );
+          })}
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+    </View>
   );
 }
 
@@ -439,9 +462,9 @@ function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; gam
 }
 
 const styles = StyleSheet.create({
-  chipRow: { flexGrow: 0 },
-  chips: { gap: Spacing.one },
-  chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
+  // The chip keeps its own width instead of stretching across the screen.
+  dayRow: { flexDirection: 'row' },
+  dayChip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
   column: { gap: Spacing.three },
   row: { flexDirection: 'row', gap: Spacing.three },
   cell: { flex: 1, minWidth: 0 },
