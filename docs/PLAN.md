@@ -31,8 +31,9 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
 - `league_members`: who belongs to a league, and who is its commissioner (a role on the account).
 - `seasons`: one per league per year, with its status. `imported_at` marks past seasons imported
   from the old Google Sheets (2020–2025); only those can be re-imported.
-- `league_managers`: everyone who has managed in the league, by first name. Imported teams point to
-  their manager (`fantasy_teams.manager_id`), and a manager can be linked to an account.
+- `league_managers`: everyone who has managed in the league, by first name. Every team points to its
+  manager (`fantasy_teams.manager_id`): imported teams from the sheets, app-played teams from the
+  claiming account's link (the commissioner links accounts in Settings → Past managers).
 - `fantasy_teams`: numbered spots in a season (`slot`). A signed-in user claims an open spot and
   names the team; `user_id` and `name` are nullable, so open spots and historical teams work.
   Unnamed spots show a random name in the app (`app/src/lib/team-name-list.ts`). `eliminated_after_round`.
@@ -55,6 +56,7 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
 | 2 | During Wild Card | Live stats poller (10s), standings with tiebreakers, per-player breakdown |
 | 3 | Before DS redraft | Redrafts (drop+add, yield, lock at first pitch), eliminations, standings-based order, autodraft |
 | 3.5 | Done | 2020–2025 history imported from the Google Sheets (Settings → Past seasons) |
+| 3.6 | Now | Almanac tab: champions, all-time leaders, records, each manager's career (`core/almanac.ts`). Next: head-to-head, then more stats |
 | 4 | Later | Bag notifications (with optional spoiler delay), chat, money tracker, iOS app via EAS |
 
 ## iOS app notes
