@@ -1,10 +1,13 @@
+import { router } from 'expo-router';
 import { type ReactNode, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { ManagerCareer } from '@core/almanac.ts';
 import { SERIES } from '@core/scoreboard.ts';
 
+import { LeaderBars, Pennant, RivalryGrid, managerColor } from '@/components/almanac-charts';
 import { Card } from '@/components/card';
+import { MomentCard } from '@/components/duel';
 import { Screen } from '@/components/screen';
 import { StatTable } from '@/components/stat-table';
 import { ThemedText } from '@/components/themed-text';
@@ -12,7 +15,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ManagerLink, openManager, ordinal } from '@/components/manager-link';
-import { type AlmanacData, useAlmanac } from '@/lib/almanac';
+import { type AlmanacData, managerSlug, useAlmanac } from '@/lib/almanac';
 
 type View_ = 'league' | 'managers';
 
@@ -53,29 +56,77 @@ function League({ data }: { data: AlmanacData }) {
   return (
     <>
       <Card title="Champions">
-        {a.champions.map((c) => (
-          <Line key={c.year} right={`${c.champion.rounds.at(-1)?.tb ?? 0} bags`}>
-            <ThemedText type="smallBold">{c.year} </ThemedText>
-            {name(c.champion.managerKey)}
-            {c.runnerUp && (
-              <ThemedText type="small" themeColor="textSecondary">
-                {'  '}over {data.managers.get(c.runnerUp.managerKey)} ({c.runnerUp.rounds.at(-1)?.tb ?? 0})
-              </ThemedText>
-            )}
-          </Line>
-        ))}
+        <View style={styles.pennants}>
+          {a.champions.map((c) => (
+            <Pennant
+              key={c.year}
+              year={c.year}
+              name={data.managers.get(c.champion.managerKey) ?? '?'}
+              bags={c.champion.rounds.at(-1)?.tb ?? 0}
+              color={managerColor(data, c.champion.managerKey)}
+              onPress={() => openManager(data, c.champion.managerKey)}
+            />
+          ))}
+        </View>
       </Card>
 
-      <Card title="All-time leaders">
-        {[...a.careers].slice(0, 5).map((c) => (
-          <Line key={c.key} right={`${c.titles} ${c.titles === 1 ? 'title' : 'titles'}`}>
-            {name(c.key)}
-            <ThemedText type="small" themeColor="textSecondary">
-              {'  '}avg finish {c.averageFinish.toFixed(1)} · {c.bags} bags in {c.seasons} {c.seasons === 1 ? 'season' : 'seasons'}
-            </ThemedText>
-          </Line>
-        ))}
+      <Card title="Most titles">
+        <LeaderBars
+          rows={a.careers
+            .filter((c) => c.titles > 0)
+            .map((c) => ({ key: c.key, name: c.name, value: c.titles, color: managerColor(data, c.key), onPress: () => openManager(data, c.key) }))}
+          format={(n) => '🏆'.repeat(n)}
+        />
       </Card>
+
+      <Card title="Career bags">
+        <LeaderBars
+          rows={[...a.careers]
+            .sort((x, y) => y.bags - x.bags)
+            .map((c) => ({
+              key: c.key,
+              name: c.name,
+              value: c.bags,
+              color: managerColor(data, c.key),
+              onPress: () => openManager(data, c.key),
+            }))}
+        />
+      </Card>
+
+      {/* The record book's headliners, as big cards in the record holder's color. */}
+      <View style={styles.records}>
+        {(() => {
+          const round = ([1, 2, 3] as const).map((r) => a.bestRounds[r][0]).filter(Boolean).sort((x, y) => y.tb - x.tb)[0];
+          const game = a.bestPlayerGames[0];
+          const season = a.bestPlayerSeasons[0];
+          const cut = a.closestCuts[0];
+          const move = moves[0];
+          return (
+            <>
+              {round && (
+                <MomentCard emoji="🔥" title="Best round ever" color={managerColor(data, round.managerKey)} headline={`${round.tb} bags`}
+                  detail={`${data.managers.get(round.managerKey)}, ${round.year} round ${round.round}`} />
+              )}
+              {game && (
+                <MomentCard emoji="💣" title="Biggest single game" color={managerColor(data, game.managerKey)} headline={`${game.tb} bags`}
+                  detail={`${player(game.playerId)}, ${game.year} ${seriesGame(game.gameType, game.seriesGameNumber)} for ${data.managers.get(game.managerKey)}`} />
+              )}
+              {season && (
+                <MomentCard emoji="⭐" title="Best player season" color={managerColor(data, season.managerKey)} headline={`${season.tb} bags`}
+                  detail={`${player(season.playerId)}, ${season.year} for ${data.managers.get(season.managerKey)}`} />
+              )}
+              {cut && (
+                <MomentCard emoji="✂️" title="Closest cut" color={managerColor(data, cut.out.managerKey)} headline={cut.margin === 0 ? 'Tiebreak' : `By ${cut.margin}`}
+                  detail={`${cut.year} round ${cut.round}: ${data.managers.get(cut.through.managerKey)} ${cut.through.tb}, ${data.managers.get(cut.out.managerKey)} ${cut.out.tb}`} />
+              )}
+              {move && (
+                <MomentCard emoji="🔁" title="Best redraft" color={managerColor(data, move.managerKey)} headline={`+${move.addedTb - move.droppedTb}`}
+                  detail={`${data.managers.get(move.managerKey)} took ${player(move.add)} for ${player(move.drop)}, ${move.year}`} />
+              )}
+            </>
+          );
+        })()}
+      </View>
 
       <Card title="Best rounds">
         {([1, 2, 3] as const).map((round) =>
@@ -138,7 +189,9 @@ function League({ data }: { data: AlmanacData }) {
 
 function Managers({ data }: { data: AlmanacData }) {
   const theme = useTheme();
+  const slug = (key: string) => (key.includes(':') ? key : managerSlug(data.managers.get(key) ?? key));
   return (
+    <>
     <StatTable<ManagerCareer>
       rows={data.almanac.careers}
       rowKey={(c) => c.key}
@@ -156,21 +209,29 @@ function Managers({ data }: { data: AlmanacData }) {
         { key: 'perRound', label: 'Bags/rd', value: (c) => c.bagsPerRound, format: (c) => c.bagsPerRound.toFixed(1), width: 72 },
       ]}
     />
+    <Card title="Rivalries">
+      <ThemedText type="small" themeColor="textSecondary">
+        Rounds won by the row&apos;s manager against the column&apos;s, in rounds they both played. Green: they usually win it. Tap one to see it.
+      </ThemedText>
+      <RivalryGrid data={data} onPick={(a, b) => router.push({ pathname: '/almanac/h2h', params: { a: slug(a), b: slug(b) } })} />
+    </Card>
+    </>
   );
 }
 
 function Segmented({ value, onChange }: { value: View_; onChange: (v: View_) => void }) {
   const theme = useTheme();
-  const tabs: [View_, string][] = [
+  const tabs: [View_ | 'h2h', string][] = [
     ['league', 'League'],
     ['managers', 'Managers'],
+    ['h2h', 'Head-to-head'],
   ];
   return (
     <ThemedView type="backgroundElement" elevation="sunken" style={styles.segmented}>
       {tabs.map(([key, label]) => (
         <Pressable
           key={key}
-          onPress={() => onChange(key)}
+          onPress={() => (key === 'h2h' ? router.push('/almanac/h2h') : onChange(key))}
           style={[styles.segment, value === key && { backgroundColor: theme.segment, boxShadow: theme.raised }]}>
           <ThemedText type="smallBold" themeColor={value === key ? 'text' : 'textSecondary'}>{label}</ThemedText>
         </Pressable>
@@ -181,6 +242,8 @@ function Segmented({ value, onChange }: { value: View_; onChange: (v: View_) => 
 
 const styles = StyleSheet.create({
   line: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.two },
+  records: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  pennants: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, justifyContent: 'center' },
   lineText: { flex: 1 },
   segmented: { flexDirection: 'row', padding: Spacing.half, borderRadius: Radius.lg },
   segment: { flex: 1, alignItems: 'center', paddingVertical: Spacing.two, borderRadius: Radius.md },

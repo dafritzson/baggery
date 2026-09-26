@@ -40,6 +40,7 @@ function RootStack() {
         <Stack.Screen name="research" options={{ title: 'Research · Baggery' }} />
         <Stack.Screen name="almanac/index" options={{ title: 'Almanac · Baggery' }} />
         <Stack.Screen name="almanac/[manager]" options={{ title: 'Almanac · Baggery' }} />
+        <Stack.Screen name="almanac/h2h" options={{ title: 'Head-to-head · Almanac · Baggery' }} />
         <Stack.Screen name="settings" options={{ title: 'Settings · Baggery' }} />
       </Stack.Protected>
       <Stack.Protected guard={!session}>
