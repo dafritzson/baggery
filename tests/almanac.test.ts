@@ -93,10 +93,38 @@ describe('almanac', () => {
   });
 
   it('finds the closest cuts', () => {
-    expect(a.closestCuts.map((c) => [c.round, c.through.managerKey, c.out.managerKey, c.margin])).toEqual([
-      [2, 'a', 'b', 3],
-      [1, 'a', 'c', 6],
+    expect(a.closestCuts.map((c) => [c.round, c.through.managerKeys, c.out.managerKeys, c.margin, c.decidedBy])).toEqual([
+      [2, ['a'], ['b'], 3, 'TB'],
+      [1, ['a'], ['c'], 6, 'TB'],
     ]);
+  });
+
+  it('shows every team tied at the cut, in ranking order, and the tiebreaker that settled it', () => {
+    // All three score 4 bags in round 1 and two go through. Slugging decides it: P needed the
+    // fewest at-bats, then Q, so R is out.
+    const line = (playerId: number, ab: number, tb: number): AlmanacStat => ({
+      gamePk: ++pk, seasonId: 't', seriesGameNumber: 1, playerId, gameType: 'F', gameStart: START.F,
+      ab, h: 1, bb: 0, hbp: 0, sf: 0, tb, hr: 0, r: 0, rbi: 0,
+    });
+    const tie = almanac({
+      seasons: [{ id: 't', year: 2025, complete: true }],
+      // Loaded in an order that isn't the ranking, which must not matter.
+      teams: [
+        { id: 'R', seasonId: 't', managerKey: 'r', eliminatedAfterRound: 1 },
+        { id: 'Q', seasonId: 't', managerKey: 'q', eliminatedAfterRound: 2 },
+        { id: 'P', seasonId: 't', managerKey: 'p', eliminatedAfterRound: null },
+      ],
+      managers: [{ key: 'p', name: 'P' }, { key: 'q', name: 'Q' }, { key: 'r', name: 'R' }],
+      spells: [
+        { seasonId: 't', teamId: 'P', playerId: 1, from: START.F, to: null },
+        { seasonId: 't', teamId: 'Q', playerId: 2, from: START.F, to: null },
+        { seasonId: 't', teamId: 'R', playerId: 3, from: START.F, to: null },
+      ],
+      stats: [line(1, 4, 4), line(2, 5, 4), line(3, 8, 4)],
+      redrafts: [],
+    });
+    const cut = tie.closestCuts.find((c) => c.round === 1)!;
+    expect(cut).toMatchObject({ through: { managerKeys: ['p', 'q'], tb: 4 }, out: { managerKeys: ['r'], tb: 4 }, margin: 0, decidedBy: 'SLG' });
   });
 
   it('weighs redrafts: bags the added player scored against the dropped one’s after the drop', () => {
