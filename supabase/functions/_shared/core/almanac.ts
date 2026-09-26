@@ -596,6 +596,8 @@ export interface AlmanacData {
   almanac: Almanac;
   /** Manager names by key. */
   managers: Map<string, string>;
+  /** The account (user id) of each manager linked to one, by key: for their photo. */
+  accounts: Map<string, string>;
   /** Player names by MLB id. */
   players: Map<number, string>;
   /** How each manager plays the game, and the badges they've earned. */
@@ -607,6 +609,7 @@ export interface AlmanacData {
 export interface AlmanacJson {
   almanac: Omit<Almanac, 'playersByManager'> & { playersByManager: [string, ManagerPlayer[]][] };
   managers: [string, string][];
+  accounts: [string, string][];
   players: [number, string][];
   scouting: ManagerScouting[];
   badges: [string, Badge[]][];
@@ -616,6 +619,7 @@ export function almanacToJson(d: AlmanacData): AlmanacJson {
   return {
     almanac: { ...d.almanac, playersByManager: [...d.almanac.playersByManager] },
     managers: [...d.managers],
+    accounts: [...d.accounts],
     players: [...d.players],
     scouting: d.scouting,
     badges: [...d.badges],
@@ -626,6 +630,8 @@ export function almanacFromJson(j: AlmanacJson): AlmanacData {
   return {
     almanac: { ...j.almanac, playersByManager: new Map(j.almanac.playersByManager) },
     managers: new Map(j.managers),
+    // `?? []`: an app that updated before the function did still draws, just without photos.
+    accounts: new Map(j.accounts ?? []),
     players: new Map(j.players),
     scouting: j.scouting,
     badges: new Map(j.badges),

@@ -27,7 +27,7 @@ async function loadAlmanac(leagueId: string): Promise<AlmanacJson> {
       select t.id, t.season_id, t.user_id, t.manager_id, t.eliminated_after_round
       from fantasy_teams t join seasons s on s.id = t.season_id
       where s.league_id = ${leagueId} order by t.id`,
-    sql`select id, name from league_managers where league_id = ${leagueId} order by id`,
+    sql`select id, name, user_id from league_managers where league_id = ${leagueId} order by id`,
     sql`
       select r.season_id, r.fantasy_team_id, r.mlb_player_id, r.from_at, r.to_at
       from roster_spells r join seasons s on s.id = r.season_id
@@ -67,11 +67,13 @@ async function loadAlmanac(leagueId: string): Promise<AlmanacJson> {
   // yet counts for the account, by the first name on the account.
   const owners = new Map(profiles.map((p) => [p.id as string, String(p.display_name ?? '').split(' ')[0]]));
   const managerNames = new Map(managers.map((m) => [m.id as string, m.name as string]));
+  const accounts = new Map<string, string>(managers.filter((m) => m.user_id).map((m) => [m.id, m.user_id]));
   const keyOf = (t: Row) =>
     t.manager_id ?? (t.user_id ? `user:${t.user_id}` : `team:${t.id}`);
   for (const t of teams) {
     const key = keyOf(t);
     if (!managerNames.has(key)) managerNames.set(key, t.user_id ? (owners.get(t.user_id) ?? 'Someone') : 'Open spot');
+    if (t.user_id && !t.manager_id) accounts.set(key, t.user_id);
   }
 
   const draftById = new Map(drafts.map((d) => [d.id as string, d]));
@@ -129,6 +131,7 @@ async function loadAlmanac(leagueId: string): Promise<AlmanacJson> {
   return almanacToJson({
     almanac: result,
     managers: managerNames,
+    accounts,
     players: new Map(names.map((p) => [p.id as number, p.full_name as string])),
     scouting: scouted,
     badges: badges(scouted),

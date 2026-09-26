@@ -202,6 +202,7 @@ describe('almanacToJson', () => {
     const data = {
       almanac: al,
       managers: new Map(inp.managers.map((m) => [m.key, m.name])),
+      accounts: new Map([['a', 'user-a']]),
       players: new Map([[1, 'One'], [4, 'Four']]),
       scouting: [],
       badges: new Map([['a', [{ emoji: '🎯', name: 'Sharp', reason: 'Why' }]]]),

@@ -1,6 +1,7 @@
+import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { TeamSeason } from '@core/almanac.ts';
@@ -18,6 +19,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { type AlmanacData, managerSlug, useAlmanac } from '@/lib/almanac';
 import { RADAR_AXES, SCOUTING_STATS, radarValues, rankOf } from '@/lib/scouting';
+import { useSeason } from '@/lib/season';
 
 const median = (xs: number[]) => {
   const sorted = [...xs].sort((a, b) => a - b);
@@ -50,6 +52,19 @@ function Line({ children, right }: { children: ReactNode; right: string }) {
   );
 }
 
+/** The manager's photo (uploaded in Settings, else Google's), or their initial in their color. */
+function HeroPhoto({ photo, name, color }: { photo: string | undefined; name: string; color: string }) {
+  const [failed, setFailed] = useState<string | null>(null);
+  if (photo && failed !== photo) {
+    return <Image source={photo} style={styles.heroAvatar} onError={() => setFailed(photo)} accessibilityLabel={name} />;
+  }
+  return (
+    <View style={styles.heroAvatar}>
+      <ThemedText style={[styles.heroInitialText, { color }]}>{name[0]}</ThemedText>
+    </View>
+  );
+}
+
 const signed = (n: number) => {
   const r = Math.round(n);
   return `${r > 0 ? '+' : r < 0 ? '−' : '±'}${Math.abs(r)}`;
@@ -57,6 +72,9 @@ const signed = (n: number) => {
 
 function Career({ data, managerKey }: { data: AlmanacData; managerKey: string }) {
   const theme = useTheme();
+  const { data: season } = useSeason();
+  const account = data.accounts.get(managerKey);
+  const photo = account ? season?.photos.get(account) : undefined;
   const a = data.almanac;
   const slugOf = (key: string) => (key.includes(':') ? key : managerSlug(data.managers.get(key) ?? key));
   const color = managerColor(data, managerKey);
@@ -85,7 +103,7 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
 
   return (
     <>
-      {/* A trading card: their color, initial, trophies and headline numbers. */}
+      {/* A trading card: their color, photo, trophies and headline numbers. */}
       <View style={[styles.hero, { backgroundColor: color, boxShadow: `0 10px 28px ${color}55` }]}>
         <View style={styles.heroTop}>
           <Pressable
@@ -96,9 +114,7 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
             style={({ pressed }) => [styles.heroBack, pressed && { opacity: 0.6 }]}>
             <SymbolView name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back_ios_new' }} size={16} tintColor="#fff" />
           </Pressable>
-          <View style={styles.heroInitial}>
-            <ThemedText style={[styles.heroInitialText, { color }]}>{name[0]}</ThemedText>
-          </View>
+          <HeroPhoto photo={photo} name={name} color={color} />
           <View style={{ flex: 1 }}>
             <ThemedText style={styles.heroName}>{name}</ThemedText>
             <ThemedText style={styles.heroTrophies}>
@@ -273,7 +289,7 @@ const styles = StyleSheet.create({
   hero: { borderRadius: Radius.lg, padding: Spacing.three, gap: Spacing.three },
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   heroBack: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.18)', alignItems: 'center', justifyContent: 'center', marginRight: -Spacing.one },
-  heroInitial: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  heroAvatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
   heroInitialText: { fontSize: 32, lineHeight: 40, fontWeight: '800' },
   heroName: { color: '#fff', fontSize: 30, lineHeight: 36, fontWeight: '800' },
   heroTrophies: { color: '#fff', fontSize: 20, lineHeight: 26 },
