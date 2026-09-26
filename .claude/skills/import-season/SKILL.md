@@ -43,8 +43,9 @@ year from the first one played in the app onward, are refused. Do it locally fir
 (`npx supabase db reset`, `npx supabase functions serve`, `npx tsx scripts/seed-local.ts`, dev
 sign-in as `daniel@example.com`), then staging, then production.
 
-Past teams belong to a `league_managers` row by first name. When a manager's row gets a
-`user_id`, their teams in seasons imported after that get it too (re-import older ones).
+Past teams belong to a `league_managers` row by first name. The commissioner links a manager
+to an account in Settings → Past managers (`link_manager`), which makes that manager's teams in
+every past season theirs; seasons imported later pick up the link too.
 
 Import policy (agreed with the league): rosters, drafts and eliminations come from the sheet,
 because that's what happened. Bags come from MLB box scores.
