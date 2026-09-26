@@ -446,3 +446,6 @@ verify_jwt = false
 
 [functions.almanac]
 verify_jwt = false
+
+[functions.close-round]
+verify_jwt = false

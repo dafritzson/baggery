@@ -147,3 +147,14 @@ export function randomOrder(teamIds: TeamId[], random: () => number = Math.rando
   }
   return order;
 }
+
+/**
+ * The order for a redraft after a round (Draft 3 after round 1, Draft 4 after round 2): the
+ * survivors by that round's ranking, best first. Teams fully tied (same rank) are shuffled among
+ * themselves.
+ */
+export function redraftOrder(ranked: { teamId: TeamId; rank: number }[], survivors: TeamId[], random: () => number = Math.random): TeamId[] {
+  const alive = ranked.filter((r) => survivors.includes(r.teamId));
+  const ranks = [...new Set(alive.map((r) => r.rank))].sort((a, b) => a - b);
+  return ranks.flatMap((rank) => randomOrder(alive.filter((r) => r.rank === rank).map((r) => r.teamId), random));
+}

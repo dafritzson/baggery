@@ -7,6 +7,7 @@ import {
   autodraftAction,
   nextTurn,
   randomOrder,
+  redraftOrder,
   snakeSlots,
   validateAction,
 } from '../supabase/functions/_shared/core/draft.ts';
@@ -162,5 +163,24 @@ describe('randomOrder', () => {
   it('is a permutation', () => {
     const teams = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
     expect(randomOrder(teams).sort()).toEqual(teams);
+  });
+});
+
+describe('redraftOrder', () => {
+  const ranked = [
+    { teamId: 'A', rank: 1 },
+    { teamId: 'B', rank: 2 },
+    { teamId: 'C', rank: 2 },
+    { teamId: 'D', rank: 4 },
+    { teamId: 'E', rank: 5 },
+  ];
+
+  it('orders the survivors by the round’s ranking', () => {
+    expect(redraftOrder(ranked, ['D', 'A', 'B'], () => 0)).toEqual(['A', 'B', 'D']);
+  });
+
+  it('shuffles only teams fully tied with each other', () => {
+    const orders = new Set([0, 0.99].map((r) => redraftOrder(ranked, ['A', 'B', 'C', 'D'], () => r).join('')));
+    expect([...orders].sort()).toEqual(['ABCD', 'ACBD']);
   });
 });

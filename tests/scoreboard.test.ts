@@ -57,6 +57,17 @@ describe('scoreboard', () => {
     expect(ranked.map((r) => r.rank)).toEqual([1, 1]);
   });
 
+  it('breaks a tie on TB with the rules: higher slugging first', () => {
+    // Both teams have 5 TB in the Wild Card; A needed 4 at-bats, B 5, so A ranks ahead.
+    const tied = [
+      { gamePk: 1, playerId: JUDGE, tb: 5, ab: 4, h: 2 },
+      { gamePk: 1, playerId: DEVERS, tb: 5, ab: 5, h: 2 },
+    ];
+    const [first, second] = roundStandings(1, ['B', 'A'], games, tied, spells);
+    expect([first.teamId, first.rank, second.teamId, second.rank]).toEqual(['A', 1, 'B', 2]);
+    expect(first.totals).toMatchObject({ tb: 5, ab: 4, h: 2 });
+  });
+
   it("breaks a team's TB down by player and series, keeping what dropped players earned", () => {
     const blocks = teamSeriesBlocks('B', games, stats, spells, (id) => mlbTeam[id]);
     const [wc, ds, cs] = blocks;

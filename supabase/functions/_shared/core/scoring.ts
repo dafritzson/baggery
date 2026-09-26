@@ -31,7 +31,7 @@ export interface TeamTotals extends StatLine {
   teamId: TeamId;
 }
 
-const STAT_KEYS: (keyof StatLine)[] = ['ab', 'h', 'bb', 'hbp', 'sf', 'tb', 'hr', 'r', 'rbi'];
+export const STAT_KEYS: (keyof StatLine)[] = ['ab', 'h', 'bb', 'hbp', 'sf', 'tb', 'hr', 'r', 'rbi'];
 
 export function emptyTotals(teamId: TeamId): TeamTotals {
   return { teamId, ab: 0, h: 0, bb: 0, hbp: 0, sf: 0, tb: 0, hr: 0, r: 0, rbi: 0 };

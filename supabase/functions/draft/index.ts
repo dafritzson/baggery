@@ -11,10 +11,13 @@ import {
   autodraftAction,
   nextTurn,
   randomOrder,
+  redraftOrder,
   validateAction,
 } from '../_shared/core/draft.ts';
+import type { FantasyRound } from '../_shared/core/types.ts';
 import { type Tx, sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
+import { roundRanking } from '../_shared/round-ranking.ts';
 
 interface Body {
   draftId: string;
@@ -220,10 +223,22 @@ serve(async (req) => {
       case 'start': {
         commissionerOnly();
         if (ctx.draft.status !== 'scheduled') throw new UserError('This draft has already started.');
-        if (ctx.draft.number > 2) throw new UserError('Standings-based draft order is not supported yet.');
         const teams = await tx`
           select id from fantasy_teams where season_id = ${ctx.draft.season_id} and eliminated_after_round is null`;
-        const order = randomOrder(teams.map((t) => t.id as string), () => crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32);
+        const alive = teams.map((t) => t.id as string);
+        const random = () => crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32;
+        let order: string[];
+        if (ctx.draft.number <= 2) {
+          order = randomOrder(alive, random);
+        } else {
+          // Drafts 3 and 4 go in the previous round's order (the best-ranked team first), once
+          // that round is closed.
+          const round = (ctx.draft.number - 2) as FantasyRound;
+          const [closed] = await tx`
+            select 1 from fantasy_teams where season_id = ${ctx.draft.season_id} and eliminated_after_round = ${round} limit 1`;
+          if (!closed) throw new UserError(`Close round ${round} first (on the Standings page), so the draft order can follow it.`);
+          order = redraftOrder(await roundRanking(tx, { id: ctx.draft.season_id, year: ctx.draft.year }, round, alive), alive, random);
+        }
         await tx`update drafts set status = 'live', pick_order = ${order} where id = ${ctx.draft.id}`;
         await tx`update seasons set status = 'active' where id = ${ctx.draft.season_id} and status = 'setup'`;
         ctx.draft = { ...ctx.draft, status: 'live', pick_order: order };

@@ -1,7 +1,7 @@
 // Total bases per game, laid out like the league's old scoring sheets: one column per game of a
 // series (WC1, WC2, DS1, ...), one row per fantasy team (standings) or per player (team view).
 
-import { type RosterSpell } from './scoring.ts';
+import { compareTeams, emptyTotals, type RosterSpell, STAT_KEYS, type StatLine } from './scoring.ts';
 import { type FantasyRound, type GameType, type PlayerId, ROUND_FOR_GAME_TYPE, type TeamId } from './types.ts';
 
 export interface ScoreGame {
@@ -17,7 +17,11 @@ export interface ScoreGame {
   awayTeamId: number;
 }
 
-export interface ScoreStat {
+/**
+ * A player's line in one game. Standings need TB; the rest is for tiebreakers (SLG, OBP, HR, R,
+ * RBI) and counts as 0 when missing.
+ */
+export interface ScoreStat extends Partial<Omit<StatLine, 'tb'>> {
   gamePk: number;
   playerId: PlayerId;
   tb: number;
@@ -80,7 +84,9 @@ export interface StandingRow {
   /** TB by column key ("F1", "D3", ...); null until a game with that number starts. */
   cells: Map<string, number | null>;
   total: number;
-  /** 1-based; teams with the same total share a rank. */
+  /** The team's whole line for the round, for the tiebreakers. */
+  totals: StatLine;
+  /** 1-based, by the rules' ranking (TB, then SLG, OBP, HR, R, RBI); only full ties share one. */
   rank: number;
 }
 
@@ -97,7 +103,13 @@ export function roundStandings(
   const rows = new Map<TeamId, StandingRow>(
     teamIds.map((id) => [
       id,
-      { teamId: id, cells: new Map(columns.map((c) => [columnKey(c.gameType, c.number), c.started ? 0 : null])), total: 0, rank: 0 },
+      {
+        teamId: id,
+        cells: new Map(columns.map((c) => [columnKey(c.gameType, c.number), c.started ? 0 : null])),
+        total: 0,
+        totals: emptyTotals(id),
+        rank: 0,
+      },
     ]),
   );
   for (const stat of stats) {
@@ -109,10 +121,11 @@ export function roundStandings(
     const key = columnKey(game.gameType, game.seriesGameNumber);
     row.cells.set(key, (row.cells.get(key) ?? 0) + stat.tb);
     row.total += stat.tb;
+    for (const k of STAT_KEYS) row.totals[k] += stat[k] ?? 0;
   }
-  const sorted = [...rows.values()].sort((a, b) => b.total - a.total);
+  const sorted = [...rows.values()].sort((a, b) => compareTeams(a.totals, b.totals));
   sorted.forEach((r, i) => {
-    r.rank = i > 0 && sorted[i - 1].total === r.total ? sorted[i - 1].rank : i + 1;
+    r.rank = i > 0 && compareTeams(sorted[i - 1].totals, r.totals) === 0 ? sorted[i - 1].rank : i + 1;
   });
   return sorted;
 }

@@ -1,3 +1,5 @@
+import { SymbolView } from 'expo-symbols';
+import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import {
@@ -8,6 +10,7 @@ import {
   roundTotals,
   teamSeriesBlocks,
 } from '@core/scoreboard.ts';
+import { eliminations } from '@core/scoring.ts';
 import type { FantasyRound } from '@core/types.ts';
 
 import { OwnerBadge, YouTag } from '@/components/owner-badge';
@@ -15,6 +18,7 @@ import { PlayerName } from '@/components/player-name';
 import { type GridRow, ScoreGrid } from '@/components/score-grid';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { TiebreakSheet } from '@/components/tiebreak-sheet';
 import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
@@ -76,21 +80,35 @@ export function StandingsTable({
   const columns = roundColumns(round, scores.games);
   const survivors = data.season.survivors_after_round[round - 1] ?? teams.length;
   const byId = new Map(teams.map((t) => [t.id, t]));
-  // Like the old sheet: blue when through, lavender when tied across the cut line (drink-off
-  // territory until tiebreakers are in), red when below it.
-  const cutTotal = standings[survivors - 1]?.total ?? 0;
-  const tieAtCut = standings.length > survivors && standings[survivors].total === cutTotal;
-  const standing = (total: number, i: number) =>
-    tieAtCut ? (total > cutTotal ? 'safe' : total === cutTotal ? 'tied' : 'out') : i < survivors ? 'safe' : 'out';
+  const theme = useTheme();
+  const [tieGroup, setTieGroup] = useState<number | null>(null);
+  // Who's through: once the round is closed, whatever was recorded (a drink-off included);
+  // until then, the ranking with its tiebreakers. Full ties across the cut are a drink-off.
+  const closed = teams.some((t) => t.eliminated_after_round === round);
+  const cut = eliminations(
+    standings.map((s) => ({ ...s.totals, teamId: s.teamId, rank: s.rank })),
+    Math.min(survivors, standings.length),
+  );
+  const status = (teamId: string): 'safe' | 'tied' | 'out' =>
+    closed
+      ? byId.get(teamId)!.eliminated_after_round === round ? 'out' : 'safe'
+      : cut.advancing.includes(teamId) ? 'safe' : cut.drinkOff?.teamIds.includes(teamId) ? 'tied' : 'out';
+  // Teams through first, so the cut line sits between them and the rest.
+  const order = { safe: 0, tied: 1, out: 2 };
+  const ordered = [...standings].sort((a, b) => order[status(a.teamId)] - order[status(b.teamId)] || a.rank - b.rank);
+  const through = ordered.filter((s) => status(s.teamId) !== 'out').length;
+  // Groups of two or more teams level on bags: each gets the tiebreaker icon.
+  const tiedTotals = [...new Set(ordered.map((s) => s.total))].filter((t) => ordered.filter((s) => s.total === t).length > 1);
   const compact = useLayout() === 'compact';
   // Before a round's first pitch there's nothing to rank.
   const started = columns.some((c) => c.started);
 
-  const rows: GridRow[] = standings.map((s, i) => {
+  const rows: GridRow[] = ordered.map((s, i) => {
     const team = byId.get(s.teamId)!;
     const owner = ownerLine(data, team);
     const mine = team.id === data.myTeam?.id;
-    const tied = standings.some((o) => o !== s && o.rank === s.rank);
+    const tied = ordered.some((o) => o !== s && o.rank === s.rank);
+    const levelOnBags = started && tiedTotals.includes(s.total);
     return {
       key: s.teamId,
       label: (
@@ -101,6 +119,16 @@ export function StandingsTable({
           )}
           {!compact && <View style={styles.badge}><OwnerBadge teamId={team.id} owner={owner} photo={team.user_id ? data.photos.get(team.user_id) : null} mine={mine} /></View>}
           <TeamLabel name={teamName(team)} owner={owner} mine={mine} />
+          {levelOnBags && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`How the tie at ${s.total} bags was broken`}
+              hitSlop={8}
+              onPress={() => setTieGroup(s.total)}
+              style={styles.tieButton}>
+              <SymbolView name={{ ios: 'scalemass', android: 'balance', web: 'balance' }} size={18} tintColor={theme.accent} />
+            </Pressable>
+          )}
         </>
       ),
       cells: columns.map((c) => {
@@ -110,8 +138,8 @@ export function StandingsTable({
       total: started ? String(s.total) : '',
       selected: team.id === selectedTeamId,
       mine,
-      standing: started ? standing(s.total, i) : undefined,
-      cutAfter: started && i === survivors - 1 && standings.length > survivors,
+      standing: started ? status(s.teamId) : undefined,
+      cutAfter: started && i === through - 1 && ordered.length > through,
       onPress: () => onSelectTeam(team.id),
     };
   });
@@ -134,6 +162,27 @@ export function StandingsTable({
         totalHeader={`RD ${round}`}
         labelWidth={compact ? 160 : 220}
         rowHeight={48}
+      />
+      <TiebreakSheet
+        title={tieGroup === null ? '' : `Tied at ${tieGroup} bags`}
+        onClose={() => setTieGroup(null)}
+        teams={
+          tieGroup === null
+            ? null
+            : ordered
+                .filter((s) => s.total === tieGroup)
+                .map((s) => {
+                  const st = status(s.teamId);
+                  // Only a tie across the cut line decides who's through.
+                  const acrossCut = st === 'tied' || ordered.some((o) => o.total === tieGroup && status(o.teamId) !== st);
+                  return {
+                    teamId: s.teamId,
+                    name: teamName(byId.get(s.teamId)!),
+                    totals: s.totals,
+                    status: acrossCut ? (st === 'safe' ? 'through' : st === 'out' ? 'out' : 'drink-off') : null,
+                  };
+                })
+        }
       />
     </View>
   );
@@ -267,6 +316,7 @@ function SeriesTable({ data, block }: { data: SeasonData; block: SeriesBlock }) 
 }
 
 const styles = StyleSheet.create({
+  tieButton: { marginLeft: Spacing.one, padding: 2 },
   chips: { flexDirection: 'row', gap: Spacing.one, flexWrap: 'wrap', minHeight: CHIPS_ROW, alignItems: 'center', alignContent: 'center' },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
   // Section heads are one line of fixed height, so tables side by side start level.

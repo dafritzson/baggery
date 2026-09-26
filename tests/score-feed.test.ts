@@ -95,11 +95,13 @@ describe('score feed', () => {
       2026,
       rostered,
     );
-    // TB for rostered players in any game; Harper isn't on a roster.
-    expect(next.stats).toEqual([
-      { gamePk: 1, playerId: OHTANI, tb: 4 },
-      { gamePk: 2, playerId: OHTANI, tb: 2 },
+    // TB for rostered players in any game, with the rest of the line for tiebreakers; Harper
+    // isn't on a roster.
+    expect(next.stats.map((x) => [x.gamePk, x.playerId, x.tb])).toEqual([
+      [1, OHTANI, 4],
+      [2, OHTANI, 2],
     ]);
+    expect(next.stats[0]).toMatchObject({ ab: 2, h: 1, hr: 1, bb: 0, hbp: 0, sf: 0, r: 1, rbi: 1 });
     // Lines for everyone who batted, but only in game 1, the live one.
     expect(next.lines.map((l) => [l.gamePk, l.playerId])).toEqual([[1, OHTANI], [1, HARPER]]);
     expect(next.lines[0]).toEqual({ gamePk: 1, playerId: OHTANI, ab: 2, h: 1, doubles: 0, triples: 0, hr: 1, bb: 0 });
