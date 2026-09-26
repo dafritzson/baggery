@@ -21,15 +21,20 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 
 /** Calls an Edge Function and returns its error message, if any. */
 export async function callFunction(name: string, body: object): Promise<string | null> {
-  const { error } = await supabase.functions.invoke(name, { body });
-  if (!error) return null;
+  return (await invokeFunction(name, body)).error;
+}
+
+/** Calls an Edge Function and returns its response, or the error message to show. */
+export async function invokeFunction<T>(name: string, body: object): Promise<{ data: T | null; error: string | null }> {
+  const { data, error } = await supabase.functions.invoke(name, { body });
+  if (!error) return { data: data as T, error: null };
   if ('context' in error && error.context instanceof Response) {
     try {
       const payload = await error.context.json();
-      if (payload?.error) return payload.error;
+      if (payload?.error) return { data: null, error: payload.error };
     } catch {
       // Fall through to the generic message.
     }
   }
-  return error.message || 'Something went wrong.';
+  return { data: null, error: error.message || 'Something went wrong.' };
 }

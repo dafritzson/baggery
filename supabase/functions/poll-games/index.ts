@@ -163,7 +163,9 @@ async function syncSchedule(year: number, all: boolean): Promise<number> {
          or (excluded.status <> 'Live'
              and (mlb_games.home_score, mlb_games.away_score) is distinct from (excluded.home_score, excluded.away_score))`;
   }
-  await sql`update private.poller set schedule_synced_at = now()`;
+  // Only the latest season's read counts for the cron job's schedule; reloading a past season
+  // mustn't delay the next read of the one being played.
+  await sql`update private.poller set schedule_synced_at = now() where ${year} = (select max(year) from seasons)`;
   return games.length;
 }
 
