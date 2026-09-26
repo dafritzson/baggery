@@ -10,3 +10,6 @@ team-names.txt
 
 # Past seasons' workbooks (one per year, downloaded from Google Sheets). League data, kept out of the repo.
 /history/
+
+# Git worktrees made by Claude Code sessions.
+.claude/worktrees/
