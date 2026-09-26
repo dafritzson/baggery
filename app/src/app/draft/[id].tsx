@@ -10,7 +10,7 @@ import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { Columns } from '@/components/columns';
 import { PlayerName } from '@/components/player-name';
-import { PlayersList, availablePlayers } from '@/components/players-list';
+import { PlayersList, availablePlayers, useDraftBoard } from '@/components/players-list';
 import { Screen } from '@/components/screen';
 import { Sheet } from '@/components/sheet';
 import { ThemedText } from '@/components/themed-text';
@@ -62,6 +62,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
 
   // The player popup's Draft button opens the pick sheet, for anyone the drafter can still take.
   const draftable = useMemo(() => new Set(availablePlayers(data).map((p) => p.id)), [data]);
+  const board = useDraftBoard(data, draft);
   const draftAction = useMemo(
     (): DraftAction | null =>
       canAct
@@ -97,7 +98,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
   const tabs = (
     <>
       <Segmented value={tab} onChange={setTab} />
-      {tab === 'players' && <PlayersList data={data} />}
+      {tab === 'players' && <PlayersList data={data} board={board} />}
       {tab === 'board' && <Board data={data} draft={draft} config={config} />}
       {tab === 'rosters' && <Rosters data={data} draft={draft} />}
     </>
@@ -606,7 +607,8 @@ function useCommissionerActions(
   return {
     canStart: draft.status === 'scheduled',
     autopickFor: onClock ? teamName(onClock) : null,
-    canUndo: data.actions.some((a) => a.draft_id === draft.id),
+    // A finished season's drafts are history.
+    canUndo: data.season.status !== 'complete' && data.actions.some((a) => a.draft_id === draft.id),
     busy,
     confirm: setConfirming,
     autopick: () => act({ action: 'autopick' }),

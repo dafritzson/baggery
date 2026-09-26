@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import * as DropdownMenu from 'zeego/dropdown-menu';
@@ -11,13 +11,77 @@ import { useTheme } from '@/hooks/use-theme';
 import { useOpenPlayer } from '@/lib/player';
 import { usePlayerColumns } from '@/lib/player-columns';
 import { projection } from '@/lib/projections';
-import type { SeasonData } from '@/lib/season';
+import type { Draft, SeasonData } from '@/lib/season';
+import { supabase } from '@/lib/supabase';
 
-/** Players who can still be drafted: on a live postseason roster and on nobody's team. */
-export function availablePlayers(data: SeasonData): (PlayerRow & { mlbTeamId: number })[] {
-  const taken = new Set(data.spells.map((s) => s.mlb_player_id));
+/** Which players a list shows. */
+export interface Board {
+  /** Players on a fantasy team, left off the list. */
+  taken: Set<number>;
+  /** MLB teams whose players are listed. */
+  teamIds: Set<number>;
+  /** Only players on their team's postseason roster. */
+  rosterOnly: boolean;
+}
+
+/**
+ * The board now: players who can still be drafted (on a live postseason roster and on nobody's
+ * team). Once the season is over there's nothing left to draft, so it's the whole player pool.
+ */
+export function currentBoard(data: SeasonData): Board {
+  if (data.season.status === 'complete') {
+    return { taken: new Set(), teamIds: new Set(data.mlbTeams.keys()), rosterOnly: false };
+  }
+  return {
+    taken: new Set(data.spells.map((s) => s.mlb_player_id)),
+    teamIds: new Set([...data.mlbTeams.values()].filter((t) => !t.eliminated).map((t) => t.id)),
+    rosterOnly: true,
+  };
+}
+
+/**
+ * A draft's board. A live or upcoming draft uses the current one. A finished draft shows what was
+ * left once it was done: players nobody had drafted by then, on the MLB teams playing the series
+ * it was before (every postseason team for Draft 1, since Wild Card byes don't play that round).
+ */
+export function useDraftBoard(data: SeasonData, draft: Draft): Board {
+  const [seriesTeams, setSeriesTeams] = useState<Set<number> | null>(null);
+  const done = draft.status === 'complete' && draft.before_game_type !== 'F';
+  const year = data.season.year;
+  useEffect(() => {
+    if (!done) return;
+    let stale = false;
+    supabase
+      .from('mlb_games')
+      .select('home_team_id, away_team_id')
+      .eq('season_year', year)
+      .eq('game_type', draft.before_game_type)
+      .then(({ data: games }) => {
+        if (!stale && games?.length) setSeriesTeams(new Set(games.flatMap((g) => [g.home_team_id, g.away_team_id])));
+      });
+    return () => {
+      stale = true;
+    };
+  }, [done, year, draft.before_game_type]);
+
+  return useMemo(() => {
+    if (draft.status !== 'complete') return currentBoard(data);
+    const locks = draft.locks_at ? Date.parse(draft.locks_at) : Infinity;
+    return {
+      taken: new Set(data.spells.filter((s) => Date.parse(s.from_at) <= locks).map((s) => s.mlb_player_id)),
+      teamIds: (done && seriesTeams) || new Set(data.mlbTeams.keys()),
+      rosterOnly: true,
+    };
+  }, [data, draft, done, seriesTeams]);
+}
+
+/** The players on a board, with what the table shows for each. */
+export function availablePlayers(data: SeasonData, board: Board = currentBoard(data)): (PlayerRow & { mlbTeamId: number })[] {
   return data.pool
-    .filter((p) => p.on_postseason_roster && !taken.has(p.mlb_player_id) && !data.mlbTeams.get(p.mlb_team_id)?.eliminated)
+    .filter(
+      (p) =>
+        (!board.rosterOnly || p.on_postseason_roster) && !board.taken.has(p.mlb_player_id) && board.teamIds.has(p.mlb_team_id),
+    )
     .map((p) => {
       const team = data.mlbTeams.get(p.mlb_team_id);
       const { bye, rdslg, tbExpected, rdtb } = projection(data, p);
@@ -59,17 +123,19 @@ export function availablePlayers(data: SeasonData): (PlayerRow & { mlbTeamId: nu
 }
 
 /**
- * Search, team filter and the sortable table of available players. Tapping one opens their stats
- * in the popup, unless `onSelect` handles it.
+ * Search, team filter and the sortable table of the players on a board (the current one unless
+ * given). Tapping one opens their stats in the popup, unless `onSelect` handles it.
  */
 export function PlayersList({
   data,
+  board,
   onSelect,
   selectedId,
   fill = false,
   onTableWidth,
 }: {
   data: SeasonData;
+  board?: Board;
   onSelect?: (playerId: number) => void;
   selectedId?: number | null;
   /** Fill the parent's height, scrolling the table inside it rather than with the page. */
@@ -88,13 +154,16 @@ export function PlayersList({
   const [query, setQuery] = useState('');
   const [teamFilter, setTeamFilter] = useState<number | null>(null);
 
-  const available = useMemo(() => availablePlayers(data), [data]);
+  const shownBoard = useMemo(() => board ?? currentBoard(data), [board, data]);
+  const available = useMemo(() => availablePlayers(data, shownBoard), [data, shownBoard]);
   const q = query.trim().toLowerCase();
   const shown = available.filter(
     (p) => (teamFilter === null || p.mlbTeamId === teamFilter) && (!q || p.name.toLowerCase().includes(q)),
   );
   const columnsMenu = <ColumnsMenu value={columns} onChange={setColumns} />;
-  const mlbTeams = [...data.mlbTeams.values()].filter((t) => !t.eliminated).sort((a, b) => a.abbreviation.localeCompare(b.abbreviation));
+  const mlbTeams = [...data.mlbTeams.values()]
+    .filter((t) => shownBoard.teamIds.has(t.id))
+    .sort((a, b) => a.abbreviation.localeCompare(b.abbreviation));
 
   return (
     <View style={[{ gap: Spacing.two }, fill && styles.fill]}>

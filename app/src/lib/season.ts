@@ -24,6 +24,8 @@ export interface Draft {
   kind: 'initial' | 'redraft';
   status: 'scheduled' | 'live' | 'complete';
   fantasy_round: number;
+  /** The MLB series this draft is before: F (Wild Card), D, L or W. */
+  before_game_type: 'F' | 'D' | 'L' | 'W';
   pick_order: string[];
   rounds: number;
   locks_at: string | null;
