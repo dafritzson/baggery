@@ -19,7 +19,7 @@ import { RADAR_AXES, SCOUTING_STATS, radarValues } from '@/lib/scouting';
 export function HeadToHead({ data, a, b }: { data: AlmanacData; a?: string; b?: string }) {
   const careers = data.almanac.careers;
   // Picking is kept in the screen, not the URL: a URL change re-renders every screen in the app.
-  const [picked, setPicked] = useState(() => {
+  const [picked, setPicked] = useState<{ a?: string; b?: string }>(() => {
     const slug = (key: string) => (key.includes(':') ? key : managerSlug(data.managers.get(key) ?? key));
     const find = (s?: string) => careers.find((c) => slug(c.key) === s)?.key;
     const aKey = find(a) ?? careers[0]?.key;
