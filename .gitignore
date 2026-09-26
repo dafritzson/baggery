@@ -7,3 +7,6 @@ node_modules/
 
 # Plain list of the pun team names (see scripts/team-names.ts). Kept out of the repo.
 team-names.txt
+
+# Past seasons' workbooks (one per year, downloaded from Google Sheets). League data, kept out of the repo.
+/history/

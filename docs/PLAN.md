@@ -29,7 +29,10 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
 
 - `leagues`, `league_members`: supports more than one friend group.
 - `league_members`: who belongs to a league, and who is its commissioner (a role on the account).
-- `seasons`: one per league per year, with its status.
+- `seasons`: one per league per year, with its status. `imported_at` marks past seasons imported
+  from the old Google Sheets (2020–2025); only those can be re-imported.
+- `league_managers`: everyone who has managed in the league, by first name. Imported teams point to
+  their manager (`fantasy_teams.manager_id`), and a manager can be linked to an account.
 - `fantasy_teams`: numbered spots in a season (`slot`). A signed-in user claims an open spot and
   names the team; `user_id` and `name` are nullable, so open spots and historical teams work.
   Unnamed spots show a random name in the app (`app/src/lib/team-name-list.ts`). `eliminated_after_round`.
@@ -51,7 +54,8 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
 | 1 | Draft 1, Mon 2026-09-28 | Login, season/manager setup, player pool import, random order, live snake draft, rosters |
 | 2 | During Wild Card | Live stats poller (10s), standings with tiebreakers, per-player breakdown |
 | 3 | Before DS redraft | Redrafts (drop+add, yield, lock at first pitch), eliminations, standings-based order, autodraft |
-| 4 | Later | Bag notifications (with optional spoiler delay), chat, 2020–2025 history import from Google Sheets, money tracker, iOS app via EAS |
+| 3.5 | Done | 2020–2025 history imported from the Google Sheets (Settings → Past seasons) |
+| 4 | Later | Bag notifications (with optional spoiler delay), chat, money tracker, iOS app via EAS |
 
 ## iOS app notes
 

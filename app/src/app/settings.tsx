@@ -5,6 +5,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { ImportSeasonCard } from '@/components/import-season-card';
 import { OwnerBadge } from '@/components/owner-badge';
 import { Screen } from '@/components/screen';
 import { TeamNameField } from '@/components/team-name-sheet';
@@ -16,7 +17,7 @@ import { useSeason } from '@/lib/season';
 import { supabase } from '@/lib/supabase';
 import { suggestTeamName, teamName } from '@/lib/teams';
 
-/** Your settings: your photo, and your team name for the season being viewed. */
+/** Your settings: your photo, your team name for the season being viewed, and (commissioner) past seasons. */
 export default function SettingsScreen() {
   const { data, loading, refetch } = useSeason();
   const [saved, setSaved] = useState(false);
@@ -56,6 +57,7 @@ export default function SettingsScreen() {
           </>
         )}
       </Card>
+      <ImportSeasonCard />
     </Screen>
   );
 }
