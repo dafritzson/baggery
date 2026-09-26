@@ -26,8 +26,11 @@ export default function SettingsScreen() {
   const team = data?.myTeam;
 
   async function rename(name: string) {
+    // No team this season (a past one, say): nothing to rename. Checked here rather than with
+    // `team!`, which the React Compiler reads while rendering, crashing the screen.
+    if (!team) return 'You have no team this season.';
     setSaved(false);
-    const { error } = await supabase.rpc('rename_team', { p_team_id: team!.id, p_name: name });
+    const { error } = await supabase.rpc('rename_team', { p_team_id: team.id, p_name: name });
     if (error) return error.message;
     setSaved(true);
     refetch();
@@ -50,6 +53,8 @@ export default function SettingsScreen() {
             />
             {saved && <ThemedText type="small" themeColor="success">Saved.</ThemedText>}
           </>
+        ) : data?.season.status === 'complete' ? (
+          <ThemedText themeColor="textSecondary">You didn&apos;t have a team in {data.season.year}.</ThemedText>
         ) : (
           <>
             <ThemedText themeColor="textSecondary">You haven&apos;t claimed a spot this season yet.</ThemedText>

@@ -36,6 +36,14 @@ export function ownerName(data: SeasonData, team: Team): string | null {
   return team.user_id ? data.owners.get(team.user_id) ?? null : null;
 }
 
+/**
+ * What to show under a team's name: its manager, "Open spot" while it can still be claimed, or
+ * nothing in a finished season (past teams are named after their manager already).
+ */
+export function ownerLine(data: SeasonData, team: Team): string | null {
+  return ownerName(data, team) ?? (data.season.status === 'complete' ? null : 'Open spot');
+}
+
 /** "Big Bags (Kyle)", or just the name for an unclaimed spot. */
 export function teamLabel(data: SeasonData, team: Team | undefined): string {
   if (!team) return '—';
