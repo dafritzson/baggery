@@ -32,11 +32,13 @@ ready to import). MLB responses are cached in `history/.cache/`.
 
 ## Import it
 
-Signed in as the commissioner on the web app: Settings → Past seasons → choose
-`history/<year>.json` → Import. The `import-season` Edge Function writes the season, teams
-(named after their manager), drafts and roster spells in one transaction (well under a
-second). Then the card asks `poll-games` to load that postseason's games and box scores from
-MLB (a few seconds). Importing a year again replaces it; seasons played in the app, and any
+Signed in as the commissioner on the web app: Settings → Past seasons → choose one or more
+`history/<year>.json` files → Import. For each, the `import-season` Edge Function writes the
+season, teams (named after their manager), drafts and roster spells in one transaction (well
+under a second). Then the card asks `sync-pool` to fill the player pool for the Draft and
+Research tabs (every hitter on a postseason team's active roster the day before the Wild Card,
+with that year's stats), and `poll-games` to load the postseason's games and box scores (a few
+seconds each). Importing a year again replaces it; seasons played in the app, and any
 year from the first one played in the app onward, are refused. Do it locally first
 (`npx supabase db reset`, `npx supabase functions serve`, `npx tsx scripts/seed-local.ts`, dev
 sign-in as `daniel@example.com`), then staging, then production.

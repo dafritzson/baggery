@@ -9,74 +9,86 @@ import { ThemedText } from '@/components/themed-text';
 import { useSeason } from '@/lib/season';
 import { callFunction, invokeFunction } from '@/lib/supabase';
 
-/** Opens the browser's file picker and reads the chosen file as text. Null when nothing is picked. */
-function pickTextFile(accept: string): Promise<string | null> {
+type Tone = 'textSecondary' | 'danger' | 'success';
+
+/** Opens the browser's file picker and reads the chosen files as text, by file name. */
+function pickTextFiles(accept: string): Promise<{ name: string; text: string }[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = accept;
+    input.multiple = true;
     input.onchange = () => {
-      const file = input.files?.[0];
-      if (!file) return resolve(null);
-      file.text().then(resolve, () => resolve(null));
+      const files = [...(input.files ?? [])];
+      Promise.all(files.map(async (f) => ({ name: f.name, text: await f.text() }))).then(resolve, () => resolve([]));
     };
-    input.oncancel = () => resolve(null);
+    input.oncancel = () => resolve([]);
     input.click();
   });
 }
 
+/** A picked file: a season ready to import, or why it can't be. */
+type Picked = { name: string; season: SeasonImport } | { name: string; problem: string };
+
+function readSeasonFile(name: string, text: string): Picked {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { name, problem: 'not a JSON file' };
+  }
+  const invalid = validateSeasonImport(parsed);
+  return invalid ? { name, problem: invalid } : { name, season: parsed as SeasonImport };
+}
+
 /**
- * Commissioner only: imports a past season from history/<year>.json, which
- * scripts/history/check.ts makes from the league's old Google Sheets. Importing a year again
- * replaces it.
+ * Commissioner only: imports past seasons from history/<year>.json files, which
+ * scripts/history/check.ts makes from the league's old Google Sheets. Each import writes the
+ * season, then fills its player pool (Draft and Research tabs) and loads its games from MLB.
+ * Importing a year again replaces it.
  */
 export function ImportSeasonCard() {
   const { data, refetch } = useSeason();
-  const [season, setSeason] = useState<SeasonImport | null>(null);
+  const [picked, setPicked] = useState<Picked[]>([]);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ text: string; tone: 'textSecondary' | 'danger' | 'success' } | null>(null);
+  const [log, setLog] = useState<{ text: string; tone: Tone }[]>([]);
   if (!data?.isCommissioner) return null;
 
+  const ready = picked.flatMap((p) => ('season' in p ? [p.season] : [])).sort((a, b) => a.year - b.year);
+
   async function choose() {
-    setMessage(null);
-    setSeason(null);
-    const text = await pickTextFile('.json,application/json');
-    if (text === null) return;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      return setMessage({ text: 'That file isn’t JSON. Pick a history/<year>.json file.', tone: 'danger' });
-    }
-    const invalid = validateSeasonImport(parsed);
-    if (invalid) return setMessage({ text: invalid, tone: 'danger' });
-    setSeason(parsed as SeasonImport);
+    setLog([]);
+    const files = await pickTextFiles('.json,application/json');
+    setPicked(files.map((f) => readSeasonFile(f.name, f.text)));
   }
 
-  async function runImport(s: SeasonImport) {
-    setBusy(true);
-    setMessage({ text: `Importing ${s.year}…`, tone: 'textSecondary' });
+  async function importOne(s: SeasonImport): Promise<{ text: string; tone: Tone }> {
     const { data: result, error } = await invokeFunction<{ seasonId: string }>('import-season', {
       leagueId: data!.season.league_id,
       season: s,
     });
-    if (error || !result) {
-      setBusy(false);
-      return setMessage({ text: error ?? 'Something went wrong.', tone: 'danger' });
-    }
-    setMessage({ text: `Loading ${s.year}'s games and box scores from MLB…`, tone: 'textSecondary' });
+    if (error || !result) return { text: `${s.year}: ${error ?? 'Something went wrong.'}`, tone: 'danger' };
+    const poolError = await callFunction('sync-pool', { seasonId: result.seasonId });
     const gamesError = await callFunction('poll-games', { seasonId: result.seasonId });
+    const failed = [poolError && `player pool (${poolError})`, gamesError && `games (${gamesError})`].filter(Boolean);
+    return failed.length
+      ? { text: `${s.year} imported, but loading its ${failed.join(' and ')} failed. Import it again to retry.`, tone: 'danger' }
+      : { text: `${s.year} imported.`, tone: 'success' };
+  }
+
+  async function importAll() {
+    setBusy(true);
+    setLog([]);
+    for (const s of ready) {
+      setLog((l) => [...l, { text: `Importing ${s.year}…`, tone: 'textSecondary' }]);
+      const done = await importOne(s);
+      setLog((l) => [...l.slice(0, -1), done]);
+    }
     setBusy(false);
-    setSeason(null);
-    setMessage(
-      gamesError
-        ? { text: `${s.year} imported, but loading its games failed (${gamesError}). Import it again to retry.`, tone: 'danger' }
-        : { text: `${s.year} imported. Switch to it from the year in the top bar.`, tone: 'success' },
-    );
+    setPicked([]);
     refetch();
   }
 
-  const champion = season?.managers.find((m) => m.eliminatedAfterRound === null)?.name;
   return (
     <Card title="Past seasons">
       {Platform.OS !== 'web' ? (
@@ -84,22 +96,34 @@ export function ImportSeasonCard() {
       ) : (
         <>
           <ThemedText type="small" themeColor="textSecondary">
-            Import a season file made from the old Google Sheets (history/&lt;year&gt;.json). Importing a year
-            again replaces it. Seasons played in the app are never touched.
+            Import season files made from the old Google Sheets (history/&lt;year&gt;.json); pick several at once.
+            Importing a year again replaces it. Seasons played in the app are never touched.
           </ThemedText>
-          <Button label="Choose a season file" variant="secondary" onPress={choose} disabled={busy} />
-          {season && (
-            <>
-              <ThemedText>
-                {season.year}: {season.managers.length} teams, {season.players.length} players drafted, {champion} won.
+          <Button label="Choose season files" variant="secondary" onPress={choose} disabled={busy} />
+          {picked.map((p) =>
+            'season' in p ? (
+              <ThemedText key={p.name} type="small">
+                {p.season.year}: {p.season.managers.length} teams, {p.season.players.length} players drafted,{' '}
+                {p.season.managers.find((m) => m.eliminatedAfterRound === null)?.name} won.
               </ThemedText>
-              <Button label={busy ? 'Importing…' : `Import ${season.year}`} onPress={() => runImport(season)} disabled={busy} />
-            </>
+            ) : (
+              <ThemedText key={p.name} type="small" themeColor="danger">{p.name}: {p.problem}</ThemedText>
+            ),
+          )}
+          {ready.length > 0 && (
+            <Button
+              label={busy ? 'Importing…' : `Import ${ready.map((s) => s.year).join(', ')}`}
+              onPress={importAll}
+              disabled={busy}
+            />
+          )}
+          {log.map((l, i) => (
+            <ThemedText key={i} type="small" themeColor={l.tone}>{l.text}</ThemedText>
+          ))}
+          {!busy && log.length > 0 && log.every((l) => l.tone === 'success') && (
+            <ThemedText type="small" themeColor="textSecondary">Switch years from the year in the top bar.</ThemedText>
           )}
         </>
-      )}
-      {message && (
-        <ThemedText type="small" themeColor={message.tone}>{message.text}</ThemedText>
       )}
     </Card>
   );
