@@ -449,3 +449,6 @@ verify_jwt = false
 
 [functions.close-round]
 verify_jwt = false
+
+[functions.notifications]
+verify_jwt = false

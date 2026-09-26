@@ -1,0 +1,60 @@
+// The text of a bag alert, the push notification poll-games sends when a drafted hitter gets a
+// bag. Pure, so the unit tests can run it without Supabase.
+
+/** A bag as private.bag_events records it, and whose team it counts for. */
+export interface Bag {
+  player: string;
+  /** Total bases gained. */
+  bags: number;
+  /** Hits gained since the last read. A scoring change can make one negative. */
+  singles: number;
+  doubles: number;
+  triples: number;
+  hr: number;
+  /** The fantasy team the bag counts for, and its manager. */
+  team: string;
+  manager: string | null;
+  /** The team is the alert's recipient's own. */
+  yours: boolean;
+}
+
+export interface Alert {
+  title: string;
+  body: string;
+}
+
+const HITS = [
+  ['singles', 'single'],
+  ['doubles', 'double'],
+  ['triples', 'triple'],
+  ['hr', 'home run'],
+] as const;
+
+/** "👜 Shohei Ohtani got a bag" / "Home run for your team", with a bag emoji per bag (up to 4). */
+export function bagAlert(bag: Bag): Alert {
+  const title = `${'👜'.repeat(Math.min(Math.max(bag.bags, 1), 4))} ${bag.player} got ${
+    bag.bags === 1 ? 'a bag' : `${bag.bags} bags`
+  }`;
+  const team = bag.yours ? 'your team' : bag.manager && bag.manager !== bag.team ? `${bag.team} (${bag.manager})` : bag.team;
+  return { title, body: `${capitalize(hitsText(bag))} for ${team}` };
+}
+
+/** "home run", "single and double", "2 singles"; "scoring change" when it wasn't a new hit. */
+export function hitsText(bag: Pick<Bag, 'singles' | 'doubles' | 'triples' | 'hr'>): string {
+  const counts = HITS.map(([key, name]) => [bag[key], name] as const);
+  if (counts.some(([n]) => n < 0) || counts.every(([n]) => n === 0)) return 'scoring change';
+  const parts = counts.filter(([n]) => n > 0).map(([n, name]) => (n === 1 ? name : `${n} ${name}s`));
+  return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
+/** The alert that confirms a device's alerts work (Settings → Send a test). */
+export function testAlert(scope: 'mine' | 'league'): Alert {
+  return {
+    title: '👜 Bag alerts are on',
+    body: scope === 'mine' ? "You'll get one when one of your hitters gets a bag." : "You'll get one when anyone's hitter gets a bag.",
+  };
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}

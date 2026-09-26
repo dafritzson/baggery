@@ -14,7 +14,9 @@ Ideas not yet decided on: [docs/IDEAS.md](docs/IDEAS.md).
   (a player's season, game log and past seasons for the player popup, from the MLB Stats API) and
   `poll-games` (live stats: mirrors postseason games and box scores into `mlb_games` and
   `player_game_stats`; pg_cron calls it every 10 seconds while a game is live, and the schedule and
-  finished games only every 10 minutes otherwise), `almanac` (builds the league's Almanac from every
+  finished games only every 10 minutes otherwise; it also sends bag alerts, the web push
+  notifications a trigger queues when a drafted hitter's total bases go up), `notifications` (each
+  device's bag alert choices, from Settings), `almanac` (builds the league's Almanac from every
   season's rows in one request, so the app doesn't chain dozens of queries), `close-round` (rounds close by themselves from `poll-games`; this is the commissioner's
   drink-offs and reopening) and `import-season` (the commissioner imports a
   past season from the league's old Google Sheets; see the `import-season` skill).
