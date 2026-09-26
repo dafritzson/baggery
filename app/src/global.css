@@ -186,3 +186,74 @@
     animation: none;
   }
 }
+
+/*
+ * Zooming between the Games tab's Day, Round and Postseason views (lib/zoom.web.ts), while
+ * <html> has data-zoom. The page scales around the focused game, cut off at its own edges, and
+ * that game morphs into its place in the new view. The controls above it and the phone tab bar
+ * are their own layers, so they stay put instead of zooming with the page.
+ */
+:root[data-zoom] [data-zoom-fixed] {
+  view-transition-name: zoom-fixed;
+}
+:root[data-zoom] [data-tab-bar] {
+  view-transition-name: zoom-tab-bar;
+}
+::view-transition-group(zoom-page) {
+  overflow: clip;
+}
+::view-transition-group(zoom-focus) {
+  animation-duration: 360ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+::view-transition-old(zoom-focus),
+::view-transition-new(zoom-focus) {
+  height: 100%;
+}
+/* The game's old look is stretched to its new size, so it fades out quickly. */
+::view-transition-old(zoom-focus) {
+  animation-duration: 180ms;
+}
+:root[data-zoom]::view-transition-old(zoom-page) {
+  transform-origin: var(--zoom-from);
+}
+:root[data-zoom]::view-transition-new(zoom-page) {
+  transform-origin: var(--zoom-to);
+}
+:root[data-zoom='in']::view-transition-old(zoom-page) {
+  animation: 360ms cubic-bezier(0.2, 0, 0, 1) both zoom-grow-out;
+}
+:root[data-zoom='in']::view-transition-new(zoom-page) {
+  animation: 360ms cubic-bezier(0.2, 0, 0, 1) both zoom-grow-in;
+}
+:root[data-zoom='out']::view-transition-old(zoom-page) {
+  animation: 360ms cubic-bezier(0.2, 0, 0, 1) both zoom-shrink-out;
+}
+:root[data-zoom='out']::view-transition-new(zoom-page) {
+  animation: 360ms cubic-bezier(0.2, 0, 0, 1) both zoom-shrink-in;
+}
+/* In: the old view grows past the screen as the new one grows into place. Out: the reverse. */
+@keyframes zoom-grow-out {
+  to {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+}
+@keyframes zoom-grow-in {
+  from {
+    transform: scale(0.88);
+    opacity: 0;
+  }
+}
+@keyframes zoom-shrink-out {
+  to {
+    transform: scale(0.88);
+    opacity: 0;
+  }
+}
+@keyframes zoom-shrink-in {
+  from {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+}

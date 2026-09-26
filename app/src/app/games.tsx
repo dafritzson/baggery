@@ -3,40 +3,25 @@ import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import type { LiveState } from '@core/live.ts';
+import { postseasonSeries } from '@core/schedule.ts';
 import { SERIES } from '@core/scoreboard.ts';
+import type { GameType } from '@core/types.ts';
 
 import { Card } from '@/components/card';
 import { YouTag } from '@/components/owner-badge';
 import { PlayerName } from '@/components/player-name';
+import { PostseasonView, RoundView } from '@/components/schedule';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
+import { Toggle } from '@/components/toggle';
 import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
+import { dayKey, dayLabel, gameDay } from '@/lib/game-day';
 import { type BattingLine, type GameInfo, type Scores, useScores } from '@/lib/scores';
 import { type SeasonData, useSeason } from '@/lib/season';
 import { ownerName, teamName } from '@/lib/teams';
-
-/** Local calendar day of a game, e.g. "2026-09-29", for grouping. */
-function dayKey(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/**
- * The day a game belongs to: MLB's official date, so a game with no start time yet (listed at a
- * 3:33 AM ET placeholder) or a late West Coast game stays on its day. Local day as a fallback.
- */
-function gameDay(game: GameInfo): string {
-  return game.officialDate ?? dayKey(game.start);
-}
-
-/** "Wed, 9/30", or "Today · Tue, 9/29". */
-function dayLabel(key: string, today: string): string {
-  const [y, m, d] = key.split('-').map(Number);
-  const date = new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
-  return key === today ? `Today · ${date}` : date;
-}
+import { zoom, zoomFixed, zoomKey, zoomView } from '@/lib/zoom';
 
 const STATUS_ORDER: Record<string, number> = { Live: 0, Preview: 1, Final: 2 };
 
@@ -45,12 +30,29 @@ function defaultDay(days: string[], today: string): string | undefined {
   return days.find((d) => d >= today) ?? days.at(-1);
 }
 
-/** The day's MLB postseason games, with the fantasy players in each and their TB. */
+type Zoom = 'day' | 'round' | 'postseason';
+
+/** Most detail first: switching to a later level zooms out. */
+const LEVELS: { value: Zoom; label: string }[] = [
+  { value: 'day', label: 'Day' },
+  { value: 'round', label: 'Round' },
+  { value: 'postseason', label: 'Postseason' },
+];
+
+const level = (z: Zoom) => LEVELS.findIndex((l) => l.value === z);
+
+/**
+ * MLB's postseason games, at three zoom levels: a day's games with the fantasy players in each
+ * and their TB, a round's series, or the whole postseason. Tapping a game in a series zooms into
+ * its day.
+ */
 export default function GamesScreen() {
   const { data, loading } = useSeason();
   const { scores } = useScores(data);
   const wide = useLayout() === 'wide';
   const [picked, setPicked] = useState<string | null>(null);
+  const [pickedRound, setPickedRound] = useState<GameType | null>(null);
+  const [view, setView] = useState<Zoom>('day');
 
   if (loading || (data && !scores)) {
     return <Screen width="wide"><ThemedText themeColor="textSecondary">Loading…</ThemedText></Screen>;
@@ -65,84 +67,128 @@ export default function GamesScreen() {
     // Live games first, then the ones still to come, then the finished ones; by start time within each.
     .sort((a, b) => (STATUS_ORDER[a.status] ?? 1) - (STATUS_ORDER[b.status] ?? 1) || a.start.localeCompare(b.start));
 
+  const series = postseasonSeries(scores.games);
+  const rounds = SERIES.filter((r) => series.some((s) => s.gameType === r.gameType));
+  // The Round view follows the day (its latest round, if two overlap) unless a round was picked.
+  const dayRound = SERIES.findLast((r) => games.some((g) => g.gameType === r.gameType))?.gameType;
+  const round = rounds.find((r) => r.gameType === pickedRound)?.gameType ?? dayRound ?? rounds[0]?.gameType;
+  // The game the zoom centers on: the day's first.
+  const focus = games[0] && `game-${games[0].gamePk}`;
+
+  const zoomTo = (next: Zoom) => {
+    if (next !== view) zoom(level(next) < level(view) ? 'in' : 'out', () => setView(next), focus);
+  };
+  const showDay = (d: string) => {
+    setPicked(d);
+    setPickedRound(null);
+  };
+  const pickGame = (game: GameInfo) =>
+    zoom('in', () => {
+      showDay(gameDay(game));
+      setView('day');
+    }, `game-${game.gamePk}`);
+  const scheduleProps = { data, day, today, onPick: pickGame };
+
   return (
     <Screen width="wide">
       {days.length === 0 ? (
         <ThemedText themeColor="textSecondary">Games show up here once the postseason schedule is out.</ThemedText>
       ) : (
         <>
-          <DayMenu games={scores.games} days={days} day={day} today={today} onChange={setPicked} />
-          {wide ? (
-            // Rows of two that fill the width; both cards in a row are as tall as the taller one.
-            <View style={styles.column}>
-              {games
+          <View style={styles.controls} {...zoomFixed()}>
+            <Toggle options={LEVELS} value={view} onChange={zoomTo} large />
+            {view === 'day' && (
+              <MenuChip
+                label={day ? dayLabel(day, today) : 'Pick a day'}
+                title="day"
+                options={days.map((d) => {
+                  const n = scores.games.filter((g) => gameDay(g) === d).length;
+                  return { value: d, label: `${dayLabel(d, today)} · ${n} ${n === 1 ? 'game' : 'games'}` };
+                })}
+                value={day}
+                onChange={showDay}
+              />
+            )}
+            {view === 'round' && round && (
+              <MenuChip
+                label={SERIES.find((r) => r.gameType === round)?.name ?? ''}
+                title="round"
+                options={rounds.map((r) => ({ value: r.gameType, label: r.name }))}
+                value={round}
+                onChange={setPickedRound}
+              />
+            )}
+          </View>
+          <View style={styles.column} {...zoomView()}>
+            {view === 'round' ? (
+              <RoundView series={series.filter((s) => s.gameType === round)} {...scheduleProps} />
+            ) : view === 'postseason' ? (
+              <PostseasonView series={series} {...scheduleProps} />
+            ) : wide ? (
+              // Rows of two that fill the width; both cards in a row are as tall as the taller one.
+              games
                 .filter((_, i) => i % 2 === 0)
                 .map((g, row) => (
                   <View key={g.gamePk} style={styles.row}>
                     {games.slice(row * 2, row * 2 + 2).map((game) => (
-                      <View key={game.gamePk} style={styles.cell}>
+                      <View key={game.gamePk} style={styles.cell} {...zoomKey(`game-${game.gamePk}`)}>
                         <GameCard data={data} scores={scores} game={game} fill />
                       </View>
                     ))}
                     {row * 2 + 1 >= games.length && <View style={styles.cell} />}
                   </View>
-                ))}
-            </View>
-          ) : (
-            <View style={styles.column}>
-              {games.map((g) => (
-                <GameCard key={g.gamePk} data={data} scores={scores} game={g} />
-              ))}
-            </View>
-          )}
+                ))
+            ) : (
+              games.map((g) => (
+                <View key={g.gamePk} {...zoomKey(`game-${g.gamePk}`)}>
+                  <GameCard data={data} scores={scores} game={g} />
+                </View>
+              ))
+            )}
+          </View>
         </>
       )}
     </Screen>
   );
 }
 
-/** The day being shown, as a chip that opens a list of every day with games. */
-function DayMenu({
-  games,
-  days,
-  day,
-  today,
+/** The current choice as a chip, opening a menu of them all (on web, scrolled to the current one). */
+function MenuChip<T extends string>({
+  label,
+  title,
+  options,
+  value,
   onChange,
 }: {
-  games: GameInfo[];
-  days: string[];
-  day?: string;
-  today: string;
-  onChange: (day: string) => void;
+  label: string;
+  /** What's being picked, for screen readers: "day". */
+  title: string;
+  options: { value: T; label: string }[];
+  value?: T;
+  onChange: (value: T) => void;
 }) {
   const theme = useTheme();
-  const count = (d: string) => games.filter((g) => gameDay(g) === d).length;
-  // The list is long by the World Series, so open it scrolled to the day being shown (web).
-  const scrollToPicked = (open: boolean) => {
+  // By the World Series the list of days is long.
+  const scrollToChecked = (open: boolean) => {
     if (!open || Platform.OS !== 'web') return;
-    requestAnimationFrame(() => document.querySelector('.day-menu [data-state="checked"]')?.scrollIntoView({ block: 'center' }));
+    requestAnimationFrame(() => document.querySelector('.chip-menu [data-state="checked"]')?.scrollIntoView({ block: 'center' }));
   };
   return (
-    <View style={styles.dayRow}>
-      <DropdownMenu.Root onOpenChange={scrollToPicked}>
-        <DropdownMenu.Trigger className="menu-trigger menu-trigger-chip" aria-label={`Showing ${day ? dayLabel(day, today) : 'no day'}, change day`}>
-          <View style={[styles.dayChip, { backgroundColor: theme.backgroundElement, boxShadow: theme.raised }]}>
-            <ThemedText type="smallBold">{day ? dayLabel(day, today) : 'Pick a day'} ▾</ThemedText>
-          </View>
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content className="menu-content menu-content-scroll day-menu" align="start" sideOffset={6} collisionPadding={8}>
-          {days.map((d) => {
-            const n = count(d);
-            return (
-              <DropdownMenu.CheckboxItem key={d} className="menu-item" value={d === day ? 'on' : 'off'} onValueChange={() => onChange(d)}>
-                <DropdownMenu.ItemTitle>{`${dayLabel(d, today)} · ${n} ${n === 1 ? 'game' : 'games'}`}</DropdownMenu.ItemTitle>
-                <DropdownMenu.ItemIndicator className="menu-check">✓</DropdownMenu.ItemIndicator>
-              </DropdownMenu.CheckboxItem>
-            );
-          })}
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
-    </View>
+    <DropdownMenu.Root onOpenChange={scrollToChecked}>
+      <DropdownMenu.Trigger className="menu-trigger menu-trigger-chip" aria-label={`Showing ${label}, change ${title}`}>
+        <View style={[styles.chip, { backgroundColor: theme.backgroundElement, boxShadow: theme.raised }]}>
+          <ThemedText type="smallBold">{label} ▾</ThemedText>
+        </View>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content className="menu-content menu-content-scroll chip-menu" align="start" sideOffset={6} collisionPadding={8}>
+        {options.map((o) => (
+          <DropdownMenu.CheckboxItem key={o.value} className="menu-item" value={o.value === value ? 'on' : 'off'} onValueChange={() => onChange(o.value)}>
+            <DropdownMenu.ItemTitle>{o.label}</DropdownMenu.ItemTitle>
+            <DropdownMenu.ItemIndicator className="menu-check">✓</DropdownMenu.ItemIndicator>
+          </DropdownMenu.CheckboxItem>
+        ))}
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
   );
 }
 
@@ -462,9 +508,8 @@ function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; gam
 }
 
 const styles = StyleSheet.create({
-  // The chip keeps its own width instead of stretching across the screen.
-  dayRow: { flexDirection: 'row' },
-  dayChip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
+  controls: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.two },
+  chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
   column: { gap: Spacing.three },
   row: { flexDirection: 'row', gap: Spacing.three },
   cell: { flex: 1, minWidth: 0 },
