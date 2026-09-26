@@ -35,17 +35,14 @@ export default function SignInScreen() {
         keyboardShouldPersistTaps="handled">
         <View style={[styles.hero, view && { minHeight: view.horizon - top }]}>
           {(fontsLoaded || fontError) && <Text style={styles.wordmark}>BAGGERY</Text>}
-          <Text style={styles.tagline}>Postseason fantasy baseball. Get some bags.</Text>
+          <Text style={styles.tagline}>Let’s get some bags.</Text>
         </View>
         <View style={[styles.card, { backgroundColor: theme.backgroundElement, boxShadow: theme.floating }]}>
-          <ThemedText type="smallBold" themeColor="textSecondary" style={styles.cardTitle}>
-            Step up to the plate
-          </ThemedText>
           <GoogleSignInButton />
           {Platform.OS === 'web' && (
             <Pressable onPress={async () => setFallbackError(await signInWithGoogleRedirect())} hitSlop={8}>
-              <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
-                Button not working? <ThemedText type="small" themeColor="accent">Try the other sign-in.</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary" style={styles.fallback}>
+                Trouble signing in? <ThemedText type="small" themeColor="textSecondary" style={styles.underline}>Try another way</ThemedText>
               </ThemedText>
             </Pressable>
           )}
@@ -77,8 +74,8 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     gap: Spacing.three,
   },
-  cardTitle: { textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.5 },
-  center: { textAlign: 'center' },
+  fallback: { textAlign: 'center' },
+  underline: { textDecorationLine: 'underline' },
   privacy: { alignSelf: 'center' },
   privacyText: { color: '#FFFFFF', fontSize: 14, fontWeight: 600, ...shadow },
   dev: { gap: Spacing.two, marginTop: Spacing.two },
