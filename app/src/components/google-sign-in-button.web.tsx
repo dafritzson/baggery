@@ -97,7 +97,12 @@ export function GoogleSignInButton() {
 
   return (
     <>
-      <div ref={container} style={{ width: '100%', minHeight: 44, display: 'flex', justifyContent: 'center' }} />
+      {/* colorScheme light: in dark mode, Google's iframe otherwise paints an opaque white box
+          around the button (its own color scheme doesn't match the page's). */}
+      <div
+        ref={container}
+        style={{ width: '100%', minHeight: 44, display: 'flex', justifyContent: 'center', colorScheme: 'light' }}
+      />
       {error && <ThemedText themeColor="danger">{error}</ThemedText>}
     </>
   );

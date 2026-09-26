@@ -1,44 +1,87 @@
+import { LuckiestGuy_400Regular, useFonts } from '@expo-google-fonts/luckiest-guy';
 import { Link } from 'expo-router';
 import { useState } from 'react';
-import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GAME_FONT } from '@/components/bag-game';
+import { Ballpark } from '@/components/ballpark';
 import { Button } from '@/components/button';
 import { GoogleSignInButton } from '@/components/google-sign-in-button';
-import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { signInWithGoogleRedirect } from '@/lib/auth';
+import { fieldView, isNight } from '@/lib/bag-game';
 import { appEnv, supabase } from '@/lib/supabase';
 
+/** Sign in: the name up in the sky over Home's ballpark, and the sign-in card down on the field. */
 export default function SignInScreen() {
+  const theme = useTheme();
+  const { top, bottom } = useSafeAreaInsets();
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  const [night] = useState(() => isNight(new Date()));
+  const [fontsLoaded, fontError] = useFonts({ LuckiestGuy_400Regular });
   const [fallbackError, setFallbackError] = useState<string | null>(null);
+  const view = size && fieldView(size.width, size.height);
+
   return (
-    <Screen>
-      <View style={styles.hero}>
-        <ThemedText type="title">Baggery</ThemedText>
-        <ThemedText themeColor="textSecondary">Postseason fantasy baseball. Get some bags.</ThemedText>
-      </View>
-      <GoogleSignInButton />
-      {Platform.OS === 'web' && (
-        <Pressable onPress={async () => setFallbackError(await signInWithGoogleRedirect())} hitSlop={8}>
-          <ThemedText type="small" themeColor="textSecondary">
-            Button not working? Try the other Google sign-in.
+    <View
+      style={[styles.screen, { backgroundColor: night ? '#040A1C' : '#3F9FE0' }]}
+      onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}>
+      {view && <Ballpark view={view} night={night} />}
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingTop: top + Spacing.three, paddingBottom: bottom + Spacing.four }]}
+        keyboardShouldPersistTaps="handled">
+        <View style={[styles.hero, view && { minHeight: view.horizon - top }]}>
+          {(fontsLoaded || fontError) && <Text style={styles.wordmark}>BAGGERY</Text>}
+          <Text style={styles.tagline}>Postseason fantasy baseball. Get some bags.</Text>
+        </View>
+        <View style={[styles.card, { backgroundColor: theme.backgroundElement, boxShadow: theme.floating }]}>
+          <ThemedText type="smallBold" themeColor="textSecondary" style={styles.cardTitle}>
+            Step up to the plate
           </ThemedText>
-        </Pressable>
-      )}
-      {fallbackError && <ThemedText themeColor="danger">{fallbackError}</ThemedText>}
-      {appEnv === 'local' && <DevSignIn />}
-      <Link href="/privacy">
-        <ThemedText type="small" themeColor="textSecondary">Privacy</ThemedText>
-      </Link>
-    </Screen>
+          <GoogleSignInButton />
+          {Platform.OS === 'web' && (
+            <Pressable onPress={async () => setFallbackError(await signInWithGoogleRedirect())} hitSlop={8}>
+              <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
+                Button not working? <ThemedText type="small" themeColor="accent">Try the other sign-in.</ThemedText>
+              </ThemedText>
+            </Pressable>
+          )}
+          {fallbackError && <ThemedText themeColor="danger">{fallbackError}</ThemedText>}
+          {appEnv === 'local' && <DevSignIn />}
+        </View>
+        <Link href="/privacy" style={styles.privacy}>
+          <Text style={styles.privacyText}>Privacy</Text>
+        </Link>
+      </ScrollView>
+    </View>
   );
 }
 
+// Text over the sky and field is always light: the ballpark looks the same in either theme.
+const shadow = { textShadowColor: 'rgba(0, 0, 0, 0.45)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 6 };
+
 const styles = StyleSheet.create({
-  hero: { paddingTop: Spacing.six, paddingBottom: Spacing.four, gap: Spacing.two },
-  dev: { gap: Spacing.two, marginTop: Spacing.four },
+  screen: { flex: 1, overflow: 'hidden' },
+  scroll: { flexGrow: 1, alignItems: 'center', paddingHorizontal: Spacing.three, gap: Spacing.four },
+  hero: { alignItems: 'center', justifyContent: 'center', gap: Spacing.two, width: '100%' },
+  wordmark: { fontFamily: GAME_FONT, fontSize: 64, lineHeight: 72, color: '#FFD84D', ...shadow },
+  tagline: { color: '#FFFFFF', fontSize: 17, fontWeight: 600, textAlign: 'center', ...shadow },
+  card: {
+    width: '100%',
+    maxWidth: 400,
+    marginTop: 'auto',
+    padding: Spacing.four,
+    borderRadius: Radius.lg,
+    gap: Spacing.three,
+  },
+  cardTitle: { textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.5 },
+  center: { textAlign: 'center' },
+  privacy: { alignSelf: 'center' },
+  privacyText: { color: '#FFFFFF', fontSize: 14, fontWeight: 600, ...shadow },
+  dev: { gap: Spacing.two, marginTop: Spacing.two },
   input: { minHeight: 44, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: 16 },
 });
 
