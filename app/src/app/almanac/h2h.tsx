@@ -1,23 +1,24 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { type HeadToHead, headToHead } from '@core/almanac.ts';
+import { type HeadToHead, type TeamSeason, headToHead } from '@core/almanac.ts';
 
+import { BackButton } from '@/components/back-button';
 import { Card } from '@/components/card';
-import { FinishChart, MomentCard, Monogram, RoundDuels, SplitBar, TapeRow, useDuelColors } from '@/components/duel';
+import { FinishChart, MomentCard, RadarChart, RoundBarsChart, SplitBar, TapeRow, YearLineChart, useDuelColors } from '@/components/duel';
 import { ordinal } from '@/components/manager-link';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { type AlmanacData, managerSlug, useAlmanac } from '@/lib/almanac';
+import { RADAR_AXES, SCOUTING_STATS, radarValues } from '@/lib/scouting';
 
 /** Two managers, compared: /almanac/h2h?a=daniel&b=darren. */
 export default function HeadToHeadScreen() {
   const params = useLocalSearchParams<{ a?: string; b?: string }>();
   const { data, error } = useAlmanac();
-  const theme = useTheme();
 
   // Managers with a finished season, by slug; the first two by default.
   const careers = data?.almanac.careers ?? [];
@@ -35,9 +36,7 @@ export default function HeadToHeadScreen() {
 
   return (
     <Screen>
-      <ThemedText type="small" style={{ color: theme.accent }} onPress={() => (router.canGoBack() ? router.back() : router.replace('/almanac'))}>
-        ‹ Almanac
-      </ThemedText>
+      <BackButton label="Almanac" to="/almanac" />
       <ThemedText type="subtitle">Head-to-head</ThemedText>
       {error && <ThemedText themeColor="danger">{error}</ThemedText>}
       {!data && !error && <ThemedText themeColor="textSecondary">Loading every season…</ThemedText>}
@@ -72,94 +71,167 @@ function Picker({ data, side, selected, onChoose }: { data: AlmanacData; side: '
   );
 }
 
+type Measure = 'perRound' | 'vsAverage';
+
+/** A season's bags per round played, and how far above that round's average they were, on average. */
+const perRound = (t: TeamSeason) => t.bags / Math.max(t.rounds.length, 1);
+const vsAverage = (t: TeamSeason) => t.rounds.reduce((sum, r) => sum + r.tb - r.average, 0) / Math.max(t.rounds.length, 1);
+
 function Duel({ h, data }: { h: HeadToHead; data: AlmanacData }) {
   const colors = useDuelColors();
+  const theme = useTheme();
+  const [measure, setMeasure] = useState<Measure>('perRound');
   const player = (id: number) => data.players.get(id) ?? `Player ${id}`;
   const { a, b } = h;
-  const r = h.record.rounds;
-  const s = h.record.seasons;
-  const leader = r.a === r.b ? null : r.a > r.b ? a : b;
+  const all = data.almanac.teamSeasons;
+  const seasonsOf = (key: string) => all.filter((t) => t.managerKey === key);
+  const sa = seasonsOf(a.key);
+  const sb = seasonsOf(b.key);
+  const years = [...new Set([...sa, ...sb].map((t) => t.year))].sort();
+  const teams = Math.max(...all.map((t) => t.place));
 
-  // Every year either played, and each one's finish.
-  const places = {
-    a: new Map(data.almanac.teamSeasons.filter((t) => t.managerKey === a.key).map((t) => [t.year, t.place])),
-    b: new Map(data.almanac.teamSeasons.filter((t) => t.managerKey === b.key).map((t) => [t.year, t.place])),
-  };
-  const years = [...new Set([...places.a.keys(), ...places.b.keys()])].sort();
-  const teams = Math.max(...data.almanac.teamSeasons.map((t) => t.place));
+  const value = measure === 'perRound' ? perRound : vsAverage;
+  const byYear = (list: TeamSeason[], f: (t: TeamSeason) => number) => new Map(list.map((t) => [t.year, f(t)]));
+  // The league's bags per round each year (its average against itself is always zero).
+  const league = new Map(
+    years.map((yr) => {
+      const rows = all.filter((t) => t.year === yr);
+      return [yr, measure === 'perRound' ? rows.reduce((sum, t) => sum + perRound(t), 0) / rows.length : 0];
+    }),
+  );
+  const roundBags = (list: TeamSeason[]) => new Map(list.map((t) => [t.year, new Map(t.rounds.map((r) => [r.round as number, r.tb]))]));
+  const places = { a: byYear(sa, (t) => t.place), b: byYear(sb, (t) => t.place) };
 
-  const blowout = [...h.rounds].sort((x, y) => Math.abs(y.a - y.b) - Math.abs(x.a - x.b))[0];
-  const closest = [...h.rounds].sort((x, y) => Math.abs(x.a - x.b) - Math.abs(y.a - y.b))[0];
-  const gap = [...h.seasons].sort((x, y) => Math.abs(y.a.place - y.b.place) - Math.abs(x.a.place - x.b.place))[0];
-  const sideOf = (w: 'a' | 'b' | null) => (w === 'a' ? a : w === 'b' ? b : null);
-  const theme = useTheme();
-  // Ties are neither side's color.
-  const colorOf = (w: 'a' | 'b' | null) => (w === 'a' ? colors.a : w === 'b' ? colors.b : theme.textSecondary);
+  const bestRound = (list: TeamSeason[]) =>
+    list.flatMap((t) => t.rounds.map((r) => ({ year: t.year, ...r }))).sort((x, y) => y.tb - x.tb)[0];
+  const bestSeason = (list: TeamSeason[]) => [...list].sort((x, y) => x.place - y.place || vsAverage(y) - vsAverage(x))[0];
+  const scoutA = data.scouting.find((x) => x.key === a.key);
+  const scoutB = data.scouting.find((x) => x.key === b.key);
+  const sides = [
+    { career: a, color: colors.a, seasons: sa },
+    { career: b, color: colors.b, seasons: sb },
+  ];
 
   return (
     <>
-      {/* The banner: both managers and their record in rounds played against each other. */}
-      <ThemedView type="backgroundElement" style={styles.hero}>
-        <View style={styles.heroSides}>
-          <View style={styles.heroSide}>
-            <Monogram name={a.name} color={colors.a} />
-            <ThemedText type="smallBold">{a.name}</ThemedText>
+      {/* The two managers side by side: trophies and the numbers that matter most. */}
+      <View style={styles.hero}>
+        {sides.map(({ career, color }) => (
+          <View key={career.key} style={[styles.heroCard, { backgroundColor: color, boxShadow: `0 8px 22px ${color}55` }]}>
+            <View style={styles.heroTop}>
+              <View style={styles.heroInitial}>
+                <ThemedText style={[styles.heroInitialText, { color }]}>{career.name[0]}</ThemedText>
+              </View>
+              <ThemedText style={styles.heroName} numberOfLines={1}>{career.name}</ThemedText>
+            </View>
+            <ThemedText style={styles.heroTrophies}>{career.titles ? '🏆'.repeat(career.titles) : 'No titles yet'}</ThemedText>
+            {(data.badges.get(career.key) ?? []).map((badge) => (
+              <View key={badge.name} style={styles.badge}>
+                <ThemedText style={styles.badgeText} numberOfLines={1}>{badge.emoji} {badge.name}</ThemedText>
+              </View>
+            ))}
+            {[
+              [career.bagsPerRound.toFixed(1), 'bags a round'],
+              [career.averageFinish.toFixed(1), 'average finish'],
+              [`${career.seasons}`, career.seasons === 1 ? 'season' : 'seasons'],
+            ].map(([v, label]) => (
+              <View key={label} style={styles.heroStat}>
+                <ThemedText style={styles.heroStatValue}>{v}</ThemedText>
+                <ThemedText style={styles.heroStatLabel}>{label}</ThemedText>
+              </View>
+            ))}
           </View>
-          <View style={styles.heroScore}>
-            <ThemedText style={styles.bigScore}>
-              <ThemedText style={[styles.bigScore, { color: colors.a }]}>{r.a}</ThemedText>
-              <ThemedText style={styles.bigScore}> – </ThemedText>
-              <ThemedText style={[styles.bigScore, { color: colors.b }]}>{r.b}</ThemedText>
-            </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              rounds won{r.ties ? ` · ${r.ties} tied` : ''}
-            </ThemedText>
-          </View>
-          <View style={styles.heroSide}>
-            <Monogram name={b.name} color={colors.b} />
-            <ThemedText type="smallBold">{b.name}</ThemedText>
-          </View>
-        </View>
-        <SplitBar a={r.a} b={r.b} height={12} />
-        <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
-          {h.rounds.length
-            ? leader
-              ? `${leader.name} has outscored ${leader === a ? b.name : a.name} in ${Math.max(r.a, r.b)} of ${h.rounds.length} rounds they both played.`
-              : `Dead even across ${h.rounds.length} rounds.`
-            : 'They’ve never been in the same round.'}{' '}
-          {h.seasons.length ? `Finished ahead: ${a.name} ${s.a}, ${b.name} ${s.b}.` : ''}
-        </ThemedText>
-      </ThemedView>
+        ))}
+      </View>
 
-      {h.rounds.length > 0 && (
-        <View style={styles.moments}>
-          <MomentCard
-            emoji="💥"
-            title="Biggest blowout"
-            color={colorOf(blowout.winner)}
-            headline={`+${Math.abs(blowout.a - blowout.b)}`}
-            detail={`${sideOf(blowout.winner)?.name ?? 'Tie'}, ${blowout.year} round ${blowout.round} (${blowout.a}–${blowout.b})`}
-          />
-          <MomentCard
-            emoji="😬"
-            title="Closest call"
-            color={colorOf(closest.winner)}
-            headline={closest.a === closest.b ? 'Tied' : `by ${Math.abs(closest.a - closest.b)}`}
-            detail={`${closest.year} round ${closest.round}: ${closest.a}–${closest.b}`}
-          />
-          {gap && (
-            <MomentCard
-              emoji={gap.winner ? '🏔️' : '🤝'}
-              title="Widest gap"
-              color={colorOf(gap.winner)}
-              headline={`${ordinal(gap.a.place)} vs ${ordinal(gap.b.place)}`}
-              detail={`${gap.year}: ${sideOf(gap.winner)?.name ?? 'Nobody'} finished ${Math.abs(gap.a.place - gap.b.place)} ${Math.abs(gap.a.place - gap.b.place) === 1 ? 'spot' : 'spots'} higher`}
+      {scoutA && scoutB && (
+        <>
+          <Card title="Scouting report">
+            <ThemedText type="small" themeColor="textSecondary">
+              Six skills, each scaled from the league&apos;s worst (center) to its best (edge).
+            </ThemedText>
+            <RadarChart
+              axes={RADAR_AXES.map((x) => x.label)}
+              shapes={[
+                { key: 'a', color: colors.a, values: radarValues(data.scouting, scoutA) },
+                { key: 'b', color: colors.b, values: radarValues(data.scouting, scoutB) },
+              ]}
             />
-          )}
-        </View>
+            <Legend colors={colors} a={a.name} b={b.name} />
+          </Card>
+          {(['Drafting', 'Redrafting', 'Style', 'Clutch'] as const).map((group) => (
+            <Card key={group} title={group}>
+              {SCOUTING_STATS.filter((st) => st.group === group).map((st) => {
+                const [va, vb] = [st.value(scoutA), st.value(scoutB)];
+                return va === null || vb === null ? null : (
+                  <TapeRow key={st.key} label={st.label} a={va} b={vb} format={st.format} lowerWins={st.lowerWins} neutral={st.neutral} help={st.help} />
+                );
+              })}
+            </Card>
+          ))}
+        </>
       )}
 
-      <Card title="Tale of the tape">
+      <Card title="Bags per round by year">
+        <View style={styles.toggle}>
+          {([
+            ['perRound', 'Bags per round'],
+            ['vsAverage', 'vs league average'],
+          ] as [Measure, string][]).map(([key, label]) => (
+            <Pressable
+              key={key}
+              onPress={() => setMeasure(key)}
+              style={[styles.toggleItem, { backgroundColor: measure === key ? theme.accent : theme.background }]}>
+              <ThemedText type="smallBold" style={{ color: measure === key ? '#fff' : theme.textSecondary }}>{label}</ThemedText>
+            </Pressable>
+          ))}
+        </View>
+        <YearLineChart
+          years={years}
+          series={[
+            { key: 'a', color: colors.a, values: byYear(sa, value) },
+            { key: 'b', color: colors.b, values: byYear(sb, value) },
+          ]}
+          baseline={league}
+          format={(n) => (measure === 'vsAverage' && n > 0 ? `+${n.toFixed(0)}` : n.toFixed(0))}
+        />
+        <Legend colors={colors} a={a.name} b={b.name} league />
+        <ThemedText type="small" themeColor="textSecondary">
+          {measure === 'perRound'
+            ? 'Round 1 covers the Wild Card and Division Series, so an early exit can still post a big number. "vs league average" evens that out.'
+            : 'How many bags above or below that round\'s average, per round played. Zero is an average manager.'}
+        </ThemedText>
+      </Card>
+
+      <View style={styles.moments}>
+        {sides.map(({ career, color, seasons }) => {
+          const r = bestRound(seasons);
+          return r ? (
+            <MomentCard key={`r${career.key}`} emoji="🔥" title={`${career.name}'s best round`} color={color} headline={`${r.tb} bags`} detail={`${r.year} round ${r.round}`} />
+          ) : null;
+        })}
+        {sides.map(({ career, color, seasons }) => {
+          const t = bestSeason(seasons);
+          return t ? (
+            <MomentCard
+              key={`s${career.key}`}
+              emoji={t.place === 1 ? '🏆' : '⭐'}
+              title={`${career.name}'s best season`}
+              color={color}
+              headline={`${t.year}`}
+              detail={`${ordinal(t.place)} place, ${perRound(t).toFixed(1)} bags a round`}
+            />
+          ) : null;
+        })}
+      </View>
+
+      <Card title="Round by round">
+        <ThemedText type="small" themeColor="textSecondary">Each year&apos;s rounds 1, 2 and 3, left to right. No bar: already out.</ThemedText>
+        <RoundBarsChart years={years} a={roundBags(sa)} b={roundBags(sb)} colors={colors} />
+        <Legend colors={colors} a={a.name} b={b.name} />
+      </Card>
+
+      <Card title="Results">
         <TapeRow label="Titles" a={a.titles} b={b.titles} />
         <TapeRow label="Runner-ups" a={a.runnerUps} b={b.runnerUps} />
         <TapeRow label="Average finish" a={a.averageFinish} b={b.averageFinish} lowerWins format={(n) => n.toFixed(1)} />
@@ -171,14 +243,8 @@ function Duel({ h, data }: { h: HeadToHead; data: AlmanacData }) {
 
       <Card title="Finish by year">
         <FinishChart years={years} places={places} teams={teams} />
+        <Legend colors={colors} a={a.name} b={b.name} />
       </Card>
-
-      {h.rounds.length > 0 && (
-        <Card title="Round by round">
-          <ThemedText type="small" themeColor="textSecondary">Each round they both played; the bar leans to the winner, as long as the margin.</ThemedText>
-          <RoundDuels rounds={h.rounds} />
-        </Card>
-      )}
 
       {h.sharedPlayers.length > 0 && (
         <Card title="Players they’ve both had">
@@ -199,15 +265,43 @@ function Duel({ h, data }: { h: HeadToHead; data: AlmanacData }) {
   );
 }
 
+function Legend({ colors, a, b, league = false }: { colors: { a: string; b: string }; a: string; b: string; league?: boolean }) {
+  const theme = useTheme();
+  const item = (color: string, label: string, dashed = false) => (
+    <View style={styles.legendItem}>
+      <View style={[styles.legendSwatch, { backgroundColor: dashed ? 'transparent' : color, borderColor: color, borderStyle: dashed ? 'dashed' : 'solid' }]} />
+      <ThemedText type="small" themeColor="textSecondary">{label}</ThemedText>
+    </View>
+  );
+  return (
+    <View style={styles.legend}>
+      {item(colors.a, a)}
+      {item(colors.b, b)}
+      {league && item(theme.textSecondary, 'League', true)}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   chips: { gap: Spacing.two, paddingVertical: Spacing.half },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: 999, borderWidth: 1 },
-  hero: { padding: Spacing.three, borderRadius: Radius.lg, gap: Spacing.three },
-  heroSides: { flexDirection: 'row', alignItems: 'center' },
-  heroSide: { alignItems: 'center', gap: Spacing.one, width: 90 },
-  heroScore: { flex: 1, alignItems: 'center' },
-  bigScore: { fontSize: 44, lineHeight: 52, fontWeight: '800' },
-  center: { textAlign: 'center' },
+  hero: { flexDirection: 'row', gap: Spacing.two },
+  heroCard: { flex: 1, borderRadius: Radius.lg, padding: Spacing.three, gap: Spacing.two },
+  heroTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  heroInitial: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  heroInitialText: { fontSize: 20, lineHeight: 26, fontWeight: '800' },
+  heroName: { flex: 1, color: '#fff', fontSize: 20, lineHeight: 26, fontWeight: '800' },
+  heroTrophies: { color: '#fff', fontSize: 16, lineHeight: 22 },
+  heroStat: { backgroundColor: 'rgba(0,0,0,0.18)', borderRadius: Radius.md, paddingVertical: Spacing.one, paddingHorizontal: Spacing.two },
+  heroStatValue: { color: '#fff', fontSize: 20, lineHeight: 24, fontWeight: '800' },
+  heroStatLabel: { color: '#fff', fontSize: 11, opacity: 0.85 },
+  badge: { backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: 999, paddingHorizontal: Spacing.two, paddingVertical: 2, alignSelf: 'flex-start', maxWidth: '100%' },
+  badgeText: { color: '#fff', fontSize: 11, lineHeight: 16, fontWeight: '700' },
+  toggle: { flexDirection: 'row', gap: Spacing.two },
+  toggleItem: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: 999 },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.three, justifyContent: 'center' },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
+  legendSwatch: { width: 14, height: 4, borderRadius: 2, borderWidth: 1.5 },
   moments: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   shared: { gap: 3 },
   sharedLine: { flexDirection: 'row', alignItems: 'baseline' },

@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { type LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-native';
+import { type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Svg, { Line, Rect, Text as SvgText } from 'react-native-svg';
 
-import { type TeamSeason, headToHead } from '@core/almanac.ts';
+import type { ManagerScouting, TeamSeason } from '@core/almanac.ts';
 
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing } from '@/constants/theme';
+import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { AlmanacData } from '@/lib/almanac';
 
@@ -71,7 +71,7 @@ export function AboveAverageChart({ seasons }: { seasons: TeamSeason[] }) {
               const rounds = placed.filter((p) => p.year === b.year).length;
               const cx = b.x + (slot * rounds) / 2;
               return (
-                <SvgText key={b.year} x={cx} y={height - 8} fontSize={11} fill={theme.textSecondary} textAnchor="middle">
+                <SvgText fontFamily={Fonts.sans} key={b.year} x={cx} y={height - 8} fontSize={11} fill={theme.textSecondary} textAnchor="middle">
                   {`${b.title ? '🏆 ' : ''}’${String(b.year).slice(2)}`}
                 </SvgText>
               );
@@ -148,6 +148,25 @@ const styles = StyleSheet.create({
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
   },
+  gridHead: { height: 40, justifyContent: 'flex-end', paddingBottom: 4 },
+  gridHeadText: { fontSize: 11, lineHeight: 13, textAlign: 'center' },
+  gridName: { height: 34, marginBottom: 3, flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingRight: Spacing.two, width: 84 },
+  // Fewer than 3 seasons: too few to read much into.
+  gridFew: { opacity: 0.5 },
+  gridDot: { width: 8, height: 8, borderRadius: 4 },
+  gridCell: { height: 34, marginBottom: 3, marginRight: 3, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  lbRow: { flexDirection: 'row', gap: Spacing.two, padding: Spacing.two, borderRadius: Radius.lg, borderWidth: 1.5, borderColor: 'transparent' },
+  lbRank: { width: 32, alignItems: 'center', paddingTop: 2 },
+  lbBody: { flex: 1, gap: Spacing.one },
+  lbLine: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.two },
+  lbTitle: { flex: 1, fontWeight: '700' },
+  lbLabel: { fontWeight: '800' },
+  lbTags: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.one },
+  lbTag: { borderRadius: 999, paddingHorizontal: Spacing.two, paddingVertical: 1 },
+  lbTagManager: { color: '#fff', fontSize: 11, lineHeight: 16, fontWeight: '800' },
+  lbTagText: { fontSize: 11, lineHeight: 16 },
+  lbTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  lbFill: { height: 6, borderRadius: 3 },
   leaderRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   leaderName: { width: 64 },
   leaderTrack: { flex: 1, height: 14, borderRadius: 7, overflow: 'hidden' },
@@ -155,70 +174,132 @@ const styles = StyleSheet.create({
   leaderValue: { width: 64, textAlign: 'right' },
 });
 
-/** Red (0%) through gray (50%) to green (100%). */
-function winColor(share: number): string {
-  const [r1, g1, b1] = share < 0.5 ? [229, 72, 77] : [124, 139, 161];
-  const [r2, g2, b2] = share < 0.5 ? [124, 139, 161] : [43, 182, 115];
-  const t = share < 0.5 ? share * 2 : (share - 0.5) * 2;
-  const mix = (x: number, y: number) => Math.round(x + (y - x) * t);
-  return `rgb(${mix(r1, r2)}, ${mix(g1, g2)}, ${mix(b1, b2)})`;
-}
-
 /**
- * Every rivalry at once: a square for each pair, colored by how often the row's manager outscored
- * the column's in rounds they both played (green: mostly, red: rarely). Tap one for the details.
+ * Every manager against every skill: a cell per stat, greener the better they are at it compared
+ * with the league (grayer for middling, redder for the bottom). Tap a manager to open their page.
  */
-export function RivalryGrid({ data, onPick }: { data: AlmanacData; onPick: (a: string, b: string) => void }) {
+export function ScoutingGrid({ data, stats, onPick }: {
+  data: AlmanacData;
+  stats: { key: string; label: string; value: (s: ManagerScouting) => number | null; format: (n: number) => string }[];
+  onPick: (key: string) => void;
+}) {
   const theme = useTheme();
-  const [width, setWidth] = useState(0);
-  const people = data.almanac.careers;
-  const label = 64;
-  const cell = width ? Math.min(40, Math.floor((width - label) / people.length) - 2) : 0;
-  const record = (a: string, b: string) => {
-    const h = headToHead(data.almanac, a, b);
-    return h && h.rounds.length ? h.record.rounds : null;
+  const rows = [...data.scouting].sort((a, b) => b.seasons - a.seasons || a.key.localeCompare(b.key));
+  const scale = (stat: (typeof stats)[number], v: number) => {
+    const values = data.scouting.map(stat.value).filter((x): x is number => x !== null);
+    const lo = Math.min(...values);
+    const hi = Math.max(...values);
+    return hi === lo ? 0.5 : (v - lo) / (hi - lo);
   };
+  const shade = (t: number) => {
+    // Red, through the card color, to green.
+    const [r, g, b] = t < 0.5 ? [229, 72, 77] : [43, 182, 115];
+    const strength = Math.abs(t - 0.5) * 2;
+    return `rgba(${r}, ${g}, ${b}, ${0.15 + strength * 0.7})`;
+  };
+  const cell = 64;
   return (
-    <View onLayout={(e) => setWidth(Math.round(e.nativeEvent.layout.width))} style={{ gap: 2 }}>
-      {cell > 0 && (
-        <>
-          <View style={{ flexDirection: 'row', gap: 2 }}>
-            <View style={{ width: label }} />
-            {people.map((c) => (
-              <View key={c.key} style={{ width: cell, alignItems: 'center' }}>
-                <ThemedText type="smallBold" themeColor="textSecondary">{c.name.slice(0, 3)}</ThemedText>
+    <View style={{ flexDirection: 'row' }}>
+      <View>
+        <View style={styles.gridHead} />
+        {rows.map((s) => (
+          <Pressable key={s.key} onPress={() => onPick(s.key)} style={[styles.gridName, s.seasons < 3 && styles.gridFew]}>
+            <View style={[styles.gridDot, { backgroundColor: managerColor(data, s.key) }]} />
+            <ThemedText type="smallBold" numberOfLines={1}>{data.managers.get(s.key)}</ThemedText>
+          </Pressable>
+        ))}
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View>
+          <View style={{ flexDirection: 'row' }}>
+            {stats.map((st) => (
+              <View key={st.key} style={[styles.gridHead, { width: cell }]}>
+                <ThemedText type="smallBold" themeColor="textSecondary" style={styles.gridHeadText} numberOfLines={2}>{st.label}</ThemedText>
               </View>
             ))}
           </View>
-          {people.map((row) => (
-            <View key={row.key} style={{ flexDirection: 'row', gap: 2, alignItems: 'center' }}>
-              <ThemedText type="smallBold" numberOfLines={1} style={{ width: label }}>{row.name}</ThemedText>
-              {people.map((col) => {
-                if (row.key === col.key) return <View key={col.key} style={{ width: cell, height: cell, borderRadius: 6, backgroundColor: theme.background }} />;
-                const r = record(row.key, col.key);
-                const played = r ? r.a + r.b + r.ties : 0;
+          {rows.map((s) => (
+            <Pressable key={s.key} onPress={() => onPick(s.key)} style={[{ flexDirection: 'row' }, s.seasons < 3 && styles.gridFew]}>
+              {stats.map((st) => {
+                const v = st.value(s);
                 return (
-                  <Pressable
-                    key={col.key}
-                    disabled={!r}
-                    onPress={() => onPick(row.key, col.key)}
-                    accessibilityLabel={r ? `${row.name} vs ${col.name}: ${r.a}–${r.b}` : `${row.name} and ${col.name} never met`}
-                    style={{
-                      width: cell,
-                      height: cell,
-                      borderRadius: 6,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: r ? winColor((r.a + r.ties / 2) / played) : theme.background,
-                    }}>
-                    {r && <ThemedText style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{`${r.a}-${r.b}`}</ThemedText>}
-                  </Pressable>
+                  <View key={st.key} style={[styles.gridCell, { width: cell - 3, backgroundColor: v === null ? theme.background : shade(scale(st, v)) }]}>
+                    <ThemedText type="smallBold" style={{ fontSize: 12 }}>{v === null ? '—' : st.format(v)}</ThemedText>
+                  </View>
                 );
               })}
-            </View>
+            </Pressable>
           ))}
-        </>
-      )}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+export interface LeaderboardRow {
+  key: string;
+  /** The main line, e.g. a player or manager. */
+  title: string;
+  /** Small tags under it, e.g. "2025 · Round 1". */
+  tags: string[];
+  /** Who it belongs to: their name and color. */
+  manager?: { name: string; color: string };
+  /** Sizes the bar; null for no bar. */
+  value: number | null;
+  /** What's shown on the right, e.g. "58 bags". */
+  label: string;
+  onPress?: () => void;
+}
+
+const MEDALS = ['🥇', '🥈', '🥉'];
+
+/**
+ * A ranked list: medals for the top three, each row in its manager's color with a bar sized to
+ * its value. The leader's row is larger.
+ */
+export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
+  const theme = useTheme();
+  const most = Math.max(1, ...rows.map((r) => Math.abs(r.value ?? 0)));
+  return (
+    <View style={{ gap: Spacing.two }}>
+      {rows.map((r, i) => {
+        const color = r.manager?.color ?? theme.accent;
+        const first = i === 0;
+        return (
+          <Pressable key={r.key} onPress={r.onPress} disabled={!r.onPress} style={[styles.lbRow, first && { backgroundColor: `${color}22`, borderColor: color }]}>
+            <View style={styles.lbRank}>
+              {i < 3 ? (
+                <ThemedText style={{ fontSize: first ? 26 : 20, lineHeight: first ? 32 : 26 }}>{MEDALS[i]}</ThemedText>
+              ) : (
+                <ThemedText type="smallBold" themeColor="textSecondary">{i + 1}</ThemedText>
+              )}
+            </View>
+            <View style={styles.lbBody}>
+              <View style={styles.lbLine}>
+                <ThemedText type={first ? 'default' : 'small'} style={styles.lbTitle} numberOfLines={1}>{r.title}</ThemedText>
+                <ThemedText style={[styles.lbLabel, { color, fontSize: first ? 20 : 15 }]}>{r.label}</ThemedText>
+              </View>
+              <View style={styles.lbTags}>
+                {r.manager && (
+                  <View style={[styles.lbTag, { backgroundColor: color }]}>
+                    <ThemedText style={styles.lbTagManager}>{r.manager.name}</ThemedText>
+                  </View>
+                )}
+                {r.tags.map((t) => (
+                  <View key={t} style={[styles.lbTag, { backgroundColor: theme.background }]}>
+                    <ThemedText type="small" themeColor="textSecondary" style={styles.lbTagText}>{t}</ThemedText>
+                  </View>
+                ))}
+              </View>
+              {r.value !== null && (
+                <View style={[styles.lbTrack, { backgroundColor: theme.background }]}>
+                  <View style={[styles.lbFill, { width: `${(Math.abs(r.value) / most) * 100}%`, backgroundColor: color }]} />
+                </View>
+              )}
+            </View>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }

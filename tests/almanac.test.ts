@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { type AlmanacInput, type AlmanacStat, almanac, headToHead } from '../supabase/functions/_shared/core/almanac.ts';
+import { type AlmanacInput, type AlmanacStat, type ScoutingInput, almanac, badges, headToHead, scouting } from '../supabase/functions/_shared/core/almanac.ts';
 import type { GameType } from '../supabase/functions/_shared/core/types.ts';
 
 const START: Record<GameType, string> = {
@@ -110,5 +110,49 @@ describe('headToHead', () => {
   it('needs two different managers who have played', () => {
     expect(headToHead(a, 'a', 'a')).toBeNull();
     expect(headToHead(a, 'a', 'nobody')).toBeNull();
+  });
+});
+
+describe('scouting', () => {
+  // Draft 1: A takes 1, B takes 2, C takes 3 (one round each). Draft 2: A swaps 1 for 4.
+  // Only player 1's MLB team (100) reached the Championship Series.
+  const scout: ScoutingInput = {
+    picks: [
+      { seasonId: 's', teamId: 'A', draftNumber: 1, actionNumber: 0, type: 'pick', add: 1, drop: null },
+      { seasonId: 's', teamId: 'B', draftNumber: 1, actionNumber: 1, type: 'pick', add: 2, drop: null },
+      { seasonId: 's', teamId: 'C', draftNumber: 1, actionNumber: 2, type: 'pick', add: 3, drop: null },
+      { seasonId: 's', teamId: 'A', draftNumber: 2, actionNumber: 0, type: 'pick', add: 4, drop: 1 },
+    ],
+    players: [
+      { seasonId: 's', playerId: 1, mlbTeamId: 100 },
+      { seasonId: 's', playerId: 2, mlbTeamId: 200 },
+      { seasonId: 's', playerId: 3, mlbTeamId: 300 },
+    ],
+    seriesTeams: [{ seasonId: 's', gameType: 'L', mlbTeamIds: [100, 400] }],
+  };
+  const inp = input();
+  const s = scouting(inp, scout, almanac(inp));
+  const of = (k: string) => s.find((x) => x.key === k)!;
+
+  it('scores round-1 picks and how deep their MLB teams went', () => {
+    expect([of('a').firstRoundBags, of('b').firstRoundBags, of('c').firstRoundBags]).toEqual([5, 11, 1]);
+    expect([of('a').crystalBall, of('b').crystalBall]).toEqual([1, 0]);
+  });
+
+  it('counts swaps and whether they paid off', () => {
+    expect(of('a')).toMatchObject({ swapsPerSeason: 1, swapWinRate: 1 });
+    expect(of('b')).toMatchObject({ swapsPerSeason: 0, swapWinRate: null });
+  });
+
+  it('finds close cuts: Alex cleared round 2 by 3, Bill missed it by 3', () => {
+    expect([of('a').closeEscapes, of('b').heartbreaks, of('c').heartbreaks]).toEqual([1, 1, 0]);
+  });
+
+  it('gives badges to the league leaders who qualify', () => {
+    const b = badges(s, 1);
+    expect(b.get('b')!.map((x) => x.name)).toContain('First-round ace');
+    expect(b.get('a')!.map((x) => x.name)).toContain('Crystal ball');
+    expect(b.get('a')!.map((x) => x.name)).toContain('Tinkerer');
+    expect(badges(s, 2).get('a')).toEqual([]); // nobody has 2 seasons
   });
 });

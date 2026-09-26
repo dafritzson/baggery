@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react';
 
-import { type Almanac, type AlmanacInput, type AlmanacStat, almanac } from '@core/almanac.ts';
+import {
+  type Almanac,
+  type AlmanacInput,
+  type AlmanacStat,
+  type Badge,
+  type ManagerScouting,
+  type ScoutingInput,
+  almanac,
+  badges,
+  scouting,
+} from '@core/almanac.ts';
 
 import { useSeason } from '@/lib/season';
 import { supabase } from '@/lib/supabase';
@@ -11,6 +21,9 @@ export interface AlmanacData {
   managers: Map<string, string>;
   /** Player names by MLB id. */
   players: Map<number, string>;
+  /** How each manager plays the game, and the badges they've earned. */
+  scouting: ManagerScouting[];
+  badges: Map<string, Badge[]>;
 }
 
 /** URL slug for a manager: their name, lowercased. */
@@ -47,18 +60,23 @@ async function loadAlmanac(leagueId: string, owners: Map<string, string>): Promi
     ),
     everyRow((a, b) => supabase.from('drafts').select('id, season_id, number, locks_at').in('season_id', seasonIds).order('id').range(a, b)),
   ]);
-  const redraftIds = drafts.filter((d) => d.number > 1).map((d) => d.id as string);
-  const picks = redraftIds.length
+  const actions = drafts.length
     ? await everyRow((a, b) =>
         supabase
           .from('draft_actions')
-          .select('draft_id, fantasy_team_id, add_player_id, drop_player_id')
-          .in('draft_id', redraftIds)
-          .eq('type', 'pick')
+          .select('draft_id, action_number, fantasy_team_id, type, add_player_id, drop_player_id')
+          .in('draft_id', drafts.map((d) => d.id as string))
           .order('id')
           .range(a, b),
       )
     : [];
+  const draftNumber = new Map(drafts.map((d) => [d.id as string, d.number as number]));
+  const picks = actions.filter((p) => p.type === 'pick' && draftNumber.get(p.draft_id)! > 1);
+  // Each rostered player's MLB team, from the season's player pool.
+  const pool = await everyRow((a, b) =>
+    supabase.from('season_player_pool').select('season_id, mlb_player_id, mlb_team_id').in('season_id', seasonIds).order('mlb_player_id').order('season_id').range(a, b),
+  );
+  const seriesTeams: ScoutingInput['seriesTeams'] = [];
 
   // Box scores of rostered players, a season at a time to keep each request small.
   const stats: AlmanacStat[] = [];
@@ -66,8 +84,17 @@ async function loadAlmanac(leagueId: string, owners: Map<string, string>): Promi
     const playerIds = [...new Set(spells.filter((s) => s.season_id === season.id).map((s) => s.mlb_player_id as number))];
     if (!playerIds.length) continue;
     const games = await everyRow((a, b) =>
-      supabase.from('mlb_games').select('game_pk, game_type, start_time, series_game_number').eq('season_year', season.year).order('game_pk').range(a, b),
+      supabase
+        .from('mlb_games')
+        .select('game_pk, game_type, start_time, series_game_number, home_team_id, away_team_id')
+        .eq('season_year', season.year)
+        .order('game_pk')
+        .range(a, b),
     );
+    for (const type of ['F', 'D', 'L', 'W'] as const) {
+      const ofType = games.filter((g) => g.game_type === type);
+      if (ofType.length) seriesTeams.push({ seasonId: season.id, gameType: type, mlbTeamIds: [...new Set(ofType.flatMap((g) => [g.home_team_id, g.away_team_id]))] });
+    }
     const gameByPk = new Map(games.map((g) => [g.game_pk as number, g]));
     if (!games.length) continue;
     const lines = await everyRow((a, b) =>
@@ -127,7 +154,20 @@ async function loadAlmanac(leagueId: string, owners: Map<string, string>): Promi
     const { data } = await supabase.from('mlb_players').select('id, full_name').in('id', ids);
     for (const p of data ?? []) players.set(p.id, p.full_name);
   }
-  return { almanac: almanac(input), managers: managerNames, players };
+  const result = almanac(input);
+  const scouted = scouting(
+    input,
+    {
+      picks: actions.map((p) => {
+        const d = draftById.get(p.draft_id)!;
+        return { seasonId: d.season_id, teamId: p.fantasy_team_id, draftNumber: d.number, actionNumber: p.action_number, type: p.type, add: p.add_player_id, drop: p.drop_player_id };
+      }),
+      players: pool.map((p) => ({ seasonId: p.season_id, playerId: p.mlb_player_id, mlbTeamId: p.mlb_team_id })),
+      seriesTeams,
+    },
+    result,
+  );
+  return { almanac: result, managers: managerNames, players, scouting: scouted, badges: badges(scouted) };
 }
 
 // Kept for a few minutes, so moving between Almanac pages doesn't reload every season.
