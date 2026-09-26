@@ -56,7 +56,7 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
 | 2 | During Wild Card | Live stats poller (10s), standings with tiebreakers, per-player breakdown |
 | 3 | Before DS redraft | Redrafts (drop+add, yield, lock at first pitch), eliminations, standings-based order, autodraft |
 | 3.5 | Done | 2020–2025 history imported from the Google Sheets (Settings → Past seasons) |
-| 3.6 | Now | Almanac tab: champions, records, each manager's career, head-to-head and the rivalry grid (`core/almanac.ts`). Next: more stats |
+| 3.6 | Now | Almanac tab: champions, records, careers, head-to-head, scouting stats and badges (`core/almanac.ts`). Next: more stats |
 | 4 | Later | Bag notifications (with optional spoiler delay), chat, money tracker, iOS app via EAS |
 
 ## iOS app notes

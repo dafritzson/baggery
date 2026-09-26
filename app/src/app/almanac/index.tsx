@@ -1,11 +1,11 @@
 import { router } from 'expo-router';
-import { type ReactNode, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { ManagerCareer } from '@core/almanac.ts';
 import { SERIES } from '@core/scoreboard.ts';
 
-import { LeaderBars, Pennant, RivalryGrid, managerColor } from '@/components/almanac-charts';
+import { LeaderBars, Leaderboard, Pennant, ScoutingGrid, managerColor } from '@/components/almanac-charts';
 import { Card } from '@/components/card';
 import { MomentCard } from '@/components/duel';
 import { Screen } from '@/components/screen';
@@ -14,8 +14,9 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { ManagerLink, openManager, ordinal } from '@/components/manager-link';
-import { type AlmanacData, managerSlug, useAlmanac } from '@/lib/almanac';
+import { openManager, ordinal } from '@/components/manager-link';
+import { type AlmanacData, useAlmanac } from '@/lib/almanac';
+import { SCOUTING_STATS } from '@/lib/scouting';
 
 type View_ = 'league' | 'managers';
 
@@ -25,7 +26,6 @@ export default function AlmanacScreen() {
   const [view, setView] = useState<View_>('league');
   return (
     <Screen>
-      <ThemedText type="subtitle">Almanac</ThemedText>
       <Segmented value={view} onChange={setView} />
       {error && <ThemedText themeColor="danger">{error}</ThemedText>}
       {!data && !error && <ThemedText themeColor="textSecondary">Loading every season…</ThemedText>}
@@ -39,20 +39,11 @@ export default function AlmanacScreen() {
 
 const seriesGame = (gameType: string, n: number | null) => `${SERIES.find((s) => s.gameType === gameType)?.label ?? gameType}${n ?? ''}`;
 
-function Line({ children, right }: { children: ReactNode; right: string }) {
-  return (
-    <View style={styles.line}>
-      <ThemedText type="small" style={styles.lineText}>{children}</ThemedText>
-      <ThemedText type="smallBold">{right}</ThemedText>
-    </View>
-  );
-}
-
 function League({ data }: { data: AlmanacData }) {
   const a = data.almanac;
-  const name = (key: string) => <ManagerLink data={data} managerKey={key} />;
   const player = (id: number) => data.players.get(id) ?? `Player ${id}`;
-  const moves = [...a.redrafts].sort((x, y) => y.addedTb - y.droppedTb - (x.addedTb - x.droppedTb)).slice(0, 5);
+  const moves = [...a.redrafts].sort((x, y) => y.addedTb - y.droppedTb - (x.addedTb - x.droppedTb)).slice(0, 6);
+  const who = (key: string) => ({ name: data.managers.get(key) ?? '?', color: managerColor(data, key) });
   return (
     <>
       <Card title="Champions">
@@ -129,59 +120,78 @@ function League({ data }: { data: AlmanacData }) {
       </View>
 
       <Card title="Best rounds">
-        {([1, 2, 3] as const).map((round) =>
-          a.bestRounds[round].slice(0, 3).map((r, i) => (
-            <Line key={`${round}-${i}`} right={`${r.tb} bags`}>
-              <ThemedText type="small" themeColor="textSecondary">Round {round} · {r.year} · </ThemedText>
-              {name(r.managerKey)}
-            </Line>
-          )),
-        )}
+        <Leaderboard
+          rows={([1, 2, 3] as const)
+            .flatMap((r) => a.bestRounds[r])
+            .sort((x, y) => y.tb - x.tb)
+            .slice(0, 8)
+            .map((r, i) => ({
+              key: `${i}`,
+              title: `Round ${r.round}, ${r.year}`,
+              tags: [],
+              manager: who(r.managerKey),
+              value: r.tb,
+              label: `${r.tb} bags`,
+              onPress: () => openManager(data, r.managerKey),
+            }))}
+        />
       </Card>
 
       <Card title="Biggest single games">
-        {a.bestPlayerGames.slice(0, 5).map((g, i) => (
-          <Line key={i} right={`${g.tb} bags`}>
-            <ThemedText type="small">{player(g.playerId)} </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">{g.year} {seriesGame(g.gameType, g.seriesGameNumber)} · </ThemedText>
-            {name(g.managerKey)}
-          </Line>
-        ))}
+        <Leaderboard
+          rows={a.bestPlayerGames.slice(0, 8).map((g, i) => ({
+            key: `${i}`,
+            title: player(g.playerId),
+            tags: [`${g.year} ${seriesGame(g.gameType, g.seriesGameNumber)}`],
+            manager: who(g.managerKey),
+            value: g.tb,
+            label: `${g.tb} bags`,
+          }))}
+        />
       </Card>
 
       <Card title="Best player seasons">
-        {a.bestPlayerSeasons.slice(0, 5).map((p, i) => (
-          <Line key={i} right={`${p.tb} bags`}>
-            <ThemedText type="small">{player(p.playerId)} </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">{p.year} · </ThemedText>
-            {name(p.managerKey)}
-          </Line>
-        ))}
+        <ThemedText type="small" themeColor="textSecondary">Most bags one player scored for one team in a postseason.</ThemedText>
+        <Leaderboard
+          rows={a.bestPlayerSeasons.slice(0, 8).map((p, i) => ({
+            key: `${i}`,
+            title: player(p.playerId),
+            tags: [`${p.year}`],
+            manager: who(p.managerKey),
+            value: p.tb,
+            label: `${p.tb} bags`,
+          }))}
+        />
       </Card>
 
       <Card title="Closest cuts">
-        {a.closestCuts.slice(0, 5).map((c, i) => (
-          <Line key={i} right={c.margin === 0 ? 'tiebreak' : `by ${c.margin}`}>
-            <ThemedText type="small" themeColor="textSecondary">{c.year} round {c.round} · </ThemedText>
-            {name(c.through.managerKey)}
-            <ThemedText type="small" themeColor="textSecondary"> {c.through.tb} over </ThemedText>
-            {name(c.out.managerKey)}
-            <ThemedText type="small" themeColor="textSecondary"> {c.out.tb}</ThemedText>
-          </Line>
-        ))}
+        <ThemedText type="small" themeColor="textSecondary">The last team through against the first team out.</ThemedText>
+        <Leaderboard
+          rows={a.closestCuts.slice(0, 6).map((c, i) => ({
+            key: `${i}`,
+            title: `${data.managers.get(c.through.managerKey)} ${c.through.tb}, ${data.managers.get(c.out.managerKey)} ${c.out.tb}`,
+            tags: [`${c.year}`, `Round ${c.round}`, `${data.managers.get(c.out.managerKey)} out`],
+            manager: who(c.through.managerKey),
+            value: null,
+            label: c.margin === 0 ? 'Tiebreak' : `By ${c.margin}`,
+          }))}
+        />
       </Card>
 
       <Card title="Best redrafts">
         <ThemedText type="small" themeColor="textSecondary">
-          Bags the added player scored for the team, against what the dropped player scored the rest of the way.
+          Bags the added player scored for the team, minus what the dropped player scored the rest of the way.
         </ThemedText>
-        {moves.map((m, i) => (
-          <Line key={i} right={`${m.addedTb - m.droppedTb >= 0 ? '+' : ''}${m.addedTb - m.droppedTb}`}>
-            <ThemedText type="small">{player(m.add)} ({m.addedTb}) for {player(m.drop)} ({m.droppedTb}) </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">{m.year} Draft {m.draftNumber} · </ThemedText>
-            {name(m.managerKey)}
-          </Line>
-        ))}
+        <Leaderboard
+          rows={moves.map((m, i) => ({
+            key: `${i}`,
+            title: `${player(m.add)} for ${player(m.drop)}`,
+            tags: [`${m.year} Draft ${m.draftNumber}`, `${m.addedTb} vs ${m.droppedTb}`],
+            manager: who(m.managerKey),
+            value: m.addedTb - m.droppedTb,
+            label: `+${m.addedTb - m.droppedTb}`,
+          }))}
+        />
       </Card>
     </>
   );
@@ -189,7 +199,6 @@ function League({ data }: { data: AlmanacData }) {
 
 function Managers({ data }: { data: AlmanacData }) {
   const theme = useTheme();
-  const slug = (key: string) => (key.includes(':') ? key : managerSlug(data.managers.get(key) ?? key));
   return (
     <>
     <StatTable<ManagerCareer>
@@ -209,11 +218,11 @@ function Managers({ data }: { data: AlmanacData }) {
         { key: 'perRound', label: 'Bags/rd', value: (c) => c.bagsPerRound, format: (c) => c.bagsPerRound.toFixed(1), width: 72 },
       ]}
     />
-    <Card title="Rivalries">
+    <Card title="Scouting grid">
       <ThemedText type="small" themeColor="textSecondary">
-        Rounds won by the row&apos;s manager against the column&apos;s, in rounds they both played. Green: they usually win it. Tap one to see it.
+        Every manager&apos;s skills side by side: greener is better than the rest of the league, redder is worse. Faded: fewer than 3 seasons, too few to read much into. Tap a manager to see their scouting report.
       </ThemedText>
-      <RivalryGrid data={data} onPick={(a, b) => router.push({ pathname: '/almanac/h2h', params: { a: slug(a), b: slug(b) } })} />
+      <ScoutingGrid data={data} stats={SCOUTING_STATS.filter((st) => !st.neutral)} onPick={(key) => openManager(data, key)} />
     </Card>
     </>
   );

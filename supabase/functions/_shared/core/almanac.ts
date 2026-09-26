@@ -388,3 +388,185 @@ export function headToHead(al: Almanac, aKey: string, bKey: string): HeadToHead 
     sharedPlayers,
   };
 }
+
+/** A draft action, for the scouting stats. Draft 1 has only picks, in snake order. */
+export interface AlmanacPick {
+  seasonId: string;
+  teamId: TeamId;
+  draftNumber: number;
+  /** 0-based order within its draft. */
+  actionNumber: number;
+  type: 'pick' | 'yield';
+  add: PlayerId | null;
+  drop: PlayerId | null;
+}
+
+/** What the scouting stats need beyond the Almanac's input. */
+export interface ScoutingInput {
+  picks: AlmanacPick[];
+  /** Each rostered player's MLB team that year. */
+  players: { seasonId: string; playerId: PlayerId; mlbTeamId: number }[];
+  /** MLB teams that played each series type, by season. */
+  seriesTeams: { seasonId: string; gameType: PlayerGameStat['gameType']; mlbTeamIds: number[] }[];
+}
+
+/**
+ * How a manager plays the game, over every finished season. Null when there's nothing to measure
+ * (e.g. never swapped a player).
+ */
+export interface ManagerScouting {
+  key: string;
+  seasons: number;
+  /** Average bags from their round-1 picks in Draft 1. */
+  firstRoundBags: number | null;
+  /** Average bags from their round-3 and -4 picks in Draft 1. */
+  lateRoundBags: number | null;
+  /** Average bags per Draft 1 pick above what that pick number has produced across the league. */
+  draftValue: number | null;
+  /** Share of Draft 1 picks whose MLB team reached the Championship Series. */
+  crystalBall: number | null;
+  /** Redraft swaps per season. */
+  swapsPerSeason: number;
+  /** Share of swaps where the added player scored more for them than the dropped one did after. */
+  swapWinRate: number | null;
+  /** Share of their bags that came from home runs. */
+  powerShare: number | null;
+  /** Team on-base percentage. */
+  obp: number | null;
+  /** Average share of a season's bags from their best player that season. */
+  topHeavy: number | null;
+  /** Rounds 2 and 3: average bags above or below the round's average. */
+  bigStage: number | null;
+  /** Cuts made by 3 bags or fewer, and missed by 3 or fewer. */
+  closeEscapes: number;
+  heartbreaks: number;
+}
+
+const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+
+export function scouting(input: AlmanacInput, scout: ScoutingInput, al: Almanac): ManagerScouting[] {
+  const complete = new Set(input.seasons.filter((s) => s.complete).map((s) => s.id));
+  const teamById = new Map(input.teams.map((t) => [t.id, t]));
+  const managerOf = (teamId: TeamId) => teamById.get(teamId)?.managerKey;
+
+  // Stat lines that counted for a fantasy team: on its roster, and the team still alive.
+  const spellsByKey = new Map<string, AlmanacSpell[]>();
+  for (const s of input.spells) spellsByKey.set(`${s.seasonId}:${s.playerId}`, [...(spellsByKey.get(`${s.seasonId}:${s.playerId}`) ?? []), s]);
+  const owned: (AlmanacStat & { teamId: TeamId })[] = [];
+  for (const stat of input.stats) {
+    if (!complete.has(stat.seasonId)) continue;
+    const spell = spellsByKey.get(`${stat.seasonId}:${stat.playerId}`)?.find((s) => inSpell(s, stat.gameStart));
+    const out = spell && teamById.get(spell.teamId)?.eliminatedAfterRound;
+    if (spell && (out == null || out >= ROUND_FOR_GAME_TYPE[stat.gameType])) owned.push({ ...stat, teamId: spell.teamId });
+  }
+  const bagsFor = new Map<string, number>();
+  for (const s of owned) bagsFor.set(`${s.teamId}:${s.playerId}`, (bagsFor.get(`${s.teamId}:${s.playerId}`) ?? 0) + s.tb);
+  const bags = (teamId: TeamId, playerId: PlayerId) => bagsFor.get(`${teamId}:${playerId}`) ?? 0;
+
+  const picks = scout.picks.filter((p) => complete.has(p.seasonId));
+  const draft1 = picks.filter((p) => p.draftNumber === 1 && p.type === 'pick' && p.add !== null);
+  const teamsInSeason = new Map<string, number>();
+  for (const t of input.teams) teamsInSeason.set(t.seasonId, (teamsInSeason.get(t.seasonId) ?? 0) + 1);
+  const snakeRound = (p: AlmanacPick) => Math.floor(p.actionNumber / (teamsInSeason.get(p.seasonId) ?? 1)) + 1;
+  const bySlot = new Map<number, number[]>();
+  for (const p of draft1) bySlot.set(p.actionNumber, [...(bySlot.get(p.actionNumber) ?? []), bags(p.teamId, p.add!)]);
+  const slotAverage = new Map([...bySlot].map(([slot, v]) => [slot, mean(v)!]));
+
+  const mlbTeam = new Map(scout.players.map((p) => [`${p.seasonId}:${p.playerId}`, p.mlbTeamId]));
+  const lcsTeams = new Map(scout.seriesTeams.filter((s) => s.gameType === 'L').map((s) => [s.seasonId, new Set(s.mlbTeamIds)]));
+
+  // Cut margins: each team's bags against the line it had to clear (or that beat it).
+  const cutMargins: { managerKey: string; made: boolean; margin: number }[] = [];
+  for (const year of new Set(al.teamSeasons.map((t) => t.year))) {
+    for (const round of ROUNDS) {
+      const inRound = al.teamSeasons.filter((t) => t.year === year && t.rounds.some((r) => r.round === round));
+      const tb = (t: TeamSeason) => t.rounds.find((r) => r.round === round)!.tb;
+      const through = inRound.filter((t) => t.place === 1 || t.rounds.some((r) => r.round === round + 1));
+      const out = inRound.filter((t) => !through.includes(t));
+      if (!through.length || !out.length) continue;
+      const lastIn = Math.min(...through.map(tb));
+      const firstOut = Math.max(...out.map(tb));
+      for (const t of inRound) {
+        const made = through.includes(t);
+        cutMargins.push({ managerKey: t.managerKey, made, margin: made ? tb(t) - firstOut : lastIn - tb(t) });
+      }
+    }
+  }
+
+  return al.careers.map((c) => {
+    const mine = (teamId: TeamId) => managerOf(teamId) === c.key;
+    const d1 = draft1.filter((p) => mine(p.teamId));
+    const seasons = al.teamSeasons.filter((t) => t.managerKey === c.key);
+    const swaps = picks.filter((p) => p.draftNumber > 1 && p.type === 'pick' && p.drop !== null && mine(p.teamId));
+    const lines = owned.filter((s) => mine(s.teamId));
+    const tb = lines.reduce((sum, s) => sum + s.tb, 0);
+    const onBase = lines.reduce((sum, s) => sum + s.h + s.bb + s.hbp, 0);
+    const pa = lines.reduce((sum, s) => sum + s.ab + s.bb + s.hbp + s.sf, 0);
+    return {
+      key: c.key,
+      seasons: c.seasons,
+      firstRoundBags: mean(d1.filter((p) => snakeRound(p) === 1).map((p) => bags(p.teamId, p.add!))),
+      lateRoundBags: mean(d1.filter((p) => snakeRound(p) >= 3).map((p) => bags(p.teamId, p.add!))),
+      draftValue: mean(d1.map((p) => bags(p.teamId, p.add!) - slotAverage.get(p.actionNumber)!)),
+      crystalBall: mean(d1.map((p) => (lcsTeams.get(p.seasonId)?.has(mlbTeam.get(`${p.seasonId}:${p.add}`) ?? -1) ? 1 : 0))),
+      swapsPerSeason: swaps.length / Math.max(c.seasons, 1),
+      swapWinRate: mean(
+        al.redrafts
+          .filter((m) => m.managerKey === c.key)
+          .map((m) => (m.addedTb > m.droppedTb ? 1 : 0)),
+      ),
+      powerShare: tb ? lines.reduce((sum, s) => sum + 4 * s.hr, 0) / tb : null,
+      obp: pa ? onBase / pa : null,
+      topHeavy: mean(
+        seasons.map((t) => {
+          const byPlayer = new Map<PlayerId, number>();
+          for (const s of lines.filter((l) => l.teamId === t.teamId)) byPlayer.set(s.playerId, (byPlayer.get(s.playerId) ?? 0) + s.tb);
+          const total = [...byPlayer.values()].reduce((a, b) => a + b, 0);
+          return total ? Math.max(...byPlayer.values()) / total : 0;
+        }),
+      ),
+      bigStage: mean(seasons.flatMap((t) => t.rounds.filter((r) => r.round > 1).map((r) => r.tb - r.average))),
+      closeEscapes: cutMargins.filter((m) => m.managerKey === c.key && m.made && m.margin <= 3).length,
+      heartbreaks: cutMargins.filter((m) => m.managerKey === c.key && !m.made && m.margin <= 3).length,
+    };
+  });
+}
+
+export interface Badge {
+  emoji: string;
+  name: string;
+  /** Why they earned it, e.g. "Most bags from round-1 picks". */
+  reason: string;
+}
+
+const BADGES: { emoji: string; name: string; reason: string; value: (s: ManagerScouting) => number | null; lowest?: boolean }[] = [
+  { emoji: '🎯', name: 'First-round ace', reason: 'Most bags from round-1 picks', value: (s) => s.firstRoundBags },
+  { emoji: '🕵️', name: 'Late-round wizard', reason: 'Most bags from round-3 and -4 picks', value: (s) => s.lateRoundBags },
+  { emoji: '🔮', name: 'Crystal ball', reason: 'Most Draft 1 picks on teams that reached the Championship Series', value: (s) => s.crystalBall },
+  { emoji: '🔧', name: 'Tinkerer', reason: 'Most redraft swaps a season', value: (s) => s.swapsPerSeason },
+  { emoji: '🧘', name: 'Set and forget', reason: 'Fewest redraft swaps a season', value: (s) => s.swapsPerSeason, lowest: true },
+  { emoji: '✅', name: 'Swap master', reason: 'Best share of swaps that paid off', value: (s) => s.swapWinRate },
+  { emoji: '💪', name: 'Long-ball lover', reason: 'Most bags from home runs', value: (s) => s.powerShare },
+  { emoji: '👀', name: 'On-base machine', reason: 'Best team on-base percentage', value: (s) => s.obp },
+  { emoji: '🌟', name: 'Stars and scrubs', reason: 'Most bags from one star', value: (s) => s.topHeavy },
+  { emoji: '🧱', name: 'Deep roster', reason: 'Bags spread most evenly across the roster', value: (s) => s.topHeavy, lowest: true },
+  { emoji: '🧊', name: 'The closer', reason: 'Best against the average in rounds 2 and 3', value: (s) => s.bigStage },
+  { emoji: '😅', name: 'Escape artist', reason: 'Most cuts made by 3 bags or fewer', value: (s) => s.closeEscapes || null },
+  { emoji: '💔', name: 'Heartbreak kid', reason: 'Most cuts missed by 3 bags or fewer', value: (s) => s.heartbreaks || null },
+];
+
+/** Each manager's badges: a stat where they lead the league (ties share it). Needs `minSeasons`. */
+export function badges(all: ManagerScouting[], minSeasons = 3): Map<string, Badge[]> {
+  const out = new Map<string, Badge[]>(all.map((s) => [s.key, []]));
+  const qualified = all.filter((s) => s.seasons >= minSeasons);
+  for (const b of BADGES) {
+    const scored = qualified.flatMap((s) => {
+      const v = b.value(s);
+      return v === null ? [] : [{ key: s.key, v }];
+    });
+    if (scored.length < 2) continue;
+    const best = b.lowest ? Math.min(...scored.map((s) => s.v)) : Math.max(...scored.map((s) => s.v));
+    for (const s of scored) if (s.v === best) out.get(s.key)!.push({ emoji: b.emoji, name: b.name, reason: b.reason });
+  }
+  return out;
+}

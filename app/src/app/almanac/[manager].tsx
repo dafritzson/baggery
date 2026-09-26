@@ -5,8 +5,9 @@ import { StyleSheet, View } from 'react-native';
 import type { TeamSeason } from '@core/almanac.ts';
 
 import { AboveAverageChart, managerColor } from '@/components/almanac-charts';
+import { BackButton } from '@/components/back-button';
 import { Card } from '@/components/card';
-import { FinishChart } from '@/components/duel';
+import { FinishChart, RadarChart } from '@/components/duel';
 import { ordinal } from '@/components/manager-link';
 import { Screen } from '@/components/screen';
 import { StatTable } from '@/components/stat-table';
@@ -14,19 +15,22 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { type AlmanacData, managerSlug, useAlmanac } from '@/lib/almanac';
+import { RADAR_AXES, SCOUTING_STATS, radarValues, rankOf } from '@/lib/scouting';
+
+const median = (xs: number[]) => {
+  const sorted = [...xs].sort((a, b) => a - b);
+  return sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
+};
 
 /** One manager's career: every season's finish and bags, their best players, and their redrafts. */
 export default function ManagerScreen() {
   const { manager } = useLocalSearchParams<{ manager: string }>();
   const { data, error } = useAlmanac();
-  const theme = useTheme();
   const key = data && [...data.managers].find(([k, name]) => k === manager || managerSlug(name) === manager)?.[0];
 
   return (
     <Screen>
-      <ThemedText type="small" style={{ color: theme.accent }} onPress={() => (router.canGoBack() ? router.back() : router.replace('/almanac'))}>
-        ‹ Almanac
-      </ThemedText>
+      <BackButton label="Almanac" to="/almanac" />
       {error && <ThemedText themeColor="danger">{error}</ThemedText>}
       {!data && !error && <ThemedText themeColor="textSecondary">Loading every season…</ThemedText>}
       {data && !key && <ThemedText>No manager called {manager}.</ThemedText>}
@@ -54,6 +58,7 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
   const a = data.almanac;
   const slugOf = (key: string) => (key.includes(':') ? key : managerSlug(data.managers.get(key) ?? key));
   const color = managerColor(data, managerKey);
+  const scout = data.scouting.find((x) => x.key === managerKey);
   const career = a.careers.find((c) => c.key === managerKey);
   const name = data.managers.get(managerKey) ?? '?';
   const player = (id: number) => data.players.get(id) ?? `Player ${id}`;
@@ -105,6 +110,61 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
           ))}
         </View>
       </View>
+
+      {(data.badges.get(managerKey) ?? []).length > 0 && (
+        <View style={styles.badges}>
+          {(data.badges.get(managerKey) ?? []).map((b) => (
+            <View key={b.name} style={[styles.badge, { borderColor: color, backgroundColor: `${color}1f` }]}>
+              <ThemedText style={styles.badgeEmoji}>{b.emoji}</ThemedText>
+              <View style={{ flexShrink: 1 }}>
+                <ThemedText type="smallBold">{b.name}</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary" style={styles.badgeReason}>{b.reason}</ThemedText>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {scout && (
+        <Card title="Scouting report">
+          <ThemedText type="small" themeColor="textSecondary">
+            Six skills, each scaled from the league&apos;s worst (center) to its best (edge). Gray is the league&apos;s middle.
+          </ThemedText>
+          <RadarChart
+            axes={RADAR_AXES.map((x) => x.label)}
+            shapes={[
+              { key: 'league', color: theme.textSecondary, values: RADAR_AXES.map((_, i) => median(data.scouting.map((x) => radarValues(data.scouting, x)[i]))) },
+              { key: 'me', color, values: radarValues(data.scouting, scout) },
+            ]}
+          />
+          {(['Drafting', 'Redrafting', 'Style', 'Clutch'] as const).map((group) => (
+            <View key={group} style={{ gap: Spacing.one }}>
+              <ThemedText type="smallBold" themeColor="textSecondary" style={styles.group}>{group}</ThemedText>
+              {SCOUTING_STATS.filter((st) => st.group === group).map((st) => {
+                const v = st.value(scout);
+                const rank = rankOf(data.scouting, st, scout);
+                if (v === null || !rank) return null;
+                return (
+                  <View key={st.key} style={styles.statRow}>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText type="small">{st.label}</ThemedText>
+                      <ThemedText type="small" themeColor="textSecondary" style={styles.badgeReason}>{st.help}</ThemedText>
+                    </View>
+                    <ThemedText type="smallBold">{st.format(v)}</ThemedText>
+                    {!st.neutral && (
+                      <View style={[styles.rank, { backgroundColor: rank.rank === 1 ? color : theme.background }]}>
+                        <ThemedText type="smallBold" style={{ color: rank.rank === 1 ? '#fff' : theme.textSecondary, fontSize: 11 }}>
+                          {ordinal(rank.rank)}
+                        </ThemedText>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          ))}
+        </Card>
+      )}
 
       <View style={styles.compare}>
         <ThemedText type="small" themeColor="textSecondary">Compare with</ThemedText>
@@ -192,6 +252,13 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
 const styles = StyleSheet.create({
   line: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.two },
   lineText: { flex: 1 },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, borderWidth: 1.5, borderRadius: Radius.lg, paddingVertical: Spacing.two, paddingHorizontal: Spacing.three, flexGrow: 1, flexBasis: 160 },
+  badgeEmoji: { fontSize: 24, lineHeight: 30 },
+  badgeReason: { fontSize: 11, lineHeight: 15 },
+  group: { textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11, marginTop: Spacing.two },
+  statRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingVertical: 2 },
+  rank: { minWidth: 38, alignItems: 'center', borderRadius: 999, paddingHorizontal: Spacing.two, paddingVertical: 1 },
   compare: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, alignItems: 'baseline' },
   hero: { borderRadius: Radius.lg, padding: Spacing.three, gap: Spacing.three },
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
