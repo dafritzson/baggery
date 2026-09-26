@@ -23,7 +23,7 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
 - Supabase projects: staging `fysycochmsjicjephrid`, prod `xjbwsveifxhtdkpmnckr`.
 - Secrets live only in the GitHub `staging` / `production` environments, and both are
   restricted to `main`. There are no repo-level secrets.
-- Once staging is deployed, the deploy comments on the merged PR with the staging URL and a link
+- Once staging is deployed, the deploy comments on the merged PR, mentioning the repo owner, with the staging URL and a link
   to the run where production is approved. A newer deploy cancels older ones still waiting for
   approval, so only the newest waits.
 - Changes to `.github/` need review from the code owner (see `.github/CODEOWNERS`).

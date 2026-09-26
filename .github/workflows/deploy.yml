@@ -70,12 +70,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          # Mentioned so the comment is a push notification (Direct Mentions) on any PR.
+          OWNER: ${{ github.repository_owner }}
           STAGING_URL: ${{ needs.staging.outputs.url }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           pr=$(gh api "repos/$GH_REPO/commits/$GITHUB_SHA/pulls" --jq '.[0].number // empty')
           if [ -z "$pr" ]; then echo "No PR for $GITHUB_SHA"; exit 0; fi
-          gh pr comment "$pr" --body "Deployed to staging: $STAGING_URL
+          gh pr comment "$pr" --body "@$OWNER Deployed to staging: $STAGING_URL
 
           **Production is waiting for approval:** [open the deploy run]($RUN_URL), tap **Review deployments**, tick **production**, then **Approve and deploy**."
 
