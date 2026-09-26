@@ -4,11 +4,16 @@ import {
   type Counts,
   type PlayerGame,
   SEASON_RATE_WARMUP,
+  absences,
+  addDays,
   chartPoints,
+  dayPositions,
+  daysBetween,
   emptyCounts,
   formatRate,
   lastGames,
   rates,
+  seasonLine,
   sumCounts,
 } from '../supabase/functions/_shared/core/player-stats.ts';
 
@@ -101,5 +106,60 @@ describe('chart points', () => {
     // A last-N window keeps every game, and a short season isn't cut.
     expect(chartPoints(season, 'avg', 15)).toHaveLength(15);
     expect(chartPoints(season.slice(0, 8), 'avg', null)).toHaveLength(8);
+  });
+});
+
+describe('season calendar', () => {
+  it('counts days between dates', () => {
+    expect(daysBetween('2026-03-25', '2026-03-25')).toBe(0);
+    expect(daysBetween('2026-03-25', '2026-04-01')).toBe(7);
+    expect(daysBetween('2026-04-01', '2026-03-25')).toBe(-7);
+    expect(addDays('2026-03-31', 1)).toBe('2026-04-01');
+    expect(addDays('2026-11-01', 1)).toBe('2026-11-02'); // no daylight-saving slip
+  });
+
+  it('puts each game in the middle of its day, and splits a doubleheader', () => {
+    const points = chartPoints(
+      [game('2026-03-27', {}), game('2026-03-26', {}), game('2026-03-26', {}), game('2026-03-25', {})],
+      'tb',
+      null,
+    );
+    expect(dayPositions(points, '2026-03-25')).toEqual([0.5, 1.25, 1.75, 2.5]);
+  });
+
+  it('finds long stretches without a game, including before his first and since his last', () => {
+    const games = [game('2026-09-16', {}), game('2026-09-11', {}), game('2026-06-05', {}), game('2026-04-10', {})];
+    expect(absences(games, '2026-03-25', '2026-09-26')).toEqual([
+      { from: '2026-03-25', to: '2026-04-09', days: 16 },
+      { from: '2026-04-11', to: '2026-06-04', days: 55 },
+      { from: '2026-06-06', to: '2026-09-10', days: 97 },
+      { from: '2026-09-17', to: '2026-09-26', days: 10 },
+    ]);
+    // Nine days off (the All-Star break and then some) doesn't count.
+    expect(absences([game('2026-07-20', {}), game('2026-07-10', {})], '2026-07-10', '2026-07-20')).toEqual([]);
+    expect(absences([], '2026-09-01', '2026-09-10')).toEqual([{ from: '2026-09-01', to: '2026-09-10', days: 10 }]);
+  });
+
+  it('holds a running total flat through days off, from 0 on opening day to the end', () => {
+    // Newest first: 2 TB on 3/27, then 3 TB after five days off.
+    const games = [game('2026-04-02', { tb: 3 }), game('2026-03-27', { tb: 2 })];
+    const points = chartPoints(games, 'tb', null, { total: true });
+    expect(seasonLine(points, '2026-03-25', '2026-04-05', { fromZero: true })).toEqual([
+      [0, 0],
+      [1.5, 0], // flat until the day before his first game
+      [2.5, 2],
+      [7.5, 2], // flat through the days off
+      [8.5, 5],
+      [12, 5], // and on to the end of the last day
+    ]);
+  });
+
+  it('starts a rate line at its first value', () => {
+    const games = [game('2026-03-26', { ab: 4, h: 1 }), game('2026-03-25', { bb: 1 })];
+    const line = seasonLine(chartPoints(games, 'avg', null), '2026-03-25', '2026-03-26');
+    expect(line).toEqual([
+      [1.5, 0.25],
+      [2, 0.25],
+    ]);
   });
 });

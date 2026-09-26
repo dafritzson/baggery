@@ -1,5 +1,6 @@
 // One player's batting stats for the player popup: this season's regular-season line, every
-// game that season (the app totals the last 7/15/30) and earlier MLB seasons. Read from the MLB
+// game that season (the app totals the last 7/15/30), when that season runs (the chart's date
+// axis) and earlier MLB seasons. Read from the MLB
 // Stats API and cached briefly, so opening a popup doesn't hit MLB every time. Any signed-in user.
 //
 // POST { playerId: number, season: number }  →  PlayerStats (see _shared/core/player-stats.ts)
@@ -10,6 +11,7 @@ import {
   type PlayerGame,
   type PlayerSeasonRow,
   type PlayerStats,
+  type SeasonDates,
   sumCounts,
 } from '../_shared/core/player-stats.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
@@ -55,13 +57,28 @@ async function abbreviations(): Promise<Map<number, string>> {
   return teamAbbrs;
 }
 
+// Season → its regular season's first and last days. They don't change, so they're kept.
+const seasonDates = new Map<number, SeasonDates | null>();
+async function datesOf(season: number): Promise<SeasonDates | null> {
+  if (!seasonDates.has(season)) {
+    const s = (await mlb(`/seasons/${season}?sportId=1`)).seasons?.[0];
+    const dates = s?.regularSeasonStartDate && s?.regularSeasonEndDate
+      ? { start: s.regularSeasonStartDate, end: s.regularSeasonEndDate }
+      : null;
+    seasonDates.set(season, dates);
+  }
+  return seasonDates.get(season)!;
+}
+
 const cache = new Map<string, { at: number; stats: PlayerStats }>();
 
 async function playerStats(playerId: number, season: number): Promise<PlayerStats> {
-  const [peopleData, statsData, abbrs] = await Promise.all([
+  const [peopleData, statsData, abbrs, dates] = await Promise.all([
     mlb(`/people/${playerId}?hydrate=currentTeam`),
     mlb(`/people/${playerId}/stats?stats=season,gameLog,yearByYear&group=hitting&gameType=R&sportId=1&season=${season}`),
     abbreviations(),
+    // Without the dates the chart falls back to one step per game, so a failure here isn't fatal.
+    datesOf(season).catch(() => null),
   ]);
   const p = peopleData.people?.[0];
   if (!p) throw new UserError('Player not found.', 404);
@@ -109,6 +126,7 @@ async function playerStats(playerId: number, season: number): Promise<PlayerStat
     },
     season: seasonSplits.length ? combined(seasonSplits) : null,
     games,
+    dates,
     years,
   };
 }

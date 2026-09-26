@@ -18,6 +18,7 @@ import {
 import {
   type Counts,
   type PlayerStats,
+  absences,
   formatRate,
   lastGames,
   rates,
@@ -397,10 +398,14 @@ function StatsBody({
   const [showYears, setShowYears] = useState(false);
   const games = stats.games.slice(0, span);
 
-  const splits: { label: string; line: Counts; season?: SeasonExtras; key?: boolean }[] = [];
+  const splits: { label: string; note?: string; line: Counts; season?: SeasonExtras; key?: boolean }[] = [];
   if (stats.season) splits.push({ label: String(year), line: stats.season, season: { opsPlus, projection }, key: true });
   for (const n of WINDOWS) {
-    if (stats.games.length >= n) splits.push({ label: `Last ${n}`, line: lastGames(stats.games, n) });
+    if (stats.games.length < n) continue;
+    // A window that reaches back across time he missed says how far back it goes.
+    const first = stats.games[n - 1].date;
+    const note = absences(stats.games.slice(0, n), first, stats.games[0].date).length ? `since ${shortDate(first)}` : undefined;
+    splits.push({ label: `Last ${n}`, note, line: lastGames(stats.games, n) });
   }
   if (!splits.length) {
     return <ThemedText themeColor="textSecondary">No MLB games in {year} yet.</ThemedText>;
@@ -415,6 +420,7 @@ function StatsBody({
           rows={splits.map((s) => ({
             key: s.label,
             label: s.label,
+            note: s.note,
             strong: s.key,
             cells: LINE_COLUMNS.map((c) => c.value(s.line, s.season ?? null)),
           }))}
@@ -423,7 +429,7 @@ function StatsBody({
 
       {stats.games.length > 0 && (
         <Section title="Chart">
-          <StatChart games={stats.games} season={stats.season} />
+          <StatChart games={stats.games} season={stats.season} dates={stats.dates ?? null} />
         </Section>
       )}
 
@@ -434,8 +440,9 @@ function StatsBody({
           <StatTable
             labelWidth={96}
             columns={GAME_COLUMNS}
-            rows={games.map((g) => ({
-              key: g.date + g.opponent,
+            rows={games.map((g, i) => ({
+              // Index too: a doubleheader is two games on one date against one team.
+              key: `${g.date}${g.opponent}${i}`,
               label: `${shortDate(g.date)} ${g.home ? 'vs' : '@'} ${g.opponent}`,
               cells: GAME_COLUMNS.map((c) => c.value(g, null)),
             }))}
@@ -507,19 +514,24 @@ function StatTable({
   labelWidth,
 }: {
   columns: Column[];
-  rows: { key: string; label: string; cells: string[]; strong?: boolean }[];
+  rows: { key: string; label: string; note?: string; cells: string[]; strong?: boolean }[];
   labelWidth: number;
 }) {
   const theme = useTheme();
+  // Room for a note after the label ("Last 30 since 5/12"), only when a row has one.
+  const width = labelWidth + (rows.some((r) => r.note) ? 72 : 0);
   const tbIndex = columns.findIndex((c) => c.label === 'TB');
   const rowBorder = (i: number) => i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border };
   return (
     <ThemedView type="backgroundElement" style={styles.table}>
-      <View style={[styles.labelColumn, { width: labelWidth, borderRightColor: theme.border }]}>
+      <View style={[styles.labelColumn, { width, borderRightColor: theme.border }]}>
         <View style={[styles.tableRow, styles.tableHead, { borderBottomColor: theme.border }]} />
         {rows.map((r, i) => (
           <View key={r.key} style={[styles.tableRow, styles.labelCell, rowBorder(i)]}>
-            <ThemedText type={r.strong ? 'smallBold' : 'small'} numberOfLines={1} style={styles.cellText}>{r.label}</ThemedText>
+            <ThemedText type={r.strong ? 'smallBold' : 'small'} numberOfLines={1} style={styles.cellText}>
+              {r.label}
+              {r.note && <ThemedText type="small" themeColor="textSecondary" style={styles.cellText}>{` ${r.note}`}</ThemedText>}
+            </ThemedText>
           </View>
         ))}
       </View>
