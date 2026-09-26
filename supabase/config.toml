@@ -443,3 +443,6 @@ verify_jwt = false
 
 [functions.import-season]
 verify_jwt = false
+
+[functions.almanac]
+verify_jwt = false

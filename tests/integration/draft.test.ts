@@ -369,3 +369,67 @@ describe('live stats poller', () => {
     expect(await res.json()).toEqual({ ok: true });
   });
 });
+
+describe('almanac', () => {
+  const FREEMAN = 518692;
+  let leagueId: string;
+  let ana: string;
+
+  // A finished 2025 for the league (its box scores came in above), as if imported from the old
+  // sheets: Ana wins with Freddie Freeman, Ben goes out after round 2 and Cal after round 1.
+  beforeAll(async () => {
+    const { data: season } = await admin.from('seasons').select('id, league_id').eq('year', 2025).single();
+    leagueId = season!.league_id;
+    // An imported season's teams keep the manager they're given (see team_managers.sql).
+    expect((await admin.from('seasons').update({ imported_at: new Date().toISOString() }).eq('id', season!.id)).error).toBeNull();
+    const { data: managers, error } = await admin
+      .from('league_managers')
+      .insert(['Ana', 'Ben', 'Cal'].map((name) => ({ league_id: leagueId, name })))
+      .select('id, name');
+    if (error) throw error;
+    const id = (name: string) => managers!.find((m) => m.name === name)!.id;
+    ana = id('Ana');
+    const { data: teams, error: teamError } = await admin
+      .from('fantasy_teams')
+      .insert([
+        { season_id: season!.id, slot: 1, manager_id: ana, eliminated_after_round: null },
+        { season_id: season!.id, slot: 2, manager_id: id('Ben'), eliminated_after_round: 2 },
+        { season_id: season!.id, slot: 3, manager_id: id('Cal'), eliminated_after_round: 1 },
+      ])
+      .select('id, slot');
+    if (teamError) throw teamError;
+    const { data: others } = await admin.from('player_game_stats').select('mlb_player_id').neq('mlb_player_id', FREEMAN).gt('tb', 0).limit(50);
+    const [ben, cal] = [...new Set(others!.map((o) => o.mlb_player_id))];
+    const team = (slot: number) => teams!.find((t) => t.slot === slot)!.id;
+    const { error: spellError } = await admin.from('roster_spells').insert(
+      [[1, FREEMAN], [2, ben], [3, cal]].map(([slot, player]) => ({
+        season_id: season!.id, fantasy_team_id: team(slot), mlb_player_id: player, from_at: '2025-09-01T00:00:00Z',
+      })),
+    );
+    if (spellError) throw spellError;
+  });
+
+  it('needs a signed-in user and a league', async () => {
+    const anon = createClient(url, publishableKey, { auth: { persistSession: false } });
+    expect((await anon.functions.invoke('almanac', { body: { leagueId } })).error).not.toBeNull();
+    expect((await call('Kyle', 'almanac', {})).error).toMatch(/leagueId/);
+  });
+
+  it('builds the Almanac from every finished season in one request', async () => {
+    const { data, error } = await clients.get('Kyle')!.functions.invoke('almanac', { body: { leagueId } });
+    expect(error).toBeNull();
+    const managers = new Map<string, string>(data.managers);
+    const players = new Map<number, string>(data.players);
+    expect(data.almanac.champions.map((c: { year: number }) => c.year)).toEqual([2025]);
+    expect(data.almanac.champions[0].champion.managerKey).toBe(ana);
+    expect(managers.get(ana)).toBe('Ana');
+    expect(data.almanac.careers.map((c: { name: string }) => c.name).sort()).toEqual(['Ana', 'Ben', 'Cal']);
+    // Freeman's postseason counts for Ana, under his name.
+    expect(players.get(FREEMAN)).toMatch(/Freeman/);
+    const freeman = data.almanac.bestPlayerSeasons.find((p: { playerId: number }) => p.playerId === FREEMAN);
+    expect(freeman).toMatchObject({ managerKey: ana, year: 2025 });
+    expect(freeman.tb).toBeGreaterThan(10);
+    expect(new Map(data.almanac.playersByManager).get(ana)).toEqual([expect.objectContaining({ playerId: FREEMAN, years: [2025] })]);
+    expect(data.scouting).toHaveLength(3);
+  });
+});

@@ -14,7 +14,8 @@ Ideas not yet decided on: [docs/IDEAS.md](docs/IDEAS.md).
   (a player's season, game log and past seasons for the player popup, from the MLB Stats API) and
   `poll-games` (live stats: mirrors postseason games and box scores into `mlb_games` and
   `player_game_stats`; pg_cron calls it every 10 seconds while a game is live, and the schedule and
-  finished games only every 10 minutes otherwise), and `import-season` (the commissioner imports a
+  finished games only every 10 minutes otherwise), `almanac` (builds the league's Almanac from every
+  season's rows in one request, so the app doesn't chain dozens of queries), and `import-season` (the commissioner imports a
   past season from the league's old Google Sheets; see the `import-season` skill).
 - `supabase/functions/_shared/core/`: pure game logic (draft, scoring), shared by the
   functions and the app (`@core/...`). No dependencies; imports use `.ts` extensions.

@@ -140,7 +140,14 @@ export interface Almanac {
   closestCuts: CutRecord[];
   redrafts: RedraftMove[];
   /** Career bags by player for each manager, most first. */
-  playersByManager: Map<string, { playerId: PlayerId; tb: number; years: number[] }[]>;
+  playersByManager: Map<string, ManagerPlayer[]>;
+}
+
+/** A player's career bags for one manager, and the years they had him. */
+export interface ManagerPlayer {
+  playerId: PlayerId;
+  tb: number;
+  years: number[];
 }
 
 function inSpell(s: RosterSpell, start: string): boolean {
@@ -274,7 +281,7 @@ export function almanac(input: AlmanacInput, top = 10): Almanac {
     playerSeason.set(k, rec);
   }
   const bestPlayerSeasons = [...playerSeason.values()].sort(byDesc((r) => r.tb)).slice(0, top);
-  const playersByManager = new Map<string, { playerId: PlayerId; tb: number; years: number[] }[]>();
+  const playersByManager = new Map<string, ManagerPlayer[]>();
   for (const rec of playerSeason.values()) {
     const list = playersByManager.get(rec.managerKey) ?? [];
     const found = list.find((p) => p.playerId === rec.playerId);
@@ -569,4 +576,45 @@ export function badges(all: ManagerScouting[], minSeasons = 3): Map<string, Badg
     for (const s of scored) if (s.v === best) out.get(s.key)!.push({ emoji: b.emoji, name: b.name, reason: b.reason });
   }
   return out;
+}
+
+/** Everything the Almanac pages show: the Almanac, names, scouting and badges. */
+export interface AlmanacData {
+  almanac: Almanac;
+  /** Manager names by key. */
+  managers: Map<string, string>;
+  /** Player names by MLB id. */
+  players: Map<number, string>;
+  /** How each manager plays the game, and the badges they've earned. */
+  scouting: ManagerScouting[];
+  badges: Map<string, Badge[]>;
+}
+
+/** AlmanacData as JSON, which has no Maps: each Map is its entries. The almanac function sends it. */
+export interface AlmanacJson {
+  almanac: Omit<Almanac, 'playersByManager'> & { playersByManager: [string, ManagerPlayer[]][] };
+  managers: [string, string][];
+  players: [number, string][];
+  scouting: ManagerScouting[];
+  badges: [string, Badge[]][];
+}
+
+export function almanacToJson(d: AlmanacData): AlmanacJson {
+  return {
+    almanac: { ...d.almanac, playersByManager: [...d.almanac.playersByManager] },
+    managers: [...d.managers],
+    players: [...d.players],
+    scouting: d.scouting,
+    badges: [...d.badges],
+  };
+}
+
+export function almanacFromJson(j: AlmanacJson): AlmanacData {
+  return {
+    almanac: { ...j.almanac, playersByManager: new Map(j.almanac.playersByManager) },
+    managers: new Map(j.managers),
+    players: new Map(j.players),
+    scouting: j.scouting,
+    badges: new Map(j.badges),
+  };
 }
