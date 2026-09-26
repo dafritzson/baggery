@@ -9,6 +9,7 @@ import { AboveAverageChart, managerColor } from '@/components/almanac-charts';
 import { BackButton, goBack } from '@/components/back-button';
 import { Card } from '@/components/card';
 import { FinishChart, RadarChart } from '@/components/duel';
+import { Loader } from '@/components/loader';
 import { ordinal } from '@/components/manager-link';
 import { Screen } from '@/components/screen';
 import { StatTable } from '@/components/stat-table';
@@ -33,7 +34,7 @@ export default function ManagerScreen() {
     <Screen>
       {!(data && key && data.almanac.careers.some((c) => c.key === key)) && <BackButton label="Almanac" to="/almanac" />}
       {error && <ThemedText themeColor="danger">{error}</ThemedText>}
-      {!data && !error && <ThemedText themeColor="textSecondary">Loading every season…</ThemedText>}
+      {!data && !error && <Loader />}
       {data && !key && <ThemedText>No manager called {manager}.</ThemedText>}
       {data && key && <Career data={data} managerKey={key} />}
     </Screen>
