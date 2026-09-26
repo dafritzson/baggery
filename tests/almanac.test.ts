@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { type AlmanacInput, type AlmanacStat, type ScoutingInput, almanac, badges, headToHead, scouting } from '../supabase/functions/_shared/core/almanac.ts';
+import {
+  type AlmanacInput,
+  type AlmanacStat,
+  type ScoutingInput,
+  almanac,
+  almanacFromJson,
+  almanacToJson,
+  badges,
+  headToHead,
+  scouting,
+} from '../supabase/functions/_shared/core/almanac.ts';
 import type { GameType } from '../supabase/functions/_shared/core/types.ts';
 
 const START: Record<GameType, string> = {
@@ -154,5 +164,23 @@ describe('scouting', () => {
     expect(b.get('a')!.map((x) => x.name)).toContain('Crystal ball');
     expect(b.get('a')!.map((x) => x.name)).toContain('Tinkerer');
     expect(badges(s, 2).get('a')).toEqual([]); // nobody has 2 seasons
+  });
+});
+
+describe('almanacToJson', () => {
+  it('survives JSON and comes back with its Maps', () => {
+    const inp = input();
+    const al = almanac(inp);
+    const data = {
+      almanac: al,
+      managers: new Map(inp.managers.map((m) => [m.key, m.name])),
+      players: new Map([[1, 'One'], [4, 'Four']]),
+      scouting: [],
+      badges: new Map([['a', [{ emoji: '🎯', name: 'Sharp', reason: 'Why' }]]]),
+    };
+    const back = almanacFromJson(JSON.parse(JSON.stringify(almanacToJson(data))));
+    expect(back).toEqual(data);
+    expect(back.almanac.playersByManager.get('a')).toEqual(al.playersByManager.get('a'));
+    expect(back.players.get(4)).toBe('Four');
   });
 });

@@ -5,3 +5,4 @@ import postgres from 'npm:postgres@3.4.7';
 export const sql = postgres(Deno.env.get('SUPABASE_DB_URL')!, { prepare: false, max: 3 });
 
 export type Tx = postgres.TransactionSql;
+export type Row = postgres.Row;
