@@ -99,6 +99,8 @@ export interface SeasonData {
     survivors_after_round: number[];
     /** Set for past seasons imported from the old sheets. */
     imported_at: string | null;
+    /** Rounds the commissioner reopened, which wait for them to close again. */
+    manual_rounds: number[];
   };
   teams: Team[];
   drafts: Draft[];
@@ -137,7 +139,7 @@ async function fetchSeason(
 ): Promise<{ data: SeasonData | null; years: number[] } | null> {
   const { data: seasons, error } = await supabase
     .from('seasons')
-    .select('id, year, status, league_id, survivors_after_round, imported_at')
+    .select('id, year, status, league_id, survivors_after_round, imported_at, manual_rounds')
     .order('year', { ascending: false });
   if (error) return null;
   const years = seasons.map((s) => s.year as number);

@@ -37,10 +37,13 @@ clarification agreed since. When code and this file disagree, one of them is a b
 7. Still tied → drink-off (any number of teams). The commissioner enters the result.
 
 The Standings rank by this order all along, and a scales icon next to teams level on TB shows
-how the tiebreakers separate them. Once every game of a round is final, the commissioner closes
-the round on the Standings page: the teams below the cut are eliminated, and a full tie at the
-cut asks for the drink-off's winners. A round can be reopened (a stat correction, say) until the
-draft after it starts. Drafts 3 and 4 need the round before them closed.
+how the tiebreakers separate them.
+
+A round closes by itself once every MLB series in it has a winner and 3 hours have passed for
+stat corrections: the teams below the cut are eliminated. The commissioner steps in only for a
+drink-off (a full tie at the cut), whose winners they pick on the Standings page. They can also
+reopen a round (a stat correction, say) until the draft after it starts; a reopened round waits
+for them to close it again. Drafts 3 and 4 need the round before them closed.
 
 xSLG, xwOBA, WAR and age were dropped as tiebreakers. They may come back later, but need to find good data sources for them.
 

@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { roundStandings } from '@core/scoreboard.ts';
+import { roundDecided, roundStandings } from '@core/scoreboard.ts';
 import { eliminations } from '@core/scoring.ts';
-import { type FantasyRound, ROUND_FOR_GAME_TYPE } from '@core/types.ts';
+import type { FantasyRound } from '@core/types.ts';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
@@ -19,24 +19,24 @@ import { teamName } from '@/lib/teams';
 const names = (list: string[]) => (list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list.at(-1)}` : (list[0] ?? ''));
 
 /**
- * Commissioner only: once every game of a round is final, closes it, eliminating the teams below
- * the cut by the rules' ranking. A full tie at the cut asks for the drink-off's winners. A closed
- * round can be reopened until the draft after it starts.
+ * Where a round stands once it's over. Rounds close by themselves (poll-games) about 3 hours after
+ * every series in them has a winner; the commissioner only steps in for a drink-off (a full tie at
+ * the cut), to reopen a round after a stat correction, or to close a round they reopened.
  */
 export function CloseRoundCard({ data, scores, round, refetch }: { data: SeasonData; scores: Scores; round: FantasyRound; refetch: () => void }) {
   const theme = useTheme();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [winners, setWinners] = useState<string[]>([]);
-  if (!data.isCommissioner || data.season.imported_at) return null;
+  if (data.season.imported_at) return null;
 
+  const commissioner = data.isCommissioner;
   const teamById = new Map(data.teams.map((t) => [t.id, t]));
   const label = (id: string) => teamName(teamById.get(id)!);
   const closed = data.teams.some((t) => t.eliminated_after_round === round);
   const previousClosed = round === 1 || data.teams.some((t) => t.eliminated_after_round === round - 1);
   const nextDraft = round < 3 ? data.drafts.find((d) => d.number === round + 2) : null;
-  const games = scores.games.filter((g) => ROUND_FOR_GAME_TYPE[g.gameType] === round);
-  const done = games.length > 0 && games.every((g) => g.status === 'Final');
+  const decided = roundDecided(round, scores.games);
 
   async function run(body: object) {
     setBusy(true);
@@ -51,16 +51,19 @@ export function CloseRoundCard({ data, scores, round, refetch }: { data: SeasonD
 
   if (closed) {
     const out = data.teams.filter((t) => t.eliminated_after_round === round).map((t) => t.id);
-    const canReopen = round === 3 ? true : !!nextDraft && nextDraft.status === 'scheduled' && !data.teams.some((t) => t.eliminated_after_round === round + 1);
+    const champion = data.teams.find((t) => t.eliminated_after_round === null);
+    const canReopen =
+      commissioner &&
+      (round === 3 || (nextDraft?.status === 'scheduled' && !data.teams.some((t) => t.eliminated_after_round === round + 1)));
     return (
       <Card title={`Round ${round} closed`}>
         <ThemedText type="small">
-          {round === 3 ? `${label(data.teams.find((t) => t.eliminated_after_round === null)!.id)} won it all.` : `${names(out.map(label))} ${out.length === 1 ? 'is' : 'are'} out.`}
+          {round === 3 && champion ? `${label(champion.id)} won it all.` : `${names(out.map(label))} ${out.length === 1 ? 'is' : 'are'} out.`}
         </ThemedText>
         {canReopen && (
           <>
             <ThemedText type="small" themeColor="textSecondary">
-              Reopen it if a stat correction changes the result{round < 3 ? `, until Draft ${round + 2} starts` : ''}.
+              Reopen it if a stat correction changes the result{round < 3 ? `, until Draft ${round + 2} starts` : ''}. It then waits for you to close it again.
             </ThemedText>
             <Button label={busy ? 'Reopening…' : `Reopen round ${round}`} variant="secondary" onPress={() => run({ reopen: true })} disabled={busy} />
           </>
@@ -69,57 +72,74 @@ export function CloseRoundCard({ data, scores, round, refetch }: { data: SeasonD
       </Card>
     );
   }
-  if (!previousClosed || !done) return null;
+  if (!previousClosed || !decided) return null;
 
-  // The same ranking the server will use: TB, then the tiebreakers.
+  // The same ranking the server uses: TB, then the tiebreakers.
   const alive = data.teams.filter((t) => t.eliminated_after_round === null).map((t) => t.id);
   const standings = roundStandings(round, alive, scores.games, scores.stats, coreSpells(data));
-  const survivors = Math.min(data.season.survivors_after_round[round - 1] ?? 1, standings.length);
   const cut = eliminations(
     standings.map((s) => ({ ...s.totals, teamId: s.teamId, rank: s.rank })),
-    survivors,
+    Math.min(data.season.survivors_after_round[round - 1] ?? 1, standings.length),
   );
   const drinkOff = cut.drinkOff;
+  const reopened = data.season.manual_rounds.includes(round);
+  const outcome =
+    round === 3
+      ? cut.advancing.length ? `${label(cut.advancing[0])} wins it all` : null
+      : cut.eliminated.length ? `${names(cut.eliminated.map(label))} ${cut.eliminated.length === 1 ? 'is' : 'are'} out` : null;
+
+  if (!drinkOff && !reopened) {
+    return (
+      <Card title={`Round ${round} is decided`}>
+        <ThemedText type="small">
+          {outcome ? `${outcome}. ` : ''}The round closes itself about 3 hours after the last out, once MLB&apos;s stat corrections are in.
+        </ThemedText>
+      </Card>
+    );
+  }
+
   const picking = drinkOff && winners.length !== drinkOff.spots;
   const toggle = (id: string) =>
     setWinners((w) => (w.includes(id) ? w.filter((x) => x !== id) : w.length < (drinkOff?.spots ?? 0) ? [...w, id] : w));
-
   return (
-    <Card title={`Close round ${round}`}>
-      <ThemedText type="small">
-        Every round {round} game is final.{' '}
-        {round === 3
-          ? `Closing it makes ${names(cut.advancing.map(label)) || 'the drink-off winner'} the champion.`
-          : cut.eliminated.length
-            ? `Closing it knocks out ${names(cut.eliminated.map(label))}.`
-            : 'Closing it records who advances.'}
-      </ThemedText>
-      {drinkOff && (
-        <View style={{ gap: Spacing.two }}>
-          <ThemedText type="small">
-            {names(drinkOff.teamIds.map(label))} are level on every tiebreaker at the cut. Pick the drink-off&apos;s{' '}
-            {drinkOff.spots === 1 ? 'winner' : `${drinkOff.spots} winners`}:
-          </ThemedText>
-          <View style={styles.chips}>
-            {drinkOff.teamIds.map((id) => {
-              const on = winners.includes(id);
-              return (
-                <Pressable
-                  key={id}
-                  onPress={() => toggle(id)}
-                  style={[styles.chip, { backgroundColor: on ? theme.accent : theme.background, borderColor: on ? theme.accent : theme.border }]}>
-                  <ThemedText type="smallBold" style={{ color: on ? '#fff' : theme.text }}>{on ? '🍺 ' : ''}{label(id)}</ThemedText>
-                </Pressable>
-              );
-            })}
-          </View>
+    <Card title={drinkOff ? 'Drink-off' : `Close round ${round}`}>
+      {drinkOff ? (
+        <ThemedText type="small">
+          {names(drinkOff.teamIds.map(label))} are level on every tiebreaker at the cut
+          {outcome ? ` (${outcome.replace(/ (is|are) out$/, ' $1 out either way')})` : ''}.{' '}
+          {commissioner
+            ? `Pick the drink-off's ${drinkOff.spots === 1 ? 'winner' : `${drinkOff.spots} winners`} to close the round:`
+            : 'The round closes once the commissioner enters the drink-off’s result.'}
+        </ThemedText>
+      ) : (
+        <ThemedText type="small">
+          {commissioner
+            ? `You reopened round ${round}. ${outcome ? `Closing it now: ${outcome}.` : ''}`
+            : `The commissioner reopened round ${round}.`}
+        </ThemedText>
+      )}
+      {commissioner && drinkOff && (
+        <View style={styles.chips}>
+          {drinkOff.teamIds.map((id) => {
+            const on = winners.includes(id);
+            return (
+              <Pressable
+                key={id}
+                onPress={() => toggle(id)}
+                style={[styles.chip, { backgroundColor: on ? theme.accent : theme.background, borderColor: on ? theme.accent : theme.border }]}>
+                <ThemedText type="smallBold" style={{ color: on ? '#fff' : theme.text }}>{on ? '🍺 ' : ''}{label(id)}</ThemedText>
+              </Pressable>
+            );
+          })}
         </View>
       )}
-      <Button
-        label={busy ? 'Closing…' : picking ? 'Pick the drink-off winner first' : `Close round ${round}`}
-        onPress={() => run(drinkOff ? { drinkOffWinners: winners } : {})}
-        disabled={busy || !!picking}
-      />
+      {commissioner && (
+        <Button
+          label={busy ? 'Closing…' : picking ? 'Pick the drink-off winner first' : `Close round ${round}`}
+          onPress={() => run(drinkOff ? { drinkOffWinners: winners } : {})}
+          disabled={busy || !!picking}
+        />
+      )}
       {error && <ThemedText type="small" themeColor="danger">{error}</ThemedText>}
     </Card>
   );

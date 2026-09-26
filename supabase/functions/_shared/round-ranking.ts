@@ -10,14 +10,6 @@ export function roundGameTypes(round: FantasyRound): GameType[] {
   return (Object.keys(ROUND_FOR_GAME_TYPE) as GameType[]).filter((t) => ROUND_FOR_GAME_TYPE[t] === round);
 }
 
-/** The round's games: how many, and how many aren't final yet. */
-export async function roundGames(tx: Tx, year: number, round: FantasyRound): Promise<{ total: number; unfinished: number }> {
-  const [row] = await tx`
-    select count(*)::int as total, count(*) filter (where status <> 'Final')::int as unfinished
-    from mlb_games where season_year = ${year} and game_type in ${tx(roundGameTypes(round))}`;
-  return { total: row.total, unfinished: row.unfinished };
-}
-
 /** `teamIds` ranked on the round's stats (TB, then SLG, OBP, HR, R, RBI; full ties share a rank). */
 export async function roundRanking(
   tx: Tx,

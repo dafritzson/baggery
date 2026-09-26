@@ -9,6 +9,7 @@
 // POST { seasonId }          commissioner: reloads every game of that season's postseason.
 
 import { requireCommissioner, requireUser } from '../_shared/auth.ts';
+import { autoCloseRounds } from '../_shared/close-round.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
 import { boxscoreBatting, linescoreLive, linescoreRuns, scheduleGames } from './feed.ts';
@@ -199,7 +200,20 @@ serve(async (req) => {
     if (secret !== cfg?.secret) throw new UserError('Not allowed.', 403);
     const [latest] = await sql`select max(year) as year from seasons`;
     if (!latest?.year) return json({ skipped: true });
-    return json(await withLease(() => poll(latest.year, false)));
+    return json(
+      await withLease(async () => {
+        const result = await poll(latest.year, false);
+        // Rounds whose series are all decided (and settled for stat corrections) close themselves.
+        // A failure here mustn't stop the scores.
+        let closedRounds: number[] = [];
+        try {
+          closedRounds = await sql.begin((tx) => autoCloseRounds(tx));
+        } catch (e) {
+          console.error('auto-close', e);
+        }
+        return { ...result, closedRounds };
+      }),
+    );
   }
 
   const userId = await requireUser(req);

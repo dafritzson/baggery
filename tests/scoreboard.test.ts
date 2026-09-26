@@ -4,7 +4,9 @@ import {
   type ScoreGame,
   currentRound,
   roundColumns,
+  roundDecided,
   roundStandings,
+  type SeriesGame,
   roundTotals,
   teamSeriesBlocks,
 } from '../supabase/functions/_shared/core/scoreboard.ts';
@@ -90,5 +92,53 @@ describe('scoreboard', () => {
     expect(currentRound([])).toBe(1);
     expect(currentRound(games)).toBe(1);
     expect(currentRound([...games, { ...games[0], gamePk: 9, gameType: 'L', status: 'Live' }])).toBe(2);
+  });
+});
+
+describe('roundDecided', () => {
+  // A best-of-n series between two teams, from the home team's results ('W'/'L'), with any
+  // leftover games still scheduled.
+  const series = (gameType: SeriesGame['gameType'], teams: [number, number], results: string, length: number, leftover = 0): SeriesGame[] => [
+    ...[...results].map((r) => ({
+      gameType, homeTeamId: teams[0], awayTeamId: teams[1], status: 'Final',
+      homeScore: r === 'W' ? 5 : 2, awayScore: r === 'W' ? 2 : 5, gamesInSeries: length,
+    })),
+    ...Array.from({ length: leftover }, () => ({
+      gameType, homeTeamId: teams[0], awayTeamId: teams[1], status: 'Preview', homeScore: null, awayScore: null, gamesInSeries: length,
+    })),
+  ];
+  const divisionSeries = (last: string) => [
+    ...series('D', [1, 2], 'WWW', 5, 2), // a sweep, with games 4 and 5 still listed "if necessary"
+    ...series('D', [3, 4], 'WLWW', 5),
+    ...series('D', [5, 6], 'LLL', 5),
+    ...series('D', [7, 8], last, 5),
+  ];
+
+  it('is decided when every series has a winner, leftover games or not', () => {
+    const wildCard = [...series('F', [1, 9], 'WW', 3), ...series('F', [3, 10], 'LWW', 3)];
+    expect(roundDecided(1, [...wildCard, ...divisionSeries('WLWLW')])).toBe(true);
+  });
+
+  it('isn’t while any series is still going', () => {
+    expect(roundDecided(1, divisionSeries('WLWL'))).toBe(false);
+  });
+
+  it('isn’t while a game is live', () => {
+    const games = divisionSeries('WLWLW');
+    games[games.length - 1] = { ...games[games.length - 1], status: 'Live' };
+    expect(roundDecided(1, games)).toBe(false);
+  });
+
+  it('isn’t when only the Wild Card is done and the Division Series aren’t set yet', () => {
+    expect(roundDecided(1, [...series('F', [1, 9], 'WW', 3), ...series('F', [3, 10], 'WW', 3)])).toBe(false);
+  });
+
+  it('handles 2021’s one-game Wild Card', () => {
+    expect(roundDecided(1, [...series('F', [1, 9], 'W', 1), ...series('F', [3, 10], 'L', 1), ...divisionSeries('WWW')])).toBe(true);
+  });
+
+  it('needs four wins in a best-of-seven', () => {
+    expect(roundDecided(3, series('W', [1, 2], 'WWWLL', 7, 2))).toBe(false);
+    expect(roundDecided(3, series('W', [1, 2], 'WWWLLW', 7, 1))).toBe(true);
   });
 });
