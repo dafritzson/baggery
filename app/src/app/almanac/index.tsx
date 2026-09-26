@@ -9,6 +9,7 @@ import { LeaderBars, Leaderboard, Pennant, ScoutingGrid, managerColor } from '@/
 import { Card } from '@/components/card';
 import { MomentCard } from '@/components/duel';
 import { HeadToHead } from '@/components/head-to-head';
+import { Loader } from '@/components/loader';
 import { Screen } from '@/components/screen';
 import { StatTable } from '@/components/stat-table';
 import { ThemedText } from '@/components/themed-text';
@@ -34,7 +35,7 @@ export default function AlmanacScreen() {
     <Screen>
       <Segmented value={view} onChange={setView} />
       {error && <ThemedText themeColor="danger">{error}</ThemedText>}
-      {!data && !error && <ThemedText themeColor="textSecondary">Loading every season…</ThemedText>}
+      {!data && !error && <Loader />}
       {data && !data.almanac.champions.length && (
         <ThemedText themeColor="textSecondary">The Almanac fills in once a season is finished.</ThemedText>
       )}
