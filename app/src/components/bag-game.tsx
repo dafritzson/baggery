@@ -334,6 +334,9 @@ function Intro({ view }: { view: FieldView }) {
   );
 }
 
+/** Feet from home plate to the pitcher's mound. */
+const MOUND_Z = 60.5;
+
 function Final({ view, score, before, onReplay }: {
   view: FieldView;
   score: number;
@@ -362,15 +365,21 @@ function Final({ view, score, before, onReplay }: {
     `Your best ${Math.max(before.mine, score)}`,
   ].filter(Boolean).join(' · ');
   const fontSize = Math.min(56, view.width / 7);
+  // The button sits on the pitcher's mound, clear of the scoreboard.
+  const mound = view.project(0, MOUND_Z);
   return (
-    <Animated.View style={[styles.sky, styles.final, { minHeight: view.horizon }, style]}>
-      <Text style={[styles.gameText, styles.outline, styles.title, { fontSize, lineHeight: fontSize * 1.15 }]}>
-        {score} {score === 1 ? 'bag' : 'bags'}
-      </Text>
-      {note && <Text style={[styles.gameText, styles.outline, styles.note, { color: '#FFD84D' }]}>{note}</Text>}
-      {details && <Text style={[styles.gameText, styles.outline, styles.details]}>{details}</Text>}
-      <Button label="Play again" onPress={onReplay} />
-    </Animated.View>
+    <>
+      <Animated.View style={[styles.sky, styles.final, { minHeight: view.horizon }, style]}>
+        <Text style={[styles.gameText, styles.outline, styles.title, { fontSize, lineHeight: fontSize * 1.15 }]}>
+          {score} {score === 1 ? 'bag' : 'bags'}
+        </Text>
+        {note && <Text style={[styles.gameText, styles.outline, styles.note, { color: '#FFD84D' }]}>{note}</Text>}
+        {details && <Text style={[styles.gameText, styles.outline, styles.details]}>{details}</Text>}
+      </Animated.View>
+      <Animated.View style={[styles.onField, { top: mound.y }, style]}>
+        <Button label="Play again" onPress={onReplay} />
+      </Animated.View>
+    </>
   );
 }
 
@@ -387,6 +396,8 @@ const styles = StyleSheet.create({
   title: { color: '#FFD84D', letterSpacing: 2 },
   tagline: { position: 'absolute', letterSpacing: 1 },
   final: { gap: Spacing.two, paddingTop: Spacing.three },
+  // Zero height, so the button is centered on `top`.
+  onField: { position: 'absolute', left: 0, right: 0, height: 0, alignItems: 'center', justifyContent: 'center', zIndex: 2100 },
   note: { fontSize: 20 },
   details: { fontSize: 15 },
 });
