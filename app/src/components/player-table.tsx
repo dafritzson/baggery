@@ -3,6 +3,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, View, type ViewStyle } fro
 import Svg, { Path } from 'react-native-svg';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
+import { FilterSheet } from '@/components/filter-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
@@ -315,7 +316,8 @@ export function PlayerTable({
 
 /**
  * A column's filter: a small funnel in the header's top right corner, filled in when it's on. The
- * menu offers round bounds ("At least 300", "At most 300"), or for a yes/no column its two answers.
+ * menu offers round bounds ("At least 300", "At most 300") and Other… to type your own, or for a
+ * yes/no column its two answers.
  */
 function FilterMenu({
   column: c,
@@ -330,7 +332,17 @@ function FilterMenu({
   onChange: (range: Range | undefined) => void;
 }) {
   const theme = useTheme();
+  const [typing, setTyping] = useState(false);
   const format = (v: number) => (c.format ? c.format(v) : String(v));
+  // A typed bound that isn't one of the menu's: Other… shows it, ticked.
+  const typed =
+    !!range && ((range.min !== null && !bounds.includes(range.min)) || (range.max !== null && !bounds.includes(range.max)));
+  const typedLabel =
+    range?.min != null && range.max != null
+      ? `${format(range.min)} – ${format(range.max)}`
+      : range?.min != null
+        ? `≥ ${format(range.min)}`
+        : `≤ ${format(range?.max ?? 0)}`;
   // Sets one bound (or clears it when it's already the one set), keeping the other.
   const set = (side: 'min' | 'max', value: number) => {
     const next = { min: range?.min ?? null, max: range?.max ?? null, [side]: range?.[side] === value ? null : value };
@@ -351,7 +363,13 @@ function FilterMenu({
             <FunnelIcon color={range ? theme.accent : theme.textSecondary} filled={!!range} />
           </View>
         </DropdownMenu.Trigger>
-        <DropdownMenu.Content className="menu-content menu-content-narrow menu-content-scroll" align="end" sideOffset={4} collisionPadding={8}>
+        <DropdownMenu.Content
+          className="menu-content menu-content-narrow menu-content-scroll"
+          align="end"
+          sideOffset={4}
+          collisionPadding={8}
+          // Web: when Other… opens the sheet, the closing menu leaves focus in it rather than on the funnel.
+          onCloseAutoFocus={(e: Event) => typing && e.preventDefault()}>
           <DropdownMenu.Label className="menu-label menu-label-heading">{c.title}</DropdownMenu.Label>
           {c.flag
             ? [item('yes', c.flag.yes, range?.min === 1, () => onChange(range?.min === 1 ? undefined : { min: 1, max: null })),
@@ -360,6 +378,8 @@ function FilterMenu({
                 ...bounds.map((b) => item(`min${b}`, `At least ${format(b)}`, range?.min === b, () => set('min', b))),
                 <DropdownMenu.Separator key="sep" className="menu-separator" />,
                 ...bounds.map((b) => item(`max${b}`, `At most ${format(b)}`, range?.max === b, () => set('max', b))),
+                <DropdownMenu.Separator key="sep-other" className="menu-separator" />,
+                item('other', typed ? `Other: ${typedLabel}` : 'Other…', typed, () => setTyping(true)),
               ]}
           {range && (
             <>
@@ -371,6 +391,7 @@ function FilterMenu({
           )}
         </DropdownMenu.Content>
       </DropdownMenu.Root>
+      {typing && <FilterSheet title={c.title} range={range} format={format} onApply={onChange} onClose={() => setTyping(false)} />}
     </View>
   );
 }
