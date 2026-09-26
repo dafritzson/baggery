@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   type Almanac,
@@ -170,35 +170,47 @@ async function loadAlmanac(leagueId: string, owners: Map<string, string>): Promi
   return { almanac: result, managers: managerNames, players, scouting: scouted, badges: badges(scouted) };
 }
 
-// Kept for a few minutes, so moving between Almanac pages doesn't reload every season.
-let cache: { leagueId: string; at: number; promise: Promise<AlmanacData> } | null = null;
+// Kept for a few minutes, so moving between Almanac pages doesn't reload every season. `data` is
+// set once the load finishes, so a page opened after that draws straight away.
+let cache: { leagueId: string; at: number; promise: Promise<AlmanacData>; data?: AlmanacData } | null = null;
 const CACHE_MS = 5 * 60 * 1000;
 
 /** The league's Almanac, loaded once and shared by the Almanac pages. */
 export function useAlmanac(): { data: AlmanacData | null; error: string | null } {
   const { data: season } = useSeason();
   const leagueId = season?.season.league_id;
-  const owners = season?.owners;
-  const [data, setData] = useState<AlmanacData | null>(null);
+  // The season reloads (a new owners map) on every live change; that alone mustn't reload the
+  // Almanac, so the load reads owners from a ref and runs only when the league changes.
+  const owners = useRef(season?.owners);
+  const hasOwners = !!season?.owners;
+  const [data, setData] = useState<AlmanacData | null>(() => (cache && cache.leagueId === leagueId ? (cache.data ?? null) : null));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!leagueId || !owners) return;
+    owners.current = season?.owners;
+  }, [season?.owners]);
+
+  useEffect(() => {
+    if (!leagueId || !owners.current) return;
     if (!cache || cache.leagueId !== leagueId || Date.now() - cache.at > CACHE_MS) {
-      cache = { leagueId, at: Date.now(), promise: loadAlmanac(leagueId, owners) };
+      const entry: NonNullable<typeof cache> = { leagueId, at: Date.now(), promise: loadAlmanac(leagueId, owners.current) };
+      entry.promise.then((d) => (entry.data = d), () => {});
+      cache = entry;
     }
+    const entry = cache;
+    // An old copy already on screen stays there until the reload lands.
     let stale = false;
-    cache.promise.then(
+    entry.promise.then(
       (d) => !stale && setData(d),
       (e) => {
-        cache = null;
+        if (cache === entry) cache = null;
         if (!stale) setError(e instanceof Error ? e.message : 'Couldn’t load the Almanac.');
       },
     );
     return () => {
       stale = true;
     };
-  }, [leagueId, owners]);
+  }, [leagueId, hasOwners]);
 
   return { data, error };
 }
