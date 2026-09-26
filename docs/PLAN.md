@@ -70,3 +70,7 @@ Things to change when the iOS app (phase 4) gets built, because the web can only
 - **Live game ring.** Live games on the Games tab get a spinning rainbow ring, which is CSS in
   `app/src/global.css` (`data-live-glow`). Native ignores it, so draw it there too, e.g. a
   rotating `expo-linear-gradient` behind the card or a Skia sweep gradient.
+- **Games zoom.** Switching the Games tab between Day, Round and Postseason zooms in or out, and
+  the tapped game morphs into its card, using the browser's View Transitions
+  (`app/src/lib/zoom.web.ts` and `global.css`). Native just switches (`zoom.ts`); animate it
+  there with Reanimated, e.g. a shared element transition from the game square to its card.

@@ -41,25 +41,3 @@ slugging and keeps each player's real at-bats per game (lineup spot, platoon, be
 E[G] treats every game as 50/50. It could use team strength (e.g. regular-season win %) and home
 field (the higher Wild Card seed hosts every game) for each team's chance to advance and
 expected series length.
-
-## Games tab calendar
-
-Raised 2026-09-25. The Games tab picks a day from a dropdown. The idea is to zoom out from a day
-to the whole schedule, with a smooth zoom between levels.
-
-Zoom by playoff round, not by week and month. The postseason is only about five weeks, weeks
-don't line up with the rounds, and a 7-column month grid on a phone has no room for matchups.
-
-- **Day**: today's games, as now. Stays the default.
-- **Round**: each series in the current round as a row (e.g. `NYY–KC`), one square per game:
-  final score, today, still to come, and faded if-necessary games. Could show your players'
-  bags for the round beside it, since those decide who survives.
-- **Postseason**: the same rows for every round, stacked, so it doubles as a bracket.
-
-Tapping a game zooms into its day. On web the browser's View Transitions API can grow the
-tapped square into the day view and back; an iOS app would need Reanimated instead.
-
-Before the next rounds' matchups are known, the schedule has placeholder games, so later rows
-read "TBD vs TBD". Past seasons (2020–2025) are enough to build and try the finished-game views,
-but they only have final games, so live, upcoming, if-necessary and TBD games need 2026 data or
-made-up test rows.

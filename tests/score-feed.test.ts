@@ -69,6 +69,7 @@ describe('score feed', () => {
       awayScore: 0,
       detailedState: 'In Progress',
       live: { inning: 3 },
+      gamesInSeries: 5,
     });
   });
 

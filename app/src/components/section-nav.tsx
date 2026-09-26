@@ -124,7 +124,12 @@ export function BottomTabBar() {
 
   if (!sections.length) return null;
   return (
-    <SafeAreaView edges={['bottom', 'left', 'right']} style={styles.bottomBar} pointerEvents="box-none">
+    <SafeAreaView
+      edges={['bottom', 'left', 'right']}
+      style={styles.bottomBar}
+      pointerEvents="box-none"
+      // Its own layer while the Games tab zooms (global.css), so the page doesn't cover it.
+      {...({ dataSet: { tabBar: '' } } as object)}>
       <View
         accessibilityRole="tablist"
         style={[

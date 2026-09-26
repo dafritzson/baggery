@@ -17,6 +17,7 @@ import {
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Toggle } from '@/components/toggle';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { shortDate } from '@/lib/format';
@@ -329,34 +330,6 @@ function StatMenu({ value, onChange }: { value: ChartStat; onChange: (s: ChartSt
   );
 }
 
-function Toggle<T>({
-  options,
-  value,
-  onChange,
-}: {
-  options: { value: T; label: string }[];
-  value: T;
-  onChange: (v: T) => void;
-}) {
-  const theme = useTheme();
-  return (
-    <ThemedView type="backgroundElement" elevation="sunken" style={styles.toggle}>
-      {options.map((o) => (
-        <Pressable
-          key={o.label}
-          onPress={() => onChange(o.value)}
-          accessibilityRole="button"
-          accessibilityState={{ selected: value === o.value }}
-          style={[styles.toggleItem, value === o.value && { backgroundColor: theme.segment, boxShadow: theme.raised }]}>
-          <ThemedText type="smallBold" themeColor={value === o.value ? 'text' : 'textSecondary'} style={styles.toggleText}>
-            {o.label}
-          </ThemedText>
-        </Pressable>
-      ))}
-    </ThemedView>
-  );
-}
-
 /** 0 up to a whole-number max, with up to five ticks on a round step (1, 2, 5, 10, 20, 25, 50 …). */
 function countScale(values: number[]): { min: number; max: number; ticks: number[] } {
   const top = Math.max(4, ...values);
@@ -401,8 +374,6 @@ const styles = StyleSheet.create({
   controls: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two },
   controlGroup: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   menuChip: { paddingHorizontal: Spacing.two, paddingVertical: 4, borderRadius: Radius.md },
-  toggle: { flexDirection: 'row', borderRadius: Radius.md, padding: 2 },
-  toggleItem: { paddingHorizontal: Spacing.two, paddingVertical: 2, borderRadius: Radius.sm },
   toggleText: { fontSize: 13 },
   readout: { fontSize: 13, lineHeight: 18 },
   plot: { height: HEIGHT, borderRadius: Radius.md, overflow: 'hidden' },

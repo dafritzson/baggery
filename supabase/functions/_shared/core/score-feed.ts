@@ -17,6 +17,8 @@ export interface GameInfo extends ScoreGame {
   officialDate: string | null;
   /** Inning, count, runners and who's up, while live (and the final state after). */
   live: LiveState | null;
+  /** Most games the series can go, as MLB lists it. */
+  gamesInSeries: number | null;
 }
 
 /** A batter's line in one game, for the at bat / due up lists of live games. */
@@ -58,6 +60,7 @@ export function toGame(g: Row): GameInfo {
     awayScore: g.away_score,
     detailedState: g.detailed_state,
     live: g.live,
+    gamesInSeries: g.games_in_series ?? null,
   };
 }
 

@@ -14,7 +14,7 @@ export function coreSpells(data: SeasonData): RosterSpell[] {
 }
 
 const GAME_COLUMNS =
-  'game_pk, game_type, series_game_number, start_time, start_time_tbd, official_date, status, detailed_state, home_team_id, away_team_id, home_score, away_score, live';
+  'game_pk, game_type, series_game_number, start_time, start_time_tbd, official_date, status, detailed_state, home_team_id, away_team_id, home_score, away_score, live, games_in_series';
 
 /**
  * One subscription to the "scores" broadcast, shared by every useScores (Games and Standings can
