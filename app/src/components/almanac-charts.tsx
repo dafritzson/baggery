@@ -155,16 +155,25 @@ const styles = StyleSheet.create({
   gridFew: { opacity: 0.5 },
   gridDot: { width: 8, height: 8, borderRadius: 4 },
   gridCell: { height: 34, marginBottom: 3, marginRight: 3, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
-  lbRow: { flexDirection: 'row', gap: Spacing.two, padding: Spacing.two, borderRadius: Radius.lg, borderWidth: 1.5, borderColor: 'transparent' },
-  lbRank: { width: 32, alignItems: 'center', paddingTop: 2 },
-  lbBody: { flex: 1, gap: Spacing.one },
+  lbRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    paddingVertical: Spacing.one + 2,
+    paddingHorizontal: Spacing.two,
+    borderRadius: Radius.lg,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  lbRank: { width: 22, alignItems: 'center' },
+  lbNumber: { fontSize: 12, lineHeight: 20, fontWeight: '700' },
+  lbBody: { flex: 1, gap: 3 },
   lbLine: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.two },
-  lbTitle: { flex: 1, fontWeight: '700' },
+  lbTitle: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: '700' },
   lbLabel: { fontWeight: '800' },
   lbTags: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.one },
-  lbTag: { borderRadius: 999, paddingHorizontal: Spacing.two, paddingVertical: 1 },
-  lbTagManager: { color: '#fff', fontSize: 11, lineHeight: 16, fontWeight: '800' },
-  lbTagText: { fontSize: 11, lineHeight: 16 },
+  lbTag: { borderRadius: 999, paddingHorizontal: Spacing.one + 2, paddingVertical: 1 },
+  lbTagManager: { color: '#fff', fontSize: 10, lineHeight: 14, fontWeight: '800' },
+  lbTagText: { fontSize: 10, lineHeight: 14 },
   leaderRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   leaderName: { width: 64 },
   leaderTrack: { flex: 1, height: 14, borderRadius: 7, overflow: 'hidden' },
@@ -256,7 +265,7 @@ const MEDALS = ['🥇', '🥈', '🥉'];
 export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
   const theme = useTheme();
   return (
-    <View style={{ gap: Spacing.two }}>
+    <View style={{ gap: Spacing.one }}>
       {rows.map((r, i) => {
         const color = r.manager?.color ?? theme.accent;
         const first = i === 0;
@@ -264,15 +273,16 @@ export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
           <Pressable key={r.key} onPress={r.onPress} disabled={!r.onPress} style={[styles.lbRow, first && { backgroundColor: `${color}22`, borderColor: color }]}>
             <View style={styles.lbRank}>
               {i < 3 ? (
-                <ThemedText style={{ fontSize: first ? 26 : 20, lineHeight: first ? 32 : 26 }}>{MEDALS[i]}</ThemedText>
+                <ThemedText style={{ fontSize: first ? 18 : 16, lineHeight: first ? 22 : 20 }}>{MEDALS[i]}</ThemedText>
               ) : (
-                <ThemedText type="smallBold" themeColor="textSecondary">{i + 1}</ThemedText>
+                <ThemedText themeColor="textSecondary" style={styles.lbNumber}>{i + 1}</ThemedText>
               )}
             </View>
             <View style={styles.lbBody}>
               <View style={styles.lbLine}>
-                <ThemedText type={first ? 'default' : 'small'} style={styles.lbTitle} numberOfLines={1}>{r.title}</ThemedText>
-                <ThemedText style={[styles.lbLabel, { color, fontSize: first ? 20 : 15 }]}>{r.label}</ThemedText>
+                {/* Two lines before cutting off, so long names (a redraft's two players) still fit. */}
+                <ThemedText style={[styles.lbTitle, first && { fontSize: 14 }]} numberOfLines={2}>{r.title}</ThemedText>
+                <ThemedText style={[styles.lbLabel, { color, fontSize: first ? 16 : 14 }]}>{r.label}</ThemedText>
               </View>
               <View style={styles.lbTags}>
                 {r.manager && (
