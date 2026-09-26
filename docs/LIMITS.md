@@ -40,7 +40,14 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   Polling live games every 5 s would roughly double that, close to or over the quota. That's why
   it's 10 s. If more headroom is needed, staging could poll live games less often.
   `player-stats` (the player popup) caches its results in memory, and `draft` runs only on draft
-  actions; both are small next to the poller.
+  actions; both are small next to the poller. `almanac` runs once per Almanac visit, at most every
+  5 minutes per open app (the app caches it): a few thousand calls a month.
+- **The Almanac.** The `almanac` function reads every season's rows next to the database and sends
+  back only the computed Almanac, an estimated ~100 KB (not yet measured), where the app used to
+  download the raw rows itself (~0.5–1 MB, dominated by box scores and the player pool). At ~15
+  apps opening it a couple of times a day, that's roughly 50–100 MB a month instead of ~0.5 GB.
+  Whether the function's own reads count as egress isn't documented clearly; at worst they're the
+  same bytes the app used to download.
 - **Egress.** The Games and Standings tabs load the season once. After that, each poll sends one
   small broadcast on the private `scores` channel with only the changed rows
   (`flush_score_changes`), and the app applies it (`applyChanges` in
