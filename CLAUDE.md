@@ -2,7 +2,8 @@
 
 Fantasy baseball for the MLB postseason. Managers draft 4 hitters, bags (total bases)
 decide who survives each round. Rules: [docs/RULES.md](docs/RULES.md). Plan and
-architecture: [docs/PLAN.md](docs/PLAN.md). Ideas not yet decided on: [docs/IDEAS.md](docs/IDEAS.md).
+architecture: [docs/PLAN.md](docs/PLAN.md). Free-tier limits: [docs/LIMITS.md](docs/LIMITS.md).
+Ideas not yet decided on: [docs/IDEAS.md](docs/IDEAS.md).
 
 ## Layout
 
@@ -52,6 +53,13 @@ Changes reach users like this. Follow it for every change:
    merges and deploys to **staging** automatically.
 4. Production deploys only after the repo owner approves the `production` environment
    in GitHub Actions. Never try to bypass or weaken that gate.
+
+Resource limits: the app runs on free Supabase and Vercel plans, with Supabase quotas shared by
+staging and production. Before changing polling or cron timing, realtime listeners or broadcasts,
+Edge Function calls, what a live screen fetches, or stored files, read
+[docs/LIMITS.md](docs/LIMITS.md), estimate the change's cost for a busy postseason month, say it
+in the PR, and update that page. Egress (5 GB) and Edge Function invocations (500k) are the tight
+ones. Don't use paid-only features.
 
 Rule changes: update `docs/RULES.md` in the same PR as the code, and add tests in
 `tests/` for any change to draft or scoring logic.
