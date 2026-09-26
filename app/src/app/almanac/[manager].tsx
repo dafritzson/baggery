@@ -175,7 +175,7 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
               key={c.key}
               type="smallBold"
               style={{ color: theme.accent }}
-              onPress={() => router.push({ pathname: '/almanac/h2h', params: { a: slugOf(managerKey), b: slugOf(c.key) } })}>
+              onPress={() => router.push({ pathname: '/almanac', params: { view: 'h2h', a: slugOf(managerKey), b: slugOf(c.key) } })}>
               {c.name}
             </ThemedText>
           ))}

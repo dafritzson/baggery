@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -8,6 +8,7 @@ import { SERIES } from '@core/scoreboard.ts';
 import { LeaderBars, Leaderboard, Pennant, ScoutingGrid, managerColor } from '@/components/almanac-charts';
 import { Card } from '@/components/card';
 import { MomentCard } from '@/components/duel';
+import { HeadToHead } from '@/components/head-to-head';
 import { Screen } from '@/components/screen';
 import { StatTable } from '@/components/stat-table';
 import { ThemedText } from '@/components/themed-text';
@@ -18,12 +19,17 @@ import { openManager, ordinal } from '@/components/manager-link';
 import { type AlmanacData, useAlmanac } from '@/lib/almanac';
 import { SCOUTING_STATS } from '@/lib/scouting';
 
-type View_ = 'league' | 'managers';
+type View_ = 'league' | 'managers' | 'h2h';
+const VIEWS: View_[] = ['league', 'managers', 'h2h'];
 
-/** Every finished season at once: the league's record book, and every manager's career. */
+/**
+ * Every finished season at once: the league's record book, every manager's career, and any two
+ * managers compared. /almanac?view=h2h&a=daniel&b=darren opens on a head-to-head.
+ */
 export default function AlmanacScreen() {
+  const params = useLocalSearchParams<{ view?: string; a?: string; b?: string }>();
   const { data, error } = useAlmanac();
-  const [view, setView] = useState<View_>('league');
+  const [view, setView] = useState<View_>(VIEWS.find((v) => v === params.view) ?? 'league');
   return (
     <Screen>
       <Segmented value={view} onChange={setView} />
@@ -32,7 +38,9 @@ export default function AlmanacScreen() {
       {data && !data.almanac.champions.length && (
         <ThemedText themeColor="textSecondary">The Almanac fills in once a season is finished.</ThemedText>
       )}
-      {data && data.almanac.champions.length > 0 && (view === 'league' ? <League data={data} /> : <Managers data={data} />)}
+      {data && data.almanac.champions.length > 0 && view === 'league' && <League data={data} />}
+      {data && data.almanac.champions.length > 0 && view === 'managers' && <Managers data={data} />}
+      {data && data.almanac.champions.length > 0 && view === 'h2h' && <HeadToHead data={data} a={params.a} b={params.b} />}
     </Screen>
   );
 }
@@ -230,7 +238,7 @@ function Managers({ data }: { data: AlmanacData }) {
 
 function Segmented({ value, onChange }: { value: View_; onChange: (v: View_) => void }) {
   const theme = useTheme();
-  const tabs: [View_ | 'h2h', string][] = [
+  const tabs: [View_, string][] = [
     ['league', 'League'],
     ['managers', 'Managers'],
     ['h2h', 'Head-to-head'],
@@ -240,7 +248,7 @@ function Segmented({ value, onChange }: { value: View_; onChange: (v: View_) => 
       {tabs.map(([key, label]) => (
         <Pressable
           key={key}
-          onPress={() => (key === 'h2h' ? router.push('/almanac/h2h') : onChange(key))}
+          onPress={() => onChange(key)}
           style={[styles.segment, value === key && { backgroundColor: theme.segment, boxShadow: theme.raised }]}>
           <ThemedText type="smallBold" themeColor={value === key ? 'text' : 'textSecondary'}>{label}</ThemedText>
         </Pressable>
