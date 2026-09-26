@@ -172,28 +172,49 @@ export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; sco
   const owner = ownerName(data, team);
   const mine = team.id === data.myTeam?.id;
 
-  return (
-    <View style={styles.team}>
-      {/* As tall as the round chips' row beside it, so both columns' tables start level. */}
-      <View style={styles.teamHead}>
-        {!compact && <OwnerBadge teamId={team.id} owner={owner} photo={team.user_id ? data.photos.get(team.user_id) : null} mine={mine} size={36} />}
-        <View style={styles.teamLabel}>
-          <ThemedText numberOfLines={1} style={styles.teamTitle}>{teamName(team)}</ThemedText>
-          <ThemedText numberOfLines={1} themeColor="textSecondary" style={styles.owner}>
-            {owner ?? 'Open spot'}{mine ? ' · You' : ''}
+  const photo = team.user_id ? data.photos.get(team.user_id) : null;
+  const label = (
+    <View style={styles.teamLabel}>
+      <ThemedText numberOfLines={1} style={styles.teamTitle}>{teamName(team)}</ThemedText>
+      <ThemedText numberOfLines={1} themeColor="textSecondary" style={styles.owner}>
+        {owner ?? 'Open spot'}{mine ? ' · You' : ''}
+      </ThemedText>
+    </View>
+  );
+  const totalsStrip = (
+    <ThemedView type="backgroundElement" style={[styles.totals, compact && styles.totalsFull]}>
+      {ROUNDS.map((r, i) => (
+        <View
+          key={r.round}
+          style={[styles.totalCell, compact && styles.totalCellFull, i > 0 && { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: theme.border }]}>
+          <ThemedText themeColor="textSecondary" style={styles.totalLabel}>RD {r.round}</ThemedText>
+          <ThemedText style={styles.totalNumber}>
+            {out !== null && r.round > out ? 'Out' : started(r.round) ? totals[r.round] : '—'}
           </ThemedText>
         </View>
-        <ThemedView type="backgroundElement" style={styles.totals}>
-          {ROUNDS.map((r, i) => (
-            <View key={r.round} style={[styles.totalCell, i > 0 && { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: theme.border }]}>
-              <ThemedText themeColor="textSecondary" style={styles.totalLabel}>RD {r.round}</ThemedText>
-              <ThemedText style={styles.totalNumber}>
-                {out !== null && r.round > out ? 'Out' : started(r.round) ? totals[r.round] : '—'}
-              </ThemedText>
-            </View>
-          ))}
-        </ThemedView>
-      </View>
+      ))}
+    </ThemedView>
+  );
+
+  return (
+    <View style={styles.team}>
+      {compact ? (
+        // Phones: photo, name and owner on top, the round totals across the full width below.
+        <View style={styles.teamHeadCompact}>
+          <View style={styles.teamNameRow}>
+            <OwnerBadge teamId={team.id} owner={owner} photo={photo} size={44} />
+            {label}
+          </View>
+          {totalsStrip}
+        </View>
+      ) : (
+        // As tall as the round chips' row beside it, so both columns' tables start level.
+        <View style={styles.teamHead}>
+          <OwnerBadge teamId={team.id} owner={owner} photo={photo} mine={mine} size={36} />
+          {label}
+          {totalsStrip}
+        </View>
+      )}
       <View style={styles.blocks}>
         {shown.map((b) => (
           <SeriesTable key={b.gameType} data={data} block={b} />
@@ -263,8 +284,12 @@ const styles = StyleSheet.create({
   team: { gap: Spacing.four },
   teamHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two + 4, height: CHIPS_ROW },
   teamTitle: { fontSize: 18, lineHeight: 22, fontWeight: 700 },
+  teamHeadCompact: { gap: Spacing.three },
+  teamNameRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two + 4 },
   totals: { flexDirection: 'row', height: CHIPS_ROW, borderRadius: Radius.md },
+  totalsFull: { height: 52 },
   totalCell: { paddingHorizontal: Spacing.three - 2, justifyContent: 'center', alignItems: 'center' },
+  totalCellFull: { flex: 1 },
   totalLabel: { fontSize: 10, lineHeight: 12, fontWeight: 700, letterSpacing: 0.5 },
   totalNumber: { fontSize: 16, lineHeight: 20, fontWeight: 700, fontVariant: ['tabular-nums'] },
   blocks: { gap: Spacing.four },
