@@ -42,3 +42,14 @@ export function thresholds(values: (number | null)[]): number[] {
   for (let i = Math.floor(lo / step) + 1; i * step < hi; i++) out.push(Number((i * step).toFixed(10)));
   return out;
 }
+
+/**
+ * A bound typed into the filter sheet: a number (".450", "0.45", "300"), null when left empty, or
+ * undefined when it isn't a number.
+ */
+export function parseBound(text: string): number | null | undefined {
+  const trimmed = text.trim().replace(/,/g, '');
+  if (!trimmed) return null;
+  const value = Number(trimmed);
+  return Number.isFinite(value) ? value : undefined;
+}

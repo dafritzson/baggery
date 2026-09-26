@@ -10,15 +10,18 @@ export function Sheet({
   visible,
   title,
   onClose,
+  onShow,
   children,
 }: {
   visible: boolean;
   title: string;
   onClose: () => void;
+  /** Once it's in view, e.g. to focus an input (on web, `autoFocus` loses to the sheet's own focus). */
+  onShow?: () => void;
   children: ReactNode;
 }) {
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} onShow={onShow}>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close">
         <Pressable style={styles.wrap} onPress={() => {}}>
           <ThemedView style={styles.sheet}>

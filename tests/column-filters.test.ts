@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { filterRows, inRange, thresholds } from '../app/src/lib/column-filters.ts';
+import { filterRows, inRange, parseBound, thresholds } from '../app/src/lib/column-filters.ts';
 
 describe('column filters', () => {
   const rows = [
@@ -48,5 +48,16 @@ describe('column filters', () => {
   it('offers nothing when the values are all the same or missing', () => {
     expect(thresholds([90, 90, 90])).toEqual([]);
     expect(thresholds([null, 5])).toEqual([]);
+  });
+
+  it('reads a typed bound', () => {
+    expect(parseBound('300')).toBe(300);
+    expect(parseBound(' .450 ')).toBe(0.45);
+    expect(parseBound('0.45')).toBe(0.45);
+    expect(parseBound('1,000')).toBe(1000);
+    expect(parseBound('')).toBeNull();
+    expect(parseBound('   ')).toBeNull();
+    expect(parseBound('abc')).toBeUndefined();
+    expect(parseBound('.4.5')).toBeUndefined();
   });
 });
