@@ -4,8 +4,12 @@ import { Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
 
 const BUCKET = 'avatars';
-/** Same as the bucket's limit (supabase/config.toml). */
-export const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+/**
+ * The largest photo people can pick. On the web the original never leaves the device (it's
+ * shrunk first), so it can be big; phones upload the original, so there it's the bucket's own
+ * limit (supabase/config.toml) until they shrink photos too.
+ */
+export const MAX_PHOTO_BYTES = (Platform.OS === 'web' ? 20 : 5) * 1024 * 1024;
 /** Photos are stored as a square this many pixels wide: sharp at any size the app draws them. */
 const STORED_SIZE = 256;
 
@@ -25,7 +29,7 @@ export async function uploadPhoto(userId: string): Promise<string | null> {
   if (picked.canceled || !picked.assets[0]) return null;
   const asset = picked.assets[0];
   const size = asset.fileSize ?? asset.file?.size ?? 0;
-  if (size > MAX_PHOTO_BYTES) return 'That photo is over 5 MB. Try a smaller one.';
+  if (size > MAX_PHOTO_BYTES) return `That photo is over ${MAX_PHOTO_BYTES / 1024 / 1024} MB. Try a smaller one.`;
 
   let body: Blob;
   let contentType = 'image/jpeg';
