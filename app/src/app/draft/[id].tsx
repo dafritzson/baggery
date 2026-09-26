@@ -9,6 +9,7 @@ import { type DraftConfig, type Turn, nextTurn } from '@core/draft.ts';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { Columns } from '@/components/columns';
+import { Loader } from '@/components/loader';
 import { PlayerName } from '@/components/player-name';
 import { PlayersList, availablePlayers, useDraftBoard } from '@/components/players-list';
 import { Screen } from '@/components/screen';
@@ -33,7 +34,7 @@ export default function DraftRoomScreen() {
   // Back to the season's drafts, keeping the year in the URL.
   const goToDrafts = () => router.replace(requestedYear ? { pathname: '/draft', params: { year: requestedYear } } : '/draft');
 
-  if (loading) return <Screen><ThemedText themeColor="textSecondary">Loading…</ThemedText></Screen>;
+  if (loading) return <Screen><Loader /></Screen>;
   if (!data || !draft) {
     return (
       <Screen>

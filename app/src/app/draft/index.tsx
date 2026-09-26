@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { Loader } from '@/components/loader';
 import { PlayerName } from '@/components/player-name';
 import { Columns } from '@/components/columns';
 import { Screen } from '@/components/screen';
@@ -30,7 +31,7 @@ export default function DraftsScreen() {
 
   return (
     <Screen width="wide" onRefresh={refetch} refreshing={false}>
-      {loading && <ThemedText themeColor="textSecondary">Loading…</ThemedText>}
+      {loading && <Loader />}
       {!loading && !data && (
         <ThemedText>{requestedYear ? `There's no ${requestedYear} season.` : 'No season set up yet.'}</ThemedText>
       )}

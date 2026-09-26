@@ -5,6 +5,7 @@ import { currentRound } from '@core/scoreboard.ts';
 import type { FantasyRound } from '@core/types.ts';
 
 import { Columns } from '@/components/columns';
+import { Loader } from '@/components/loader';
 import { RoundChips, StandingsTable, TeamScoreboard } from '@/components/scoreboard';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
@@ -29,7 +30,7 @@ export default function StandingsScreen() {
   const [view, setView] = useState<'standings' | 'team'>('standings');
 
   if (loading || (data && !scores)) {
-    return <Screen width="wide"><ThemedText themeColor="textSecondary">Loading…</ThemedText></Screen>;
+    return <Screen width="wide"><Loader /></Screen>;
   }
   if (!data || !scores) return <Screen width="wide"><ThemedText>No season set up yet.</ThemedText></Screen>;
 

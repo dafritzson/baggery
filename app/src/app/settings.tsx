@@ -6,6 +6,7 @@ import { StyleSheet, View } from 'react-native';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { ImportSeasonCard } from '@/components/import-season-card';
+import { Loader } from '@/components/loader';
 import { PastManagersCard } from '@/components/past-managers-card';
 import { OwnerBadge } from '@/components/owner-badge';
 import { Screen } from '@/components/screen';
@@ -23,7 +24,7 @@ export default function SettingsScreen() {
   const { data, loading, refetch } = useSeason();
   const [saved, setSaved] = useState(false);
 
-  if (loading) return <Screen><ThemedText themeColor="textSecondary">Loading…</ThemedText></Screen>;
+  if (loading) return <Screen><Loader /></Screen>;
   const team = data?.myTeam;
 
   async function rename(name: string) {
