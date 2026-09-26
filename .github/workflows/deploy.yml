@@ -32,10 +32,34 @@ jobs:
           vercel-project-id: ${{ vars.VERCEL_PROJECT_ID }}
           vercel-alias: ${{ vars.VERCEL_STAGING_ALIAS }}
 
+  supersede:
+    # A production job waiting for approval holds the deploy-production slot, so a newer one would
+    # queue behind it and couldn't be approved until the old one was. Once this run's staging deploy
+    # is done, cancel older runs still waiting for approval, so only the newest one waits. Deploys
+    # already running (approved) are left alone.
+    needs: staging
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel older deploys waiting for approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh run list --workflow deploy.yml --status waiting --json databaseId --jq '.[].databaseId' |
+            while read -r id; do
+              if [ "$id" -lt "${{ github.run_id }}" ]; then
+                echo "Cancelling superseded run $id"
+                gh run cancel "$id"
+              fi
+            done
+
   production:
     needs: staging
     runs-on: ubuntu-latest
-    # Only the newest production deploy waits for approval; older pending ones are superseded.
+    # One production deploy at a time. Older ones still waiting for approval are cancelled by
+    # `supersede`, so this never queues behind a stale deploy for long.
     concurrency:
       group: deploy-production
       cancel-in-progress: false
