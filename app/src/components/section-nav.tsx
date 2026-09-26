@@ -47,6 +47,12 @@ const SECTIONS: Section[] = [
     icon: { ios: 'chart.line.uptrend.xyaxis', android: 'query_stats', web: 'query_stats' },
     matches: (p) => p.startsWith('/research'),
   },
+  {
+    label: 'Almanac',
+    href: '/almanac',
+    icon: { ios: 'book.closed', android: 'menu_book', web: 'menu_book' },
+    matches: (p) => p.startsWith('/almanac'),
+  },
 ];
 
 function useSections() {
