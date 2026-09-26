@@ -97,6 +97,22 @@ export function compareTeams(a: StatLine, b: StatLine): number {
   );
 }
 
+export type Tiebreaker = 'TB' | 'SLG' | 'OBP' | 'HR' | 'R' | 'RBI';
+
+/**
+ * The first measure that separates two teams, in compareTeams' order: TB when they differ,
+ * otherwise the tiebreaker that decided it. Null when they're fully tied (a drink-off).
+ */
+export function decidedBy(a: StatLine, b: StatLine): Tiebreaker | null {
+  if (a.tb !== b.tb) return 'TB';
+  if (compareRatio(b.tb, b.ab, a.tb, a.ab) !== 0) return 'SLG';
+  if (compareRatio(b.h + b.bb + b.hbp, b.ab + b.bb + b.hbp + b.sf, a.h + a.bb + a.hbp, a.ab + a.bb + a.hbp + a.sf) !== 0) return 'OBP';
+  if (a.hr !== b.hr) return 'HR';
+  if (a.r !== b.r) return 'R';
+  if (a.rbi !== b.rbi) return 'RBI';
+  return null;
+}
+
 export interface RankedTeam extends TeamTotals {
   /** 1-based; fully tied teams share a rank. */
   rank: number;

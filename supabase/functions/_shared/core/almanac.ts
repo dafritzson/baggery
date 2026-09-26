@@ -2,7 +2,7 @@
 // Built on the same scoring as the standings (teamRoundTotals, rankTeams), so the two can't
 // disagree. Pure: the app loads the rows and calls almanac().
 
-import { type PlayerGameStat, rankTeams, type RosterSpell, teamRoundTotals } from './scoring.ts';
+import { decidedBy, type PlayerGameStat, rankTeams, type RosterSpell, teamRoundTotals, type Tiebreaker } from './scoring.ts';
 import { type FantasyRound, type PlayerId, ROUND_FOR_GAME_TYPE, type TeamId } from './types.ts';
 
 const ROUNDS: FantasyRound[] = [1, 2, 3];
@@ -111,10 +111,16 @@ export interface RoundRecord {
 export interface CutRecord {
   year: number;
   round: FantasyRound;
-  /** Last team through (the champion, in round 3) and first team out. */
-  through: { managerKey: string; tb: number };
-  out: { managerKey: string; tb: number };
+  /**
+   * The teams on each side of the line: the lowest-scoring teams through (the champion, in round
+   * 3) and the highest-scoring teams out. More than one when they tied on bags, best-ranked first.
+   */
+  through: { managerKeys: string[]; tb: number };
+  out: { managerKeys: string[]; tb: number };
+  /** Bags between the two sides; 0 when a tiebreaker settled it. */
   margin: number;
+  /** What separated them: 'TB', a tiebreaker, or null for a drink-off. */
+  decidedBy: Tiebreaker | null;
 }
 
 export interface RedraftMove {
@@ -197,16 +203,23 @@ export function almanac(input: AlmanacInput, top = 10): Almanac {
       // The cut: last team through against first team out (in round 3, champion against runner-up).
       const through = alive.filter((t) => t.eliminatedAfterRound === null || t.eliminatedAfterRound > round);
       const out = alive.filter((t) => t.eliminatedAfterRound === round);
-      const tbOf = (id: TeamId) => ranked.find((r) => r.teamId === id)!.tb;
-      const lastThrough = [...through].sort((a, b) => tbOf(a.id) - tbOf(b.id))[0];
-      const firstOut = [...out].sort((a, b) => tbOf(b.id) - tbOf(a.id))[0];
-      if (lastThrough && firstOut) {
+      const line = (id: TeamId) => ranked.find((r) => r.teamId === id)!;
+      if (through.length && out.length) {
+        // Everyone at the line on each side (ties on bags included), in ranking order so the
+        // record doesn't depend on the order teams were loaded in.
+        const lowIn = Math.min(...through.map((t) => line(t.id).tb));
+        const highOut = Math.max(...out.map((t) => line(t.id).tb));
+        const byRank = (a: AlmanacTeam, b: AlmanacTeam) => line(a.id).rank - line(b.id).rank || a.managerKey.localeCompare(b.managerKey);
+        const atLineIn = through.filter((t) => line(t.id).tb === lowIn).sort(byRank);
+        const atLineOut = out.filter((t) => line(t.id).tb === highOut).sort(byRank);
         closestCuts.push({
           year: season.year,
           round,
-          through: { managerKey: lastThrough.managerKey, tb: tbOf(lastThrough.id) },
-          out: { managerKey: firstOut.managerKey, tb: tbOf(firstOut.id) },
-          margin: tbOf(lastThrough.id) - tbOf(firstOut.id),
+          through: { managerKeys: atLineIn.map((t) => t.managerKey), tb: lowIn },
+          out: { managerKeys: atLineOut.map((t) => t.managerKey), tb: highOut },
+          margin: lowIn - highOut,
+          // The worst-ranked team through against the best-ranked team out.
+          decidedBy: decidedBy(line(atLineIn.at(-1)!.id), line(atLineOut[0].id)),
         });
       }
     }

@@ -2,7 +2,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import type { ManagerCareer } from '@core/almanac.ts';
+import type { CutRecord, ManagerCareer } from '@core/almanac.ts';
 import { SERIES } from '@core/scoreboard.ts';
 
 import { LeaderBars, Leaderboard, Pennant, ScoutingGrid, managerColor } from '@/components/almanac-charts';
@@ -21,6 +21,17 @@ import { type AlmanacData, useAlmanac } from '@/lib/almanac';
 import { SCOUTING_STATS } from '@/lib/scouting';
 
 type View_ = 'league' | 'managers' | 'h2h';
+
+/** How a tied cut was settled, in words. */
+const TIEBREAKER: Record<string, string> = {
+  TB: 'bags',
+  SLG: 'slugging',
+  OBP: 'on-base',
+  HR: 'home runs',
+  R: 'runs',
+  RBI: 'RBIs',
+  'drink-off': 'a drink-off',
+};
 const VIEWS: View_[] = ['league', 'managers', 'h2h'];
 
 /**
@@ -53,6 +64,16 @@ function League({ data }: { data: AlmanacData }) {
   const player = (id: number) => data.players.get(id) ?? `Player ${id}`;
   const moves = [...a.redrafts].sort((x, y) => y.addedTb - y.droppedTb - (x.addedTb - x.droppedTb)).slice(0, 6);
   const who = (key: string) => ({ name: data.managers.get(key) ?? '?', color: managerColor(data, key) });
+  // "James, Darren and Daniel"
+  const names = (keys: string[]) => {
+    const list = keys.map((k) => data.managers.get(k) ?? '?');
+    return list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list.at(-1)}` : (list[0] ?? '?');
+  };
+  const tiedAt = (c: CutRecord) => `${c.through.managerKeys.length + c.out.managerKeys.length > 2 ? 'all' : 'both'} at ${c.out.tb}`;
+  const cutSummary = (c: CutRecord) =>
+    c.margin === 0
+      ? `${names([...c.through.managerKeys, ...c.out.managerKeys])} ${tiedAt(c)}; ${names(c.out.managerKeys)} out on ${TIEBREAKER[c.decidedBy ?? 'drink-off']}`
+      : `${names(c.through.managerKeys)} ${c.through.tb}, ${names(c.out.managerKeys)} ${c.out.tb}`;
   return (
     <>
       <Card title="Champions">
@@ -117,8 +138,8 @@ function League({ data }: { data: AlmanacData }) {
                   detail={`${player(season.playerId)}, ${season.year} for ${data.managers.get(season.managerKey)}`} />
               )}
               {cut && (
-                <MomentCard emoji="✂️" title="Closest cut" color={managerColor(data, cut.out.managerKey)} headline={cut.margin === 0 ? 'Tiebreak' : `By ${cut.margin}`}
-                  detail={`${cut.year} round ${cut.round}: ${data.managers.get(cut.through.managerKey)} ${cut.through.tb}, ${data.managers.get(cut.out.managerKey)} ${cut.out.tb}`} />
+                <MomentCard emoji="✂️" title="Closest cut" color={managerColor(data, cut.out.managerKeys[0])} headline={cut.margin === 0 ? 'Tiebreak' : `By ${cut.margin}`}
+                  detail={`${cut.year} round ${cut.round}: ${cutSummary(cut)}`} />
               )}
               {move && (
                 <MomentCard emoji="🔁" title="Best redraft" color={managerColor(data, move.managerKey)} headline={`+${move.addedTb - move.droppedTb}`}
@@ -176,9 +197,16 @@ function League({ data }: { data: AlmanacData }) {
         <Leaderboard
           rows={a.closestCuts.slice(0, 6).map((c, i) => ({
             key: `${i}`,
-            title: `${data.managers.get(c.through.managerKey)} ${c.through.tb}, ${data.managers.get(c.out.managerKey)} ${c.out.tb}`,
-            tags: [`${c.year}`, `Round ${c.round}`, `${data.managers.get(c.out.managerKey)} out`],
-            manager: who(c.through.managerKey),
+            title:
+              c.margin === 0
+                ? `${names(c.out.managerKeys)} out on ${TIEBREAKER[c.decidedBy ?? 'drink-off']}`
+                : `${names(c.through.managerKeys)} ${c.through.tb}, ${names(c.out.managerKeys)} ${c.out.tb}`,
+            tags: [
+              `${c.year}`,
+              `Round ${c.round}`,
+              ...(c.margin === 0 ? [`${names([...c.through.managerKeys, ...c.out.managerKeys])} ${tiedAt(c)}`] : []),
+            ],
+            manager: who(c.out.managerKeys[0]),
             label: c.margin === 0 ? 'Tiebreak' : `By ${c.margin}`,
           }))}
         />
