@@ -18,15 +18,6 @@ function useWidth(): [number, (e: LayoutChangeEvent) => void] {
   return [width, (e) => setWidth(Math.round(e.nativeEvent.layout.width))];
 }
 
-/** A big initial in the side's color. */
-export function Monogram({ name, color, size = 64 }: { name: string; color: string; size?: number }) {
-  return (
-    <View style={[styles.monogram, { width: size, height: size, borderRadius: size / 2, backgroundColor: color }]}>
-      <ThemedText style={{ color: '#fff', fontSize: size * 0.45, lineHeight: size * 0.55, fontWeight: '800' }}>{name[0]}</ThemedText>
-    </View>
-  );
-}
-
 /** A bar split between the two sides by their share; an even split when both are zero. */
 export function SplitBar({ a, b, height = 10 }: { a: number; b: number; height?: number }) {
   const colors = useDuelColors();
@@ -350,7 +341,6 @@ export function MomentCard({ emoji, title, headline, detail, color }: {
 }
 
 const styles = StyleSheet.create({
-  monogram: { alignItems: 'center', justifyContent: 'center' },
   split: { flexDirection: 'row', overflow: 'hidden' },
   tape: { gap: Spacing.one },
   tapeLine: { flexDirection: 'row', alignItems: 'baseline' },
