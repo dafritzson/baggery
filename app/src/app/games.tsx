@@ -199,31 +199,126 @@ const BAGS = ['👜', '💼', '🎒', '🛍️', '👝', '🧳'];
  * One bag emoji per total base, each picked at random. Seeded by player, game and position, so a
  * row doesn't reshuffle every time the live scores refresh.
  */
-function bagEmojis(tb: number, playerId: number, gamePk: number): string {
+function bagEmojis(tb: number, playerId: number, gamePk: number): string[] {
   return Array.from({ length: tb }, (_, i) => {
     let h = (playerId ^ Math.imul(gamePk, 0x9e3779b1) ^ Math.imul(i + 1, 0x85ebca6b)) >>> 0;
     h = Math.imul(h ^ (h >>> 16), 0x7feb352d) >>> 0;
     h = Math.imul(h ^ (h >>> 15), 0x846ca68b) >>> 0;
     return BAGS[((h ^ (h >>> 16)) >>> 0) % BAGS.length];
-  }).join('');
+  });
 }
 
-/** Room for about four bags; a bigger game scrolls sideways instead of crowding the card. */
-const BAGS_MAX_WIDTH = 72;
+/** How many bags fit in `width`, once a bag's width has been measured. */
+function bagsThatFit(width: number, bagWidth: number | null): number {
+  return bagWidth ? Math.floor((width + 0.5) / bagWidth) : 0;
+}
 
-function Bags({ tb, playerId, gamePk }: { tb: number | null; playerId: number; gamePk: number }) {
-  const [width, setWidth] = useState<number | null>(null);
-  if (tb === null) return null;
+/**
+ * The free space at the end of a line of a player's mini card, filled with bags from the right.
+ * Reports its width, so the card can decide how many bags go on each line. `scroll` lets a
+ * row that doesn't fit scroll sideways.
+ */
+function BagRoom({
+  bags,
+  minWidth,
+  scroll,
+  label,
+  onWidth,
+}: {
+  bags: string;
+  minWidth?: number;
+  scroll?: boolean;
+  label?: string;
+  onWidth: (width: number) => void;
+}) {
+  const text = (
+    <ThemedText
+      type="small"
+      numberOfLines={1}
+      style={styles.bagText}
+      accessibilityLabel={label}
+      accessibilityElementsHidden={!label}
+      importantForAccessibility={label ? 'auto' : 'no-hide-descendants'}>
+      {bags}
+    </ThemedText>
+  );
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator
-      onContentSizeChange={(w) => setWidth(w)}
-      style={[styles.bags, width !== null && { width: Math.min(width, BAGS_MAX_WIDTH) }]}>
-      <ThemedText type="small" numberOfLines={1} accessibilityLabel={`${tb} total bases`}>
-        {tb === 0 ? '–' : bagEmojis(tb, playerId, gamePk)}
-      </ThemedText>
-    </ScrollView>
+    <View style={[styles.bagRoom, { minWidth }]} onLayout={(e) => onWidth(e.nativeEvent.layout.width)}>
+      {scroll ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator style={styles.fill} contentContainerStyle={styles.bagScroll}>
+          {text}
+        </ScrollView>
+      ) : (
+        bags ? text : null
+      )}
+    </View>
+  );
+}
+
+/**
+ * A rostered player in a game: name, then owner, with a bag per TB in the space left on both
+ * lines. Bags fill the owner line first, then beside the name; only past that does the owner
+ * line scroll sideways.
+ */
+function BaggerCard({
+  data,
+  playerId,
+  team,
+  tb,
+  gamePk,
+  bagWidth,
+}: {
+  data: SeasonData;
+  playerId: number;
+  team: SeasonData['teams'][number];
+  tb: number | null;
+  gamePk: number;
+  bagWidth: number | null;
+}) {
+  const theme = useTheme();
+  const compact = useLayout() === 'compact';
+  const [nameRoom, setNameRoom] = useState(0);
+  const [ownerRoom, setOwnerRoom] = useState(0);
+  const mine = team.id === data.myTeam?.id;
+  const owner = ownerName(data, team);
+  const bags = tb ? bagEmojis(tb, playerId, gamePk) : [];
+  // Beside the name: only what the owner line can't hold.
+  const high = Math.max(0, Math.min(bagsThatFit(nameRoom, bagWidth), bags.length - bagsThatFit(ownerRoom, bagWidth)));
+  const low = bags.slice(high);
+  return (
+    <View style={[styles.playerCard, { backgroundColor: mine ? theme.mine : theme.background }]}>
+      <View style={styles.playerLine}>
+        <PlayerName playerId={playerId} type="smallBold" numberOfLines={1} style={styles.playerName}>
+          {data.players.get(playerId)?.full_name ?? `Player ${playerId}`}
+        </PlayerName>
+        <BagRoom bags={bags.slice(0, high).join('')} onWidth={setNameRoom} />
+      </View>
+      <View style={[styles.playerLine, styles.playerSecondLine]}>
+        {/*
+          Like Standings: team and owner, or a YOU tag on my own players (already tinted).
+          Phones only have room for the owner's name.
+        */}
+        <View style={styles.ownerLine}>
+          {mine ? (
+            <YouTag />
+          ) : (
+            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.owner}>
+              {compact ? (owner ?? teamName(team)) : `${teamName(team)}${owner ? ` · ${owner}` : ''}`}
+            </ThemedText>
+          )}
+        </View>
+        {tb !== null && (
+          <BagRoom
+            bags={tb === 0 ? '–' : low.join('')}
+            // A long team or owner name gives way to the first few bags.
+            minWidth={Math.min(low.length, 4) * (bagWidth ?? 0)}
+            scroll={low.length > bagsThatFit(ownerRoom, bagWidth)}
+            label={`${tb} total bases`}
+            onWidth={setOwnerRoom}
+          />
+        )}
+      </View>
+    </View>
   );
 }
 
@@ -456,8 +551,7 @@ function OpenCard({ data, scores, game, fill }: { data: SeasonData; scores: Scor
 /** The fantasy-rostered players on either team, as mini cards with their bags, most TB first. */
 function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; game: GameInfo }) {
   const theme = useTheme();
-  const compact = useLayout() === 'compact';
-  const owner = (team: SeasonData['teams'][number]) => ownerName(data, team);
+  const [bagWidth, setBagWidth] = useState<number | null>(null);
   // Fantasy-rostered players on either team, with their TB in this game.
   const tb = new Map(scores.stats.filter((s) => s.gamePk === game.gamePk).map((s) => [s.playerId, s.tb]));
   const playerIds = [...new Set(data.spells.map((s) => s.mlb_player_id))];
@@ -476,34 +570,19 @@ function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; gam
   if (players.length === 0) return null;
   return (
     <View style={[styles.players, { borderTopColor: theme.border }]}>
-      {players.map((p) => {
-        const mine = p.team.id === data.myTeam?.id;
-        return (
-          <View
-            key={p.id}
-            style={[styles.playerCard, { backgroundColor: mine ? theme.mine : theme.background }]}>
-            <PlayerName playerId={p.id} type="smallBold" numberOfLines={1} style={styles.playerName}>
-              {data.players.get(p.id)?.full_name ?? `Player ${p.id}`}
-            </PlayerName>
-            <View style={styles.playerSecondLine}>
-              {/*
-                Like Standings: team and owner, or a YOU tag on my own players (already tinted).
-                Phones only have room for the owner's name.
-              */}
-              <View style={styles.ownerLine}>
-                {mine ? (
-                  <YouTag />
-                ) : (
-                  <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.owner}>
-                    {compact ? (owner(p.team) ?? teamName(p.team)) : `${teamName(p.team)}${owner(p.team) ? ` · ${owner(p.team)}` : ''}`}
-                  </ThemedText>
-                )}
-              </View>
-              <Bags tb={p.tb} playerId={p.id} gamePk={game.gamePk} />
-            </View>
-          </View>
-        );
-      })}
+      {/* Every bag once, out of sight, to measure how wide one is. */}
+      <ThemedText
+        type="small"
+        numberOfLines={1}
+        style={[styles.bagText, styles.measure]}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        onLayout={(e) => setBagWidth(e.nativeEvent.layout.width / BAGS.length)}>
+        {BAGS.join('')}
+      </ThemedText>
+      {players.map((p) => (
+        <BaggerCard key={p.id} data={data} playerId={p.id} team={p.team} tb={p.tb} gamePk={game.gamePk} bagWidth={bagWidth} />
+      ))}
     </View>
   );
 }
@@ -561,9 +640,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
     borderRadius: Radius.md,
   },
-  playerSecondLine: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, minHeight: 18 },
+  playerLine: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
+  playerSecondLine: { minHeight: 18 },
   playerName: { fontSize: 13, lineHeight: 17 },
-  ownerLine: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
+  ownerLine: { flexShrink: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
   owner: { flexShrink: 1, minWidth: 0, fontSize: 11, lineHeight: 14 },
-  bags: { maxWidth: BAGS_MAX_WIDTH, flexGrow: 0, flexShrink: 0 },
+  // The rest of a line, bags pushed to its right end.
+  bagRoom: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end', overflow: 'hidden' },
+  bagScroll: { flexGrow: 1, justifyContent: 'flex-end' },
+  bagText: { lineHeight: 17 },
+  measure: { position: 'absolute', opacity: 0 },
 });
