@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { currentRound } from '@core/scoreboard.ts';
 import type { FantasyRound } from '@core/types.ts';
 
+import { CloseRoundCard } from '@/components/close-round-card';
 import { Columns } from '@/components/columns';
 import { Loader } from '@/components/loader';
 import { RoundChips, StandingsTable, TeamScoreboard } from '@/components/scoreboard';
@@ -21,7 +22,7 @@ import { teamName } from '@/lib/teams';
  * side by side; phones switch between them.
  */
 export default function StandingsScreen() {
-  const { data, loading } = useSeason();
+  const { data, loading, refetch } = useSeason();
   const { scores } = useScores(data);
   const wide = useLayout() === 'wide';
   const theme = useTheme();
@@ -46,6 +47,7 @@ export default function StandingsScreen() {
     <View style={[styles.stack, wide && styles.wideStack]}>
       <RoundChips round={shownRound} onChange={setRound} />
       <StandingsTable data={data} scores={scores} round={shownRound} selectedTeamId={wide ? teamId : null} onSelectTeam={selectTeam} />
+      <CloseRoundCard data={data} scores={scores} round={shownRound} refetch={refetch} />
       {scores.games.length === 0 && (
         <ThemedText type="small" themeColor="textSecondary">
           Scores fill in once the postseason schedule is out and games start.

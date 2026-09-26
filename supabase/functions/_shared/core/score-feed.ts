@@ -82,6 +82,24 @@ export interface ScoreChanges {
   reload?: boolean;
 }
 
+/** A player_game_stats row as the standings keep it: TB plus the line for the tiebreakers. */
+// deno-lint-ignore no-explicit-any
+export function toStat(row: any): ScoreStat {
+  return {
+    gamePk: row.game_pk,
+    playerId: row.mlb_player_id,
+    tb: row.tb,
+    ab: row.ab,
+    h: row.h,
+    bb: row.bb,
+    hbp: row.hbp,
+    sf: row.sf,
+    hr: row.hr,
+    r: row.r,
+    rbi: row.rbi,
+  };
+}
+
 /** Folds one poll's changed rows into the scores, so a live game costs no refetch. */
 export function applyChanges(scores: Scores, changes: ScoreChanges, year: number, rostered: Set<number>): Scores {
   let { games, stats, lines } = scores;
@@ -92,7 +110,7 @@ export function applyChanges(scores: Scores, changes: ScoreChanges, year: number
   const live = new Set(games.filter((g) => g.status === 'Live').map((g) => g.gamePk));
   for (const row of changes.stats ?? []) {
     if (rostered.has(row.mlb_player_id)) {
-      const stat = { gamePk: row.game_pk, playerId: row.mlb_player_id, tb: row.tb };
+      const stat = toStat(row);
       stats = upsert(stats, stat, (s) => s.gamePk === stat.gamePk && s.playerId === stat.playerId);
     }
     if (live.has(row.game_pk)) {

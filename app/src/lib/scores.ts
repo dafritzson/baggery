@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { type ScoreChanges, type Scores, applyChanges, toGame, toLine } from '@core/score-feed.ts';
+import { type ScoreChanges, type Scores, applyChanges, toGame, toLine, toStat } from '@core/score-feed.ts';
 import type { RosterSpell } from '@core/scoring.ts';
 
 import type { SeasonData } from '@/lib/season';
@@ -75,7 +75,11 @@ export function useScores(data: SeasonData | null): { scores: Scores | null; ref
     const playerIds = playerKey ? playerKey.split(',').map(Number) : [];
     const { data: stats } =
       gamePks.length && playerIds.length
-        ? await supabase.from('player_game_stats').select('game_pk, mlb_player_id, tb').in('game_pk', gamePks).in('mlb_player_id', playerIds)
+        ? await supabase
+            .from('player_game_stats')
+            .select('game_pk, mlb_player_id, tb, ab, h, bb, hbp, sf, hr, r, rbi')
+            .in('game_pk', gamePks)
+            .in('mlb_player_id', playerIds)
         : { data: [] };
     const livePks = (games ?? []).filter((g) => g.status === 'Live').map((g) => g.game_pk as number);
     const { data: lines } = livePks.length
@@ -84,7 +88,7 @@ export function useScores(data: SeasonData | null): { scores: Scores | null; ref
     if (fetchId !== latest.current) return;
     setScores({
       games: (games ?? []).filter((g) => g.series_game_number !== null).map(toGame),
-      stats: (stats ?? []).map((s) => ({ gamePk: s.game_pk, playerId: s.mlb_player_id, tb: s.tb })),
+      stats: (stats ?? []).map(toStat),
       lines: (lines ?? []).map(toLine),
     });
   }, [year, playerKey]);

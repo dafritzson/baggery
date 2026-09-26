@@ -1,7 +1,7 @@
 // Total bases per game, laid out like the league's old scoring sheets: one column per game of a
 // series (WC1, WC2, DS1, ...), one row per fantasy team (standings) or per player (team view).
 
-import { type RosterSpell } from './scoring.ts';
+import { compareTeams, emptyTotals, type RosterSpell, STAT_KEYS, type StatLine } from './scoring.ts';
 import { type FantasyRound, type GameType, type PlayerId, ROUND_FOR_GAME_TYPE, type TeamId } from './types.ts';
 
 export interface ScoreGame {
@@ -17,7 +17,11 @@ export interface ScoreGame {
   awayTeamId: number;
 }
 
-export interface ScoreStat {
+/**
+ * A player's line in one game. Standings need TB; the rest is for tiebreakers (SLG, OBP, HR, R,
+ * RBI) and counts as 0 when missing.
+ */
+export interface ScoreStat extends Partial<Omit<StatLine, 'tb'>> {
   gamePk: number;
   playerId: PlayerId;
   tb: number;
@@ -80,7 +84,9 @@ export interface StandingRow {
   /** TB by column key ("F1", "D3", ...); null until a game with that number starts. */
   cells: Map<string, number | null>;
   total: number;
-  /** 1-based; teams with the same total share a rank. */
+  /** The team's whole line for the round, for the tiebreakers. */
+  totals: StatLine;
+  /** 1-based, by the rules' ranking (TB, then SLG, OBP, HR, R, RBI); only full ties share one. */
   rank: number;
 }
 
@@ -97,7 +103,13 @@ export function roundStandings(
   const rows = new Map<TeamId, StandingRow>(
     teamIds.map((id) => [
       id,
-      { teamId: id, cells: new Map(columns.map((c) => [columnKey(c.gameType, c.number), c.started ? 0 : null])), total: 0, rank: 0 },
+      {
+        teamId: id,
+        cells: new Map(columns.map((c) => [columnKey(c.gameType, c.number), c.started ? 0 : null])),
+        total: 0,
+        totals: emptyTotals(id),
+        rank: 0,
+      },
     ]),
   );
   for (const stat of stats) {
@@ -109,10 +121,11 @@ export function roundStandings(
     const key = columnKey(game.gameType, game.seriesGameNumber);
     row.cells.set(key, (row.cells.get(key) ?? 0) + stat.tb);
     row.total += stat.tb;
+    for (const k of STAT_KEYS) row.totals[k] += stat[k] ?? 0;
   }
-  const sorted = [...rows.values()].sort((a, b) => b.total - a.total);
+  const sorted = [...rows.values()].sort((a, b) => compareTeams(a.totals, b.totals));
   sorted.forEach((r, i) => {
-    r.rank = i > 0 && sorted[i - 1].total === r.total ? sorted[i - 1].rank : i + 1;
+    r.rank = i > 0 && compareTeams(sorted[i - 1].totals, r.totals) === 0 ? sorted[i - 1].rank : i + 1;
   });
   return sorted;
 }
@@ -205,4 +218,50 @@ export function currentRound(games: ScoreGame[]): FantasyRound {
   let round: FantasyRound = 1;
   for (const g of games) if (hasStarted(g) && ROUND_FOR_GAME_TYPE[g.gameType] > round) round = ROUND_FOR_GAME_TYPE[g.gameType];
   return round;
+}
+
+/** A game with what's needed to tell whether its series has a winner. */
+export interface SeriesGame extends Pick<ScoreGame, 'gameType' | 'homeTeamId' | 'awayTeamId' | 'status'> {
+  homeScore: number | null;
+  awayScore: number | null;
+  /** Most games the series can go (3, 5, 7; 1 for 2021's one-game Wild Card). */
+  gamesInSeries: number | null;
+}
+
+/** The MLB round that ends each fantasy round, and how many series it has. */
+const LAST_SERIES: Record<FantasyRound, { gameType: GameType; count: number }> = {
+  1: { gameType: 'D', count: 4 },
+  2: { gameType: 'L', count: 2 },
+  3: { gameType: 'W', count: 1 },
+};
+const DEFAULT_LENGTH: Record<GameType, number> = { F: 3, D: 5, L: 7, W: 7 };
+
+/**
+ * Whether every MLB series in a fantasy round has a winner: someone has won enough games (2 of
+ * 3, 3 of 5, 4 of 7), and the round's last series type is all there (4 Division Series, 2
+ * Championship Series, the World Series), so an unset bracket doesn't look finished. Leftover
+ * "if necessary" games on the schedule don't matter.
+ */
+export function roundDecided(round: FantasyRound, games: SeriesGame[]): boolean {
+  const types = roundSeries(round).map((s) => s.gameType);
+  const inRound = games.filter((g) => types.includes(g.gameType));
+  if (inRound.some((g) => g.status === 'Live')) return false;
+  const series = new Map<string, SeriesGame[]>();
+  for (const g of inRound) {
+    const key = `${g.gameType}:${[g.homeTeamId, g.awayTeamId].sort((a, b) => a - b).join('-')}`;
+    series.set(key, [...(series.get(key) ?? []), g]);
+  }
+  const decided = [...series.values()].every((list) => {
+    const needed = Math.ceil((list.find((g) => g.gamesInSeries)?.gamesInSeries ?? DEFAULT_LENGTH[list[0].gameType]) / 2);
+    const wins = new Map<number, number>();
+    for (const g of list) {
+      if (g.status !== 'Final' || g.homeScore === null || g.awayScore === null || g.homeScore === g.awayScore) continue;
+      const winner = g.homeScore > g.awayScore ? g.homeTeamId : g.awayTeamId;
+      wins.set(winner, (wins.get(winner) ?? 0) + 1);
+    }
+    return Math.max(0, ...wins.values()) >= needed;
+  });
+  const last = LAST_SERIES[round];
+  const lastCount = [...series.keys()].filter((k) => k.startsWith(`${last.gameType}:`)).length;
+  return decided && lastCount >= last.count;
 }

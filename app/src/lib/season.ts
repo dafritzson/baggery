@@ -91,7 +91,17 @@ export interface MlbTeam {
 }
 
 export interface SeasonData {
-  season: { id: string; year: number; status: string; league_id: string; survivors_after_round: number[] };
+  season: {
+    id: string;
+    year: number;
+    status: string;
+    league_id: string;
+    survivors_after_round: number[];
+    /** Set for past seasons imported from the old sheets. */
+    imported_at: string | null;
+    /** Rounds the commissioner reopened, which wait for them to close again. */
+    manual_rounds: number[];
+  };
   teams: Team[];
   drafts: Draft[];
   actions: DraftActionRow[];
@@ -129,7 +139,7 @@ async function fetchSeason(
 ): Promise<{ data: SeasonData | null; years: number[] } | null> {
   const { data: seasons, error } = await supabase
     .from('seasons')
-    .select('id, year, status, league_id, survivors_after_round')
+    .select('id, year, status, league_id, survivors_after_round, imported_at, manual_rounds')
     .order('year', { ascending: false });
   if (error) return null;
   const years = seasons.map((s) => s.year as number);
