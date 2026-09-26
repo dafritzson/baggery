@@ -54,6 +54,10 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   `_shared/core/score-feed.ts`). Full reloads happen only on reconnect, when a game starts, or when
   the server asks. Before this, every change refetched the whole season (50–150 KB), which could
   have reached 10–25 GB in a postseason.
+  If the season load fails (or finds no seasons while signed in, as when the app opens before its
+  sign-in is renewed), `lib/season.ts` retries up to 6 times over about a minute, then stops. A good
+  start costs nothing extra; a bad one at most 6 more loads (~1 MB), and a lasting server error
+  can't turn into endless reloads.
 - **Realtime messages per second.** The old per-row Postgres Changes could burst 150–250 messages
   right after a poll on a busy day. One broadcast per poll keeps it to about one message per open
   app every 10 seconds. The draft room still uses Postgres Changes on low-traffic tables
