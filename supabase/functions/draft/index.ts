@@ -152,10 +152,52 @@ async function requireLive(ctx: Ctx) {
   if (ctx.draft.status !== 'live') throw new UserError('The draft is not live.');
 }
 
+/**
+ * The autodraft switch, kept light because managers flip it and wait for it: it locks just the
+ * draft row, and loads the full draft (players, rosters, the pool) only when switching on for
+ * the team that's on the clock, which is the one case where it has to pick right away.
+ */
+async function setAutodraft(body: Body, userId: string) {
+  const teamId = body.teamId;
+  if (!teamId) throw new UserError('teamId is required.');
+  const on = !!body.autodraft;
+  await sql.begin(async (tx) => {
+    const [draft] = await tx<DraftRow[]>`
+      select id, season_id, kind, status, pick_order, rounds from drafts where id = ${body.draftId} for update`;
+    if (!draft) throw new UserError('Draft not found.', 404);
+    const [team] = await tx`select user_id from fantasy_teams where id = ${teamId} and season_id = ${draft.season_id}`;
+    if (!team) throw new UserError('Team not found.', 404);
+    if (team.user_id !== userId && !(await isCommissioner(draft.season_id, userId))) {
+      throw new UserError('Only the commissioner can do that.', 403);
+    }
+    await tx`update fantasy_teams set autodraft = ${on} where id = ${teamId}`;
+    if (!on || draft.status !== 'live') return;
+
+    const actions = await tx`
+      select type, fantasy_team_id from draft_actions where draft_id = ${draft.id} order by action_number`;
+    const turn = nextTurn(
+      { kind: draft.kind, order: draft.pick_order, rounds: draft.rounds },
+      actions.map((a): DraftAction =>
+        a.type === 'yield' ? { type: 'yield', teamId: a.fantasy_team_id } : { type: 'pick', teamId: a.fantasy_team_id, addPlayerId: 0 },
+      ),
+    );
+    if (turn?.teamId !== teamId) return;
+    await advance(tx, await load(tx, draft.id));
+  });
+}
+
 serve(async (req) => {
+  const started = Date.now();
   const userId = await requireUser(req);
   const body = (await req.json()) as Body;
   if (!body.draftId) throw new UserError('draftId is required.');
+
+  if (body.action === 'set-autodraft') {
+    await setAutodraft(body, userId);
+    // Visible in the function's logs, to see where a slow toggle spends its time.
+    console.log(JSON.stringify({ action: body.action, ms: Date.now() - started }));
+    return json({ ok: true });
+  }
 
   await sql.begin(async (tx) => {
     const ctx = await load(tx, body.draftId);
@@ -230,19 +272,11 @@ serve(async (req) => {
         await tx`update drafts set status = 'live' where id = ${ctx.draft.id}`;
         break;
       }
-      case 'set-autodraft': {
-        if (!body.teamId) throw new UserError('teamId is required.');
-        if (ctx.teamOwners.get(body.teamId) !== userId) commissionerOnly();
-        await tx`update fantasy_teams set autodraft = ${!!body.autodraft} where id = ${body.teamId}`;
-        if (body.autodraft) ctx.autodraftTeams.add(body.teamId);
-        else ctx.autodraftTeams.delete(body.teamId);
-        if (ctx.draft.status === 'live') await advance(tx, ctx);
-        break;
-      }
       default:
         throw new UserError('Unknown action.');
     }
   });
 
+  console.log(JSON.stringify({ action: body.action, ms: Date.now() - started }));
   return json({ ok: true });
 });

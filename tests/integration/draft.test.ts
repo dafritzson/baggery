@@ -162,6 +162,25 @@ describe('draft 1', () => {
     expect(count).toBe(0);
   });
 
+  it("only lets a manager flip their own team's autodraft, and picks at once when they're on the clock", async () => {
+    const up = await onTheClock();
+    const upTeam = teamIdByManager.get(up)!;
+    const other = MANAGERS.find((m) => m !== up && m !== 'Daniel')!;
+    expect((await call(other, 'draft', { draftId, action: 'set-autodraft', teamId: upTeam, autodraft: true })).error).toMatch(/commissioner/);
+
+    const count = async () => (await admin.from('draft_actions').select('*', { count: 'exact', head: true }).eq('draft_id', draftId)).count!;
+    const before = await count();
+    expect((await call(up, 'draft', { draftId, action: 'set-autodraft', teamId: upTeam, autodraft: true })).ok).toBe(true);
+    expect(await count()).toBeGreaterThan(before);
+    const { data: team } = await admin.from('fantasy_teams').select('autodraft').eq('id', upTeam).single();
+    expect(team!.autodraft).toBe(true);
+
+    // Switching off never picks.
+    const after = await count();
+    expect((await call(up, 'draft', { draftId, action: 'set-autodraft', teamId: upTeam, autodraft: false })).ok).toBe(true);
+    expect(await count()).toBe(after);
+  });
+
   it('autodrafts for absent managers and finishes with 4 players each', async () => {
     // Mookie is away: autodraft picks for them whenever they're up.
     expect((await call('Mookie', 'draft', { draftId, action: 'set-autodraft', teamId: teamIdByManager.get('Mookie'), autodraft: true })).ok).toBe(true);
@@ -182,7 +201,12 @@ describe('draft 1', () => {
     for (const teamId of teamIdByManager.values()) {
       expect(spells!.filter((s) => s.fantasy_team_id === teamId)).toHaveLength(4);
     }
-    const { count: autoPicks } = await admin.from('draft_actions').select('*', { count: 'exact', head: true }).eq('is_auto', true);
+    // All of Mookie's picks were made for them (the test above adds an auto pick of its own).
+    const { count: autoPicks } = await admin
+      .from('draft_actions')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_auto', true)
+      .eq('fantasy_team_id', teamIdByManager.get('Mookie')!);
     expect(autoPicks).toBe(4);
   });
 });

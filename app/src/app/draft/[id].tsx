@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
@@ -245,21 +245,40 @@ function ClockBar({
 }
 
 /**
- * Flips as soon as it's tapped and stays disabled until the server confirms the save, so taps
- * can't pile up. It goes back if the save fails. After the save, it keeps showing the saved
- * value until the season reload catches up.
+ * Shows the new value the moment it's tapped and stays tappable while it saves: a tap during a
+ * save is queued, and only the last value is sent once that save lands. If a save fails, it goes
+ * back to the saved value (and the draft room shows the error). After saving, it keeps showing
+ * the new value until the season reload catches up.
  */
 function AutodraftSwitch({ value, onChange }: { value: boolean; onChange: (v: boolean) => Promise<string | null> }) {
   const [local, setLocal] = useState<{ value: boolean; saving: boolean } | null>(null);
+  const queued = useRef<boolean | null>(null);
   if (local && !local.saving && value === local.value) setLocal(null);
+
+  async function save(v: boolean) {
+    let target = v;
+    for (;;) {
+      if (await onChange(target)) {
+        queued.current = null;
+        setLocal(null);
+        return;
+      }
+      const next = queued.current;
+      queued.current = null;
+      if (next === null || next === target) break;
+      target = next;
+    }
+    setLocal({ value: target, saving: false });
+  }
+
   return (
     <Switch
       value={local ? local.value : value}
-      disabled={local?.saving}
-      onValueChange={async (v) => {
+      onValueChange={(v) => {
+        const saving = local?.saving;
         setLocal({ value: v, saving: true });
-        const error = await onChange(v);
-        setLocal(error ? null : { value: v, saving: false });
+        if (saving) queued.current = v;
+        else save(v);
       }}
     />
   );
