@@ -6,6 +6,7 @@ import { type HeadToHead as Duel_, type TeamSeason, headToHead } from '@core/alm
 import { Card } from '@/components/card';
 import { FinishChart, MomentCard, RadarChart, RoundBarsChart, SplitBar, TapeRow, YearLineChart, useDuelColors } from '@/components/duel';
 import { ordinal } from '@/components/manager-link';
+import { ManagerPhoto } from '@/components/manager-photo';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -114,9 +115,7 @@ const Duel = memo(function Duel({ h, data }: { h: Duel_; data: AlmanacData }) {
         {sides.map(({ career, color }) => (
           <View key={career.key} style={[styles.heroCard, { backgroundColor: color, boxShadow: `0 8px 22px ${color}55` }]}>
             <View style={styles.heroTop}>
-              <View style={styles.heroInitial}>
-                <ThemedText style={[styles.heroInitialText, { color }]}>{career.name[0]}</ThemedText>
-              </View>
+              <ManagerPhoto data={data} managerKey={career.key} color={color} size={40} />
               <ThemedText style={styles.heroName} numberOfLines={1}>{career.name}</ThemedText>
             </View>
             <ThemedText style={styles.heroTrophies}>{career.titles ? '🏆'.repeat(career.titles) : 'No titles yet'}</ThemedText>
@@ -283,8 +282,6 @@ const styles = StyleSheet.create({
   hero: { flexDirection: 'row', gap: Spacing.two },
   heroCard: { flex: 1, borderRadius: Radius.lg, padding: Spacing.three, gap: Spacing.two },
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  heroInitial: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  heroInitialText: { fontSize: 20, lineHeight: 26, fontWeight: '800' },
   heroName: { flex: 1, color: '#fff', fontSize: 20, lineHeight: 26, fontWeight: '800' },
   heroTrophies: { color: '#fff', fontSize: 16, lineHeight: 22 },
   heroStat: { backgroundColor: 'rgba(0,0,0,0.18)', borderRadius: Radius.md, paddingVertical: Spacing.one, paddingHorizontal: Spacing.two },

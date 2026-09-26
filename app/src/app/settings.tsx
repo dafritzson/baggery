@@ -1,4 +1,3 @@
-import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -98,11 +97,7 @@ function PhotoCard() {
   return (
     <Card title="Photo">
       <View style={styles.photoRow}>
-        {photo ? (
-          <Image source={photo} style={styles.photo} accessibilityLabel="Your photo" />
-        ) : (
-          <OwnerBadge teamId={data?.myTeam?.id ?? userId} owner={name} size={72} />
-        )}
+        <OwnerBadge teamId={data?.myTeam?.id ?? userId} owner={name} photo={photo} size={72} />
         <View style={styles.photoActions}>
           <Button label={busy ? 'Saving…' : 'Upload photo'} onPress={() => run(() => uploadPhoto(userId), 'Photo saved.')} disabled={busy} />
           {uploaded && (
@@ -127,6 +122,5 @@ function PhotoCard() {
 
 const styles = StyleSheet.create({
   photoRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
-  photo: { width: 72, height: 72, borderRadius: 36 },
   photoActions: { flex: 1, gap: Spacing.two, alignItems: 'flex-start' },
 });
