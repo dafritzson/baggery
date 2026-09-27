@@ -9,6 +9,7 @@ import { ImportSeasonCard } from '@/components/import-season-card';
 import { Loader } from '@/components/loader';
 import { PastManagersCard } from '@/components/past-managers-card';
 import { OwnerBadge } from '@/components/owner-badge';
+import { ReloadGamesCard } from '@/components/reload-games-card';
 import { Screen } from '@/components/screen';
 import { TeamNameField } from '@/components/team-name-sheet';
 import { ThemedText } from '@/components/themed-text';
@@ -72,6 +73,7 @@ export default function SettingsScreen() {
       <BagAlertsCard />
       <CelebrationsCard />
       <ImportSeasonCard />
+      <ReloadGamesCard />
       <PastManagersCard />
     </Screen>
   );

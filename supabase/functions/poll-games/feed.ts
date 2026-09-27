@@ -149,3 +149,79 @@ export function linescoreLive(data: any): LiveState | null {
     dueUp: [livePlayer(defense.batter), livePlayer(defense.onDeck), livePlayer(defense.inHole)],
   };
 }
+
+/** A hit's play, as mlb_hits keeps it. */
+export interface HitRow {
+  play_id: string;
+  game_pk: number;
+  mlb_player_id: number;
+  event: '1B' | '2B' | '3B' | 'HR';
+  inning: number;
+  top_inning: boolean;
+  ended_at: string | null;
+}
+
+const HIT_EVENTS: Record<string, HitRow['event']> = { single: '1B', double: '2B', triple: '3B', home_run: 'HR' };
+
+/**
+ * Every hit in `/game/{gamePk}/playByPlay`, with the play ID of the pitch that was put in play
+ * (the last pitch of the at-bat): the ID Savant's videos and MLB's clips go by.
+ */
+// deno-lint-ignore no-explicit-any
+export function playHits(gamePk: number, data: any): HitRow[] {
+  const rows: HitRow[] = [];
+  // deno-lint-ignore no-explicit-any
+  for (const play of (data?.allPlays ?? []) as any[]) {
+    const event = HIT_EVENTS[play?.result?.eventType];
+    const batter = play?.matchup?.batter?.id;
+    // deno-lint-ignore no-explicit-any
+    const pitch = [...((play?.playEvents ?? []) as any[])].reverse().find((e) => e?.isPitch && e?.playId);
+    if (!event || !batter || !pitch) continue;
+    rows.push({
+      play_id: pitch.playId,
+      game_pk: gamePk,
+      mlb_player_id: batter,
+      event,
+      inning: play.about?.inning ?? 0,
+      top_inning: play.about?.isTopInning ?? play.about?.halfInning === 'top',
+      ended_at: play.about?.endTime ?? null,
+    });
+  }
+  return rows;
+}
+
+/** An official highlight clip that's of one play. */
+export interface Clip {
+  playId: string;
+  slug: string;
+  headline: string;
+  playerIds: number[];
+}
+
+/** The clips in `/game/{gamePk}/content` tied to a play (their guid is its play ID). */
+// deno-lint-ignore no-explicit-any
+export function highlightClips(data: any): Clip[] {
+  // deno-lint-ignore no-explicit-any
+  return ((data?.highlights?.highlights?.items ?? []) as any[]).flatMap((item): Clip[] => {
+    const slug = item?.slug ?? item?.id;
+    if (!item?.guid || !slug) return [];
+    const playerIds = ((item.keywordsAll ?? []) as { type?: string; value?: string }[])
+      .filter((k) => k.type === 'player_id')
+      .map((k) => Number(k.value));
+    return [{ playId: item.guid, slug, headline: item.headline ?? '', playerIds }];
+  });
+}
+
+/**
+ * The clip for each hit that has one: of that play, preferring one tagged with the batter (a
+ * play's clip can be about the defense, e.g. a runner thrown out on the same hit).
+ */
+export function clipsForHits(hits: Pick<HitRow, 'play_id' | 'mlb_player_id'>[], clips: Clip[]): Map<string, Clip> {
+  const out = new Map<string, Clip>();
+  for (const hit of hits) {
+    const ofPlay = clips.filter((c) => c.playId === hit.play_id);
+    const clip = ofPlay.find((c) => c.playerIds.includes(hit.mlb_player_id)) ?? ofPlay[0];
+    if (clip) out.set(hit.play_id, clip);
+  }
+  return out;
+}

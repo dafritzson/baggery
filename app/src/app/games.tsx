@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from 'react';
-import { type LayoutChangeEvent, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { type LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { BAG_EMOJI } from '@core/bag-celebration.ts';
@@ -9,6 +9,7 @@ import { SERIES } from '@core/scoreboard.ts';
 import type { GameType } from '@core/types.ts';
 
 import { Card } from '@/components/card';
+import { HitVideosSheet } from '@/components/hit-videos';
 import { Loader } from '@/components/loader';
 import { YouTag } from '@/components/owner-badge';
 import { PlayerName } from '@/components/player-name';
@@ -292,6 +293,7 @@ function BaggerCard({
   team,
   tb,
   gamePk,
+  gameLabel,
   bagWidth,
 }: {
   data: SeasonData;
@@ -299,9 +301,13 @@ function BaggerCard({
   team: SeasonData['teams'][number];
   tb: number | null;
   gamePk: number;
+  /** "World Series · Game 3", for the videos sheet. */
+  gameLabel: string;
   bagWidth: number | null;
 }) {
   const theme = useTheme();
+  const [videos, setVideos] = useState(false);
+  const name = data.players.get(playerId)?.full_name ?? `Player ${playerId}`;
   const compact = useLayout() === 'compact';
   const [nameRoom, setNameRoom] = useState(0);
   const [ownerRoom, setOwnerRoom] = useState(0);
@@ -315,10 +321,16 @@ function BaggerCard({
     <View style={[styles.playerCard, { backgroundColor: mine ? theme.mine : theme.background }]}>
       <View style={styles.playerLine}>
         <PlayerName playerId={playerId} type="smallBold" numberOfLines={1} style={styles.playerName}>
-          {data.players.get(playerId)?.full_name ?? `Player ${playerId}`}
+          {name}
         </PlayerName>
         <BagRoom bags={bags.slice(0, high).join('')} onWidth={setNameRoom} />
+        {!!tb && (
+          <Pressable onPress={() => setVideos(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Videos of ${name}'s hits`}>
+            <ThemedText type="smallBold" themeColor="accent">▶</ThemedText>
+          </Pressable>
+        )}
       </View>
+      {videos && <HitVideosSheet gamePk={gamePk} playerId={playerId} title={`${name} · ${gameLabel}`} onClose={() => setVideos(false)} />}
       <View style={[styles.playerLine, styles.playerSecondLine]}>
         {/*
           Like Standings: team and owner, or a YOU tag on my own players (already tinted).
@@ -618,7 +630,7 @@ function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; gam
         {BAG_EMOJI.join('')}
       </ThemedText>
       {players.map((p) => (
-        <BaggerCard key={p.id} data={data} playerId={p.id} team={p.team} tb={p.tb} gamePk={game.gamePk} bagWidth={bagWidth} />
+        <BaggerCard key={p.id} data={data} playerId={p.id} team={p.team} tb={p.tb} gamePk={game.gamePk} gameLabel={seriesLabel(game)} bagWidth={bagWidth} />
       ))}
     </View>
   );

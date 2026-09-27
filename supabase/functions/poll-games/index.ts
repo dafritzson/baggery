@@ -8,13 +8,17 @@
 //                            Then sends the bag alerts that are due (alerts.ts).
 // POST { setup: true }       from the deploy: records this function's URL for the cron job.
 // POST { seasonId }          commissioner: reloads every game of that season's postseason.
+// POST { seasonId, videos: true, after? }
+//                            commissioner: reads the plays and highlight clips of a few of that
+//                            season's games at a time (after the given gamePk), for the Games
+//                            tab's videos; the app calls it until `next` is null.
 
 import { requireCommissioner, requireUser } from '../_shared/auth.ts';
 import { autoCloseRounds } from '../_shared/close-round.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
 import { sendBagAlerts } from './alerts.ts';
-import { boxscoreBatting, linescoreLive, linescoreRuns, scheduleGames } from './feed.ts';
+import { boxscoreBatting, clipsForHits, highlightClips, linescoreLive, linescoreRuns, playHits, scheduleGames } from './feed.ts';
 
 const MLB = 'https://statsapi.mlb.com/api/v1';
 const LEAGUES: Record<number, 'AL' | 'NL'> = { 103: 'AL', 104: 'NL' };
@@ -92,6 +96,65 @@ async function saveGame(gamePk: number): Promise<number> {
 }
 
 /**
+ * A game's hits and their videos (mlb_hits). Its play-by-play when the box score has hits not yet
+ * matched to a play (at most every 20 seconds), then its highlights while hits are still without
+ * an official clip (every 2 minutes while live, every 10 after; finished games stop being polled
+ * after 6 hours). `force` reads both regardless (reloading a season). Returns the hits it saved.
+ */
+async function saveVideos(gamePk: number, force: boolean): Promise<number> {
+  const due = async () => {
+    const [row] = await sql`
+      select
+        (select coalesce(sum(h), 0) from player_game_stats where game_pk = g.game_pk)
+          > (select count(*) from mlb_hits where game_pk = g.game_pk)
+          and (r.plays_read_at is null or r.plays_read_at < now() - interval '20 seconds') as plays,
+        exists (select 1 from mlb_hits where game_pk = g.game_pk and clip_slug is null)
+          and (r.clips_read_at is null or r.clips_read_at < now()
+               - case when g.status = 'Live' then interval '2 minutes' else interval '10 minutes' end) as clips
+      from mlb_games g
+      left join private.video_reads r using (game_pk)
+      where g.game_pk = ${gamePk}`;
+    return { plays: !!row?.plays, clips: !!row?.clips };
+  };
+
+  let saved = 0;
+  if (force || (await due()).plays) {
+    const hits = playHits(gamePk, await mlb(`/game/${gamePk}/playByPlay`));
+    await sql.begin(async (tx) => {
+      if (hits.length) {
+        await tx`
+          insert into mlb_hits ${tx(hits, 'play_id', 'game_pk', 'mlb_player_id', 'event', 'inning', 'top_inning', 'ended_at')}
+          on conflict (play_id) do update set
+            mlb_player_id = excluded.mlb_player_id, event = excluded.event, inning = excluded.inning,
+            top_inning = excluded.top_inning, ended_at = excluded.ended_at`;
+        // A scoring change can take a hit away.
+        await tx`delete from mlb_hits where game_pk = ${gamePk} and not (play_id = any(${hits.map((h) => h.play_id)}::uuid[]))`;
+      }
+      await tx`
+        insert into private.video_reads (game_pk, plays_read_at) values (${gamePk}, now())
+        on conflict (game_pk) do update set plays_read_at = now()`;
+    });
+    saved = hits.length;
+  }
+  if (force || (await due()).clips) {
+    const missing = await sql`select play_id, mlb_player_id from mlb_hits where game_pk = ${gamePk} and clip_slug is null`;
+    const clips = clipsForHits(
+      missing.map((h) => ({ play_id: h.play_id as string, mlb_player_id: h.mlb_player_id as number })),
+      highlightClips(await mlb(`/game/${gamePk}/content`)),
+    );
+    await sql.begin(async (tx) => {
+      for (const [playId, clip] of clips) {
+        await tx`update mlb_hits set clip_slug = ${clip.slug}, clip_headline = ${clip.headline} where play_id = ${playId}`;
+      }
+      await tx`
+        insert into private.video_reads (game_pk, clips_read_at) values (${gamePk}, now())
+        on conflict (game_pk) do update set clips_read_at = now()`;
+    });
+  }
+  return saved;
+}
+
+/**
  * Reads the schedule if it's due (private.schedule_due), then the box score of every live game
  * and of finished games due a re-check. A reload (`all`) reads the schedule and every game that
  * has started, and treats finished games as settled so the cron job leaves them alone.
@@ -118,6 +181,17 @@ async function poll(year: number, all: boolean) {
     while (pending.length) {
       const counts = await Promise.all(pending.splice(0, 4).map(saveGame));
       batted += counts.reduce((a, b) => a + b, 0);
+    }
+    // Videos only on the regular polls; a reload reads them in batches of their own (CPU limits).
+    // A failure here mustn't stop the scores.
+    if (!all) {
+      for (const r of due) {
+        try {
+          await saveVideos(r.game_pk as number, false);
+        } catch (e) {
+          console.error('videos', r.game_pk, e);
+        }
+      }
     }
   } finally {
     // Everything this poll changed, to open apps in one realtime message.
@@ -187,7 +261,7 @@ async function withLease<T>(run: () => Promise<T>): Promise<T | { skipped: true 
 }
 
 serve(async (req) => {
-  const body = (await req.json().catch(() => ({}))) as { setup?: boolean; seasonId?: string };
+  const body = (await req.json().catch(() => ({}))) as { setup?: boolean; seasonId?: string; videos?: boolean; after?: number };
 
   if (body.setup) {
     // Only ever points the cron job at this function, so it needs no auth.
@@ -230,5 +304,14 @@ serve(async (req) => {
   await requireCommissioner(body.seasonId, userId);
   const [season] = await sql`select year from seasons where id = ${body.seasonId}`;
   if (!season) throw new UserError('Season not found.', 404);
+  if (body.videos) {
+    const games = await sql`
+      select game_pk from mlb_games
+      where season_year = ${season.year} and status in ('Live', 'Final') and game_pk > ${body.after ?? 0}
+      order by game_pk limit 4`;
+    let hits = 0;
+    for (const g of games) hits += await saveVideos(g.game_pk as number, true);
+    return json({ hits, next: games.length === 4 ? games[3].game_pk : null });
+  }
   return json(await poll(season.year, true));
 });

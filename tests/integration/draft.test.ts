@@ -332,6 +332,31 @@ describe('live stats poller', () => {
     expect(wc!.every((g) => g.games_in_series === 3 && g.series_game_number! <= 3)).toBe(true);
   });
 
+  it("finds each hit's play and its videos, a few games at a time", async () => {
+    // World Series Game 3 and the few games after it.
+    const { data: ws3 } = await admin.from('mlb_games').select('game_pk').eq('season_year', 2025).eq('game_type', 'W').eq('series_game_number', 3).single();
+    const batch = (await call('Daniel', 'poll-games', { seasonId: season2025, videos: true, after: ws3!.game_pk - 1 })) as { hits?: number; next?: number | null };
+    expect(batch.hits).toBeGreaterThan(20);
+    expect((await call('Kyle', 'poll-games', { seasonId: season2025, videos: true })).error).toMatch(/commissioner/);
+
+    // Freeman's walk-off in the 18th: the play Savant's video goes by, and MLB's official clip.
+    const { data: walkOff } = await admin
+      .from('mlb_hits')
+      .select('play_id, event, inning, top_inning, clip_slug, clip_headline')
+      .eq('game_pk', ws3!.game_pk)
+      .eq('mlb_player_id', 518692)
+      .eq('inning', 18)
+      .single();
+    expect(walkOff).toMatchObject({ play_id: '1b148aed-a2b7-3b9c-a0c4-6bb88a732ec8', event: 'HR', top_inning: false });
+    expect(walkOff!.clip_slug).toBeTruthy();
+    expect(walkOff!.clip_headline).toMatch(/Freeman/);
+
+    // Signed-in users can read them (the Games tab's ▶).
+    const { data: seen, error } = await clients.get('Kyle')!.from('mlb_hits').select('play_id').eq('game_pk', ws3!.game_pk);
+    expect(error).toBeNull();
+    expect(seen!.length).toBeGreaterThan(20);
+  });
+
   it("sums each hitter's postseason PA and TB for the draft table, up to a draft's lock", async () => {
     const FREEMAN = 518692;
     const { data: lines } = await admin.from('player_game_stats').select('pa, tb, mlb_games!inner(season_year)').eq('mlb_player_id', FREEMAN).eq('mlb_games.season_year', 2025);
