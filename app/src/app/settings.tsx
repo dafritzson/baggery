@@ -5,6 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import { BagAlertsCard } from '@/components/bag-alerts-card';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { ExportSeasonCard } from '@/components/export-season-card';
 import { ImportSeasonCard } from '@/components/import-season-card';
 import { Loader } from '@/components/loader';
 import { PastManagersCard } from '@/components/past-managers-card';
@@ -72,6 +73,7 @@ export default function SettingsScreen() {
       </Card>
       <BagAlertsCard />
       <CelebrationsCard />
+      <ExportSeasonCard />
       <ImportSeasonCard />
       <ReloadGamesCard />
       <PastManagersCard />

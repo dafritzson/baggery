@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { type SeasonImport, importSpells, validateSeasonImport } from '../supabase/functions/_shared/core/season-import.ts';
+import { type SeasonImport, type SeasonRecord, exportSeason, importSpells, validateSeasonImport } from '../supabase/functions/_shared/core/season-import.ts';
 
 const LOCKS = ['2021-10-05T00:08:00Z', '2021-10-07T18:07:00Z', '2021-10-15T20:07:00Z', '2021-10-26T00:09:00Z'];
 
@@ -92,5 +92,41 @@ describe('importSpells', () => {
     expect(spells.find((s) => s.playerId === 13)).toMatchObject({ manager: 'B', from: LOCKS[1], to: null, addedByDraft: 2 });
     expect(spells.find((s) => s.playerId === 1)).toMatchObject({ manager: 'A', to: LOCKS[3], droppedByDraft: 4 });
     expect(spells.find((s) => s.playerId === 14)).toMatchObject({ manager: 'A', from: LOCKS[3], to: null });
+  });
+});
+
+describe('exportSeason', () => {
+  /** The sample season as the app keeps it: team ids, and the pool's extra players. */
+  function record(): SeasonRecord {
+    const s = season();
+    const id = (manager: string) => `team-${manager}`;
+    return {
+      year: s.year,
+      teams: s.managers.map((m) => ({ id: id(m.name), manager: m.name, name: null, eliminatedAfterRound: m.eliminatedAfterRound })),
+      drafts: [...s.drafts].reverse().map((d) => ({
+        number: d.number,
+        locksAt: d.locksAt,
+        pickOrder: d.pickOrder.map(id),
+        actions: d.actions.map((a) => ({ teamId: id(a.manager), type: a.type, add: a.add, drop: a.drop })),
+      })),
+      players: [...s.players, { id: 99, fullName: 'Never Drafted', teamId: 144 }],
+      mlbTeams: s.mlbTeams,
+    };
+  }
+
+  it('writes the season in the import format, which imports again', () => {
+    const out = exportSeason(record());
+    expect(out).toEqual(season());
+    expect(validateSeasonImport(out)).toBeNull();
+  });
+
+  it('keeps team names, and tells apart managers with the same name', () => {
+    const r = record();
+    r.teams[0].name = 'Hot Bag Summer';
+    r.teams[1].manager = 'A';
+    const out = exportSeason(r);
+    expect(out.managers.map((m) => [m.name, m.teamName])).toEqual([['A', 'Hot Bag Summer'], ['A 2', undefined], ['C', undefined]]);
+    expect(out.drafts[0].pickOrder).toEqual(['A', 'A 2', 'C']);
+    expect(validateSeasonImport(out)).toBeNull();
   });
 });

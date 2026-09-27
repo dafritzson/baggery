@@ -154,3 +154,59 @@ export function importSpells(season: SeasonImport): ImportSpell[] {
   }
   return spells;
 }
+
+/** A season as the app keeps it, for exportSeason: team ids rather than manager names. */
+export interface SeasonRecord {
+  year: number;
+  teams: { id: string; manager: string; name: string | null; eliminatedAfterRound: number | null }[];
+  drafts: {
+    number: number;
+    locksAt: string | null;
+    /** Team ids in first-round order. */
+    pickOrder: string[];
+    /** In action order. */
+    actions: { teamId: string; type: 'pick' | 'yield'; add: PlayerId | null; drop: PlayerId | null }[];
+  }[];
+  players: { id: PlayerId; fullName: string; teamId: number }[];
+  mlbTeams: SeasonImport['mlbTeams'];
+}
+
+/** What an export adds to SeasonImport: the team names managers chose (import ignores them). */
+export type SeasonExport = Omit<SeasonImport, 'managers'> & { managers: (SeasonImport['managers'][number] & { teamName?: string })[] };
+
+/**
+ * A season in the import format: the league's own inputs (who managed, every draft's order and
+ * picks, who went out when), with the players and MLB teams they name. Everything else (games,
+ * box scores, stats) is MLB's and can be loaded again. A finished season exports as a file the
+ * Past seasons card can import. Managers are keyed by name, so a repeated name gets its slot.
+ */
+export function exportSeason(r: SeasonRecord): SeasonExport {
+  const managerOf = new Map<string, string>();
+  const used = new Set<string>();
+  for (const t of r.teams) {
+    let name = t.manager;
+    for (let n = 2; used.has(name); n++) name = `${t.manager} ${n}`;
+    used.add(name);
+    managerOf.set(t.id, name);
+  }
+  const manager = (teamId: string) => managerOf.get(teamId) ?? teamId;
+  const rostered = new Set(r.drafts.flatMap((d) => d.actions.flatMap((a) => [a.add, a.drop])).filter((id): id is number => id !== null));
+  return {
+    year: r.year,
+    managers: r.teams.map((t) => ({
+      name: manager(t.id),
+      eliminatedAfterRound: t.eliminatedAfterRound as 1 | 2 | 3 | null,
+      ...(t.name ? { teamName: t.name } : {}),
+    })),
+    drafts: [...r.drafts]
+      .sort((a, b) => a.number - b.number)
+      .map((d) => ({
+        number: d.number,
+        locksAt: d.locksAt ?? '',
+        pickOrder: d.pickOrder.map(manager),
+        actions: d.actions.map((a) => ({ manager: manager(a.teamId), type: a.type, add: a.add, drop: a.drop })),
+      })),
+    players: r.players.filter((p) => rostered.has(p.id)).sort((a, b) => a.id - b.id),
+    mlbTeams: [...r.mlbTeams].sort((a, b) => a.id - b.id),
+  };
+}
