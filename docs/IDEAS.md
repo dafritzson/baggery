@@ -73,12 +73,12 @@ Still open:
 
 ## Faster first visits to tabs
 
-Tabs now stay mounted once opened, and pressing one starts drawing it before the press ends
-(`app/src/components/section-nav.tsx`), so going back to a tab takes a frame or two. What's left is
-each tab's first visit per app open, and on iPhone that's most launches: iOS closes a Home Screen
-app that's been in the background a while. `scripts/bench-tabs.mjs` times it (phone viewport, 4x
-CPU slowdown, the 2025 season, 80 ms taps): Research 234 ms to its first frame, Draft 56, Games 47,
-Almanac 25 (then its data), Standings 21. Ideas, biggest first:
+Tabs now stay mounted once opened (`app/src/components/section-nav.tsx`), so going back to a tab
+takes a frame or two. What's left is each tab's first visit per app open, and on iPhone that's most
+launches: iOS closes a Home Screen app that's been in the background a while.
+`scripts/bench-tabs.mjs` times it (phone viewport, 4x CPU slowdown, the 2025 season, 80 ms taps):
+Research ~255 ms to its first frame, Games ~100, Draft ~90, Almanac ~35 (then its data), Standings
+~35. Ideas, biggest first:
 
 1. **Research** draws all of its ~200 rows at once (about 5,000 DOM nodes, ~250 ms at 4x).
    Virtualize the rows. The name column is as wide as the longest name it has drawn, so drawing
@@ -86,6 +86,8 @@ Almanac 25 (then its data), Standings 21. Ideas, biggest first:
 2. **Pre-render tabs** in idle time after the app opens: React's `<Activity mode="hidden">`
    renders at the lowest priority and runs no effects until shown. Adding each tab's DOM is one
    task that can't be split, though, which could make Home's bag game stutter while it happens.
+   Not on the tab's press-in: iPhone Safari takes a tap that changes the page before the finger
+   lifts for a hover and doesn't click, so the first tap on each tab did nothing (tried in #148).
 3. **Almanac:** keep a copy on the device and show it while it reloads. Prefetching on app start
    costs egress and invocations for every open (docs/LIMITS.md).
 4. **App open:** keep the last season data on the device and show it at once while it reloads

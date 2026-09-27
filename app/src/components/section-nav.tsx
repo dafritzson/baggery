@@ -123,15 +123,10 @@ function switchTab({ state, navigation }: TabBarProps, s: Section, year: number 
 }
 
 /**
- * Starts drawing a tab that hasn't been opened yet as soon as its button is pressed, so that it's
- * ready, or nearly, by the time the press ends and switchTab shows it.
+ * The sections, the one on show, and `go`, which the tab buttons call on press. Nothing may change
+ * the page on press-in: iPhone Safari takes a tap that does, before the finger lifts, for a hover
+ * and doesn't click (drawing a tab on press-in made the first tap on each tab do nothing).
  */
-function preloadTab({ state, navigation }: TabBarProps, s: Section, year: number | undefined) {
-  const route = state.routes.find((r) => r.name === s.route);
-  if (!route || route.state || state.preloadedRouteKeys.includes(route.key) || state.history.some((h) => h.key === route.key)) return;
-  navigation.preload(route.name, s.stack ? { screen: 'index', params: withYear(undefined, year) } : withYear(route.params, year));
-}
-
 function useSections() {
   const pathname = usePathname();
   const { requestedYear } = useSeason();
@@ -141,10 +136,7 @@ function useSections() {
     if (tabBarRef.current) switchTab(tabBarRef.current, s, requestedYear);
     else router.navigate({ pathname: s.path as never, params: requestedYear ? { year: requestedYear } : {} });
   };
-  const preload = (s: Section) => {
-    if (tabBarRef.current) preloadTab(tabBarRef.current, s, requestedYear);
-  };
-  return { sections: SECTIONS, active, go, preload };
+  return { sections: SECTIONS, active, go };
 }
 
 /**
@@ -178,7 +170,7 @@ export function TabScreen({ children }: { children: ReactNode }) {
 /** Desktop: section tabs inline in the app header. */
 export function HeaderTabs() {
   const theme = useTheme();
-  const { sections, active, go, preload } = useSections();
+  const { sections, active, go } = useSections();
   return (
     <View style={styles.headerTabs} accessibilityRole="tablist">
       {sections.map((s) => {
@@ -188,7 +180,6 @@ export function HeaderTabs() {
             key={s.label}
             accessibilityRole="tab"
             aria-selected={selected}
-            onPressIn={() => preload(s)}
             onPress={() => go(s)}
             style={[styles.headerTab, selected && { borderBottomColor: theme.text }]}>
             <ThemedText type="smallBold" themeColor={selected ? 'text' : 'textSecondary'}>{s.label}</ThemedText>
@@ -212,7 +203,7 @@ export const BOTTOM_TAB_BAR_SPACE = 88;
 function BottomTabBar() {
   const dark = useColorScheme() === 'dark';
   const pathname = usePathname();
-  const { sections, active, go, preload } = useSections();
+  const { sections, active, go } = useSections();
   // Readable over whatever's behind it: the theme's glass over plain pages, a darker glass with
   // white labels over artwork (Home's ballpark), in either theme.
   const look = OVER_ARTWORK(pathname) ? LOOKS.overArtwork : dark ? LOOKS.dark : LOOKS.light;
@@ -265,7 +256,6 @@ function BottomTabBar() {
               accessibilityRole="tab"
               aria-selected={selected}
               accessibilityLabel={s.label}
-              onPressIn={() => preload(s)}
               onPress={() => go(s)}
               onLayout={(e) => {
                 const { x, width } = e.nativeEvent.layout;

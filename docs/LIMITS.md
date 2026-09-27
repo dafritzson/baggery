@@ -83,9 +83,7 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   `app/src/components/section-nav.tsx`), so going back to one loads nothing, where every switch
   used to open it anew and reload what it loads for itself (Research's Post PA and TB, the
   Almanac after 5 minutes). A tab that isn't on show starts no loads of its own; the season and
-  scores it shows are the app-wide ones. Pressing a tab's button starts drawing it before the press
-  ends, so a press that slides off still opens that tab in the background, with its first load.
-  Fewer loads than before, and no new realtime channels or Edge Function calls.
+  scores it shows are the app-wide ones. Fewer loads than before, and no new realtime channels or Edge Function calls.
 - **Adv% and xBags.** Computed in the app from the season and scores it already loads. The season
   load gains each team's seed and league (a few bytes per team). No new calls, polling or storage.
 - **The player popup's Baggery section.** Each time the popup opens it loads the player's MLB
