@@ -14,7 +14,7 @@ import { PlayerName } from '@/components/player-name';
 import { PlayersList, availablePlayers, useDraftBoard } from '@/components/players-list';
 import { Screen } from '@/components/screen';
 import { Sheet } from '@/components/sheet';
-import { RosterRows, TeamTile, emptySlots } from '@/components/team-roster';
+import { FoldChevron, HeadshotStack, RosterRows, TeamTile, emptySlots } from '@/components/team-roster';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
@@ -369,19 +369,38 @@ function Board({ data, draft, config }: { data: SeasonData; draft: Draft; config
 
 /** Sidebar: your current players. */
 function MyRoster({ data, teamId }: { data: SeasonData; teamId: string }) {
+  const theme = useTheme();
+  const [open, setOpen] = useState(true);
   const roster = currentRosters(data).get(teamId) ?? [];
   return (
-    <Card title={`My roster · ${roster.length}/${ROSTER_SIZE}`}>
-      {roster.length > 0 && (
-        <ThemedText themeColor="textSecondary" style={styles.statHead}>Season TB</ThemedText>
+    <Card>
+      {/* Like a card title, but tapping it folds the roster down to a headshot stack. */}
+      <Pressable
+        onPress={() => setOpen(!open)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityHint={open ? 'Hides your players' : 'Shows your players'}
+        style={styles.foldHead}>
+        <ThemedText type="smallBold" themeColor="textSecondary" style={styles.foldTitle}>
+          My roster · {roster.length}/{ROSTER_SIZE}
+        </ThemedText>
+        {!open && <HeadshotStack roster={roster} surface={theme.backgroundElement} />}
+        <FoldChevron open={open} />
+      </Pressable>
+      {open && (
+        <>
+          {roster.length > 0 && (
+            <ThemedText themeColor="textSecondary" style={styles.statHead}>Season TB</ThemedText>
+          )}
+          <RosterRows
+            data={data}
+            roster={roster}
+            empty={emptySlots(data, roster, true)}
+            stat={(id) => String(data.poolByPlayer.get(id)?.regular_season_tb ?? '')}
+            stacked
+          />
+        </>
       )}
-      <RosterRows
-        data={data}
-        roster={roster}
-        empty={emptySlots(data, roster, true)}
-        stat={(id) => String(data.poolByPlayer.get(id)?.regular_season_tb ?? '')}
-        stacked
-      />
     </Card>
   );
 }
@@ -788,6 +807,9 @@ const styles = StyleSheet.create({
   boardPick: { minHeight: 64, borderRadius: Radius.md, padding: Spacing.two, borderWidth: 2, borderColor: 'transparent' },
   dropRow: { borderWidth: 2, borderRadius: Radius.md, padding: Spacing.two },
   buttonRow: { flexDirection: 'row', gap: Spacing.two },
+  foldHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two + 2 },
+  // Card's title look (see Card), in a header that also folds.
+  foldTitle: { flex: 1, textTransform: 'uppercase', letterSpacing: 0.5 },
   // Over My roster's last column.
   statHead: { alignSelf: 'flex-end', fontSize: 11, lineHeight: 14, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: -Spacing.one },
   rosters: { gap: Spacing.two + 2 },

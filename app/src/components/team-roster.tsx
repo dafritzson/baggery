@@ -76,24 +76,8 @@ export function TeamTile({
             <ThemedText type="small" style={{ color: theme.accent }}>Rename</ThemedText>
           </Pressable>
         )}
-        {!open && roster.length > 0 && (
-          <View style={styles.stack}>
-            {roster.map((id, i) => (
-              <Image
-                key={id}
-                source={headshotUrl(id, 96)}
-                style={[styles.stackHeadshot, { backgroundColor: theme.backgroundElement, borderColor: surface }, i > 0 && styles.stackOverlap]}
-                contentFit="cover"
-                accessibilityIgnoresInvertColors
-              />
-            ))}
-          </View>
-        )}
-        <SymbolView
-          name={open ? { ios: 'chevron.up', android: 'expand_less', web: 'expand_less' } : { ios: 'chevron.down', android: 'expand_more', web: 'expand_more' }}
-          size={20}
-          tintColor={theme.textSecondary}
-        />
+        {!open && <HeadshotStack roster={roster} surface={surface} />}
+        <FoldChevron open={open} />
       </Pressable>
       {open &&
         (roster.length === 0 ? (
@@ -102,6 +86,37 @@ export function TeamTile({
           <RosterRows data={data} roster={roster} empty={emptySlots(data, roster)} />
         ))}
     </View>
+  );
+}
+
+/** A folded roster: its hitters' headshots, overlapping. `surface` is the color behind them. */
+export function HeadshotStack({ roster, surface }: { roster: number[]; surface: string }) {
+  const theme = useTheme();
+  if (roster.length === 0) return null;
+  return (
+    <View style={styles.stack}>
+      {roster.map((id, i) => (
+        <Image
+          key={id}
+          source={headshotUrl(id, 96)}
+          style={[styles.stackHeadshot, { backgroundColor: theme.backgroundSelected, borderColor: surface }, i > 0 && styles.stackOverlap]}
+          contentFit="cover"
+          accessibilityIgnoresInvertColors
+        />
+      ))}
+    </View>
+  );
+}
+
+/** Up when a roster is open, down when it's folded. */
+export function FoldChevron({ open }: { open: boolean }) {
+  const theme = useTheme();
+  return (
+    <SymbolView
+      name={open ? { ios: 'chevron.up', android: 'expand_less', web: 'expand_less' } : { ios: 'chevron.down', android: 'expand_more', web: 'expand_more' }}
+      size={20}
+      tintColor={theme.textSecondary}
+    />
   );
 }
 
