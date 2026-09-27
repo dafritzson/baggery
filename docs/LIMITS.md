@@ -77,6 +77,8 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   hitter who has batted, ~15 KB at most by the World Series. At ~15 people opening it ~10 times a
   day, that's ~70 MB a month. It doesn't follow live games, so it adds nothing per poll; the
   poller's box score rows just carry one more number (PA).
+- **Adv% and xBags.** Computed in the app from the season and scores it already loads. The season
+  load gains each team's seed and league (a few bytes per team). No new calls, polling or storage.
 - **Realtime messages per second.** The old per-row Postgres Changes could burst 150–250 messages
   right after a poll on a busy day. One broadcast per poll keeps it to about one message per open
   app every 10 seconds. The draft room still uses Postgres Changes on low-traffic tables

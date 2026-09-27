@@ -15,6 +15,10 @@ export interface PlayerRow {
   name: string;
   team: string;
   wins: number | null;
+  /** His team's chance (0–100) to win the series it's in or waiting for; null without seeds. */
+  adv: number | null;
+  /** Expected TB for the rest of the postseason (core/stats.ts expectedBags). */
+  xBags: number | null;
   bye: boolean;
   /** This postseason so far: null before it has games or his team has played (or PA from before it was stored). */
   postPa: number | null;
@@ -63,6 +67,8 @@ export interface Column {
   postseason?: boolean;
   /** Only for Draft 1: left out once the postseason has games, when it no longer tells anything. */
   draft1?: boolean;
+  /** From the team odds: left out when there are none (no seeds yet, or a past season's format). */
+  odds?: boolean;
 }
 
 /** Bounds per column, from the filter menus in the header. */
@@ -87,7 +93,9 @@ const rate = (key: ColumnKey, label: string, title: string, width = 52): Column 
 });
 
 export const COLUMNS: Column[] = [
-  { ...count('wins', 'Wins', 'Team wins', 50), default: true },
+  { ...count('adv', 'Adv%', "His team's chance to win its current series", 54), format: (v) => `${Math.round(v)}%`, default: true, odds: true },
+  { ...count('xBags', 'xBags', 'Expected TB across the rest of the postseason', 58), format: oneDecimal, default: true, odds: true },
+  count('wins', 'Wins', 'Team wins', 50),
   { key: 'bye', label: 'Bye', title: 'Team has a Wild Card bye', width: 44, value: (r) => (r.bye ? 1 : 0), format: (v) => (v ? '✓' : ''), default: true, flag: { yes: 'Bye', no: 'No bye' }, draft1: true },
   { ...count('postPa', 'Post PA', 'Plate appearances this postseason', 66), default: true, postseason: true },
   { ...count('postTb', 'Post TB', 'Total bases this postseason', 66), default: true, postseason: true },
@@ -126,6 +134,17 @@ const ROW_HEIGHT = 36;
 // Web only: the header row and name column stay in view while the table scrolls under them.
 const sticky = (edges: { top?: number; left?: number }, zIndex: number) =>
   ({ position: 'sticky', ...edges, zIndex }) as unknown as ViewStyle;
+
+/**
+ * Web: shows `text` when the pointer rests on the element (react-native-web doesn't pass `title`
+ * through). Phones have no hover; the column menu lists what each column is.
+ */
+function hoverTitle(text: string) {
+  if (Platform.OS !== 'web') return undefined;
+  return (el: unknown) => {
+    (el as HTMLElement | null)?.setAttribute?.('title', text);
+  };
+}
 
 /** Compares with nulls last, whichever way the column is sorted. */
 function compareNullable(a: number | null, b: number | null, desc: boolean): number {
@@ -239,7 +258,7 @@ export function PlayerTable({
       <View style={[styles.header, styles.cells, { borderBottomColor: theme.border }, box && [sticky({ top: 0 }, 1), fill]]}>
         {columns.map((c) => (
           <View key={c.key} style={{ minWidth: c.width, flexGrow: c.width, flexBasis: c.width }}>
-            <Pressable onPress={() => sortBy(c.key)} style={styles.cell}>
+            <Pressable ref={hoverTitle(c.title)} onPress={() => sortBy(c.key)} style={styles.cell}>
               <ThemedText
                 type="smallBold"
                 numberOfLines={1}

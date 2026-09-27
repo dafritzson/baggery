@@ -46,7 +46,14 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
   OPS, TB/G, RDSLG, RDTB and TB·E[G]/162 are computed from them in the app, formulas in
   `core/stats.ts`). Once the postseason has games, the table also shows Post PA and Post TB, summed
   from `player_game_stats` by `postseason_totals()` (up to a finished draft's lock), and drops
-  Bye, which only matters for Draft 1. Which table columns show is each person's choice, saved in their browser. `season_mlb_teams` holds each team's wins and Wild Card bye.
+  Bye, which only matters for Draft 1.
+- Team odds (`core/odds.ts`), computed in the app from each team's seed and wins
+  (`season_mlb_teams`, set by `sync-pool`) and the series so far: regular-season win % shrunk
+  toward .500 by 70 games, log5 plus a small home edge per game, the real series formats and
+  home-field patterns, and MLB's fixed bracket. The draft table shows **Adv%** (his team's chance
+  to win its current series) and **xBags** (expected TB for the rest of the postseason: RDSLG ×
+  his AB per game × his team's expected games left). Both are hidden without a full 6 seeds per
+  league, so re-sync the pool after the seeds exist. Which table columns show is each person's choice, saved in their browser. `season_mlb_teams` holds each team's wins and Wild Card bye.
 - `drafts`, `draft_actions`: every pick or yield, numbered. `unique(draft_id, action_number)`
   prevents double picks.
 - `roster_spells`: (team, player, from, to) intervals. `unique(season_id, mlb_player_id)`

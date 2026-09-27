@@ -1,6 +1,6 @@
 // Rebuilds a season's draft pool from the MLB Stats API: every hitter on the active
 // roster of a postseason team, with regular-season stats (TB for autodraft; PA, AB, games, SLG,
-// OPS+ and the other counts for the draft room) and each team's wins and Wild Card bye.
+// OPS+ and the other counts for the draft room) and each team's wins, Wild Card bye and seed.
 // Commissioner only. For an imported past season it fills the pool for the Draft and Research
 // tabs from that year's end-of-season rosters, for the postseason teams the import stored.
 //
@@ -13,6 +13,7 @@ import {
   type StandingsTeam,
   addBattingLines,
   byeTeamIds,
+  playoffSeeds,
   emptyBattingLine,
   opsPlus,
   seasonSlg,
@@ -175,6 +176,7 @@ serve(async (req) => {
       ? importedTeamIds
       : table.filter((t) => t.clinched).map((t) => t.teamId);
   if (!playoffTeamIds.length) throw new UserError('No teams have clinched a postseason spot yet.');
+  const seeds = playoffSeeds(table, playoffTeamIds);
 
   // One entry per player, in case a player turns up on two teams' rosters.
   const players = [
@@ -209,9 +211,10 @@ serve(async (req) => {
           mlb_team_id: id,
           wins: standingOf.get(id)?.wins ?? null,
           has_bye: byes.has(id),
+          seed: seeds.get(id) ?? null,
         })),
       )}
-      on conflict (season_id, mlb_team_id) do update set wins = excluded.wins, has_bye = excluded.has_bye`;
+      on conflict (season_id, mlb_team_id) do update set wins = excluded.wins, has_bye = excluded.has_bye, seed = excluded.seed`;
 
     if (players.length) {
       await tx`
