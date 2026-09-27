@@ -2,9 +2,10 @@
 // the bags as they happened (every hit that counted for a fantasy team still in that round).
 //
 // A stop is a moment in the season: a day's first `bag` bags. Games before that day count in
-// full, from their box scores. That day's games count only up to that bag, from the hits (TB, H
-// and HR; the rest of their lines aren't known yet, so tiebreakers use what is). At a day's last
-// bag the day's box scores count in full, so its end matches the standings the day really ended with.
+// full, from their box scores. That day's games count only up to that bag: from their play-by-play
+// lines when the app has them (every plate appearance and run, so tiebreakers are exact), else
+// from the hits (TB, H and HR only). At a day's last bag the day's box scores count in full, so
+// its end matches the standings the day really ended with.
 
 import { ownerAt, type ScoreGame, type ScoreStat } from './scoreboard.ts';
 import type { RosterSpell } from './scoring.ts';
@@ -22,6 +23,22 @@ export interface TimelineHit {
   event: '1B' | '2B' | '3B' | 'HR';
   /** When the play ended; hits without it count only at the end of their day. */
   endedAt: string | null;
+}
+
+/** What one play added to a player's batting line (mlb_play_lines). */
+export interface PlayLine {
+  gamePk: number;
+  playerId: PlayerId;
+  endedAt: string | null;
+  ab: number;
+  h: number;
+  tb: number;
+  hr: number;
+  bb: number;
+  hbp: number;
+  sf: number;
+  r: number;
+  rbi: number;
 }
 
 export const HIT_BAGS: Record<TimelineHit['event'], number> = { '1B': 1, '2B': 2, '3B': 3, HR: 4 };
@@ -130,19 +147,42 @@ export function roundDays(tl: Timeline, games: TimelineGame[], round: FantasyRou
 
 /**
  * The scrubber's stops at a zoom: the end of each day for the season; every bag of the round
- * (`at`'s) when zoomed in on it; and one day's start and every bag when zoomed in on that day. A day
- * without bags is only its end.
+ * (`at`'s) when zoomed in on it; and one day's first pitch and every bag when zoomed in on that day.
+ * A day's last bag is its end; a day without bags is only its end.
  */
 export function stopsFor(tl: Timeline, zoom: Zoom, at: Stop): Stop[] {
   if (!tl.days.length) return [];
   if (zoom === 'season') return tl.days.map((_, i) => dayEnd(tl, i));
-  const bagsOf = (day: number, from: number) => {
-    const n = tl.days[day].bags.length;
-    return n ? Array.from({ length: n - from + 1 }, (_, k) => ({ day, bag: from + k })) : [{ day, bag: 0 }];
-  };
-  if (zoom === 'day') return bagsOf(at.day, 0);
+  if (zoom === 'day') return bagsOf(tl, at.day, 0);
   const round = tl.days[at.day].round;
-  return tl.days.flatMap((d, i) => (d.round === round ? bagsOf(i, 1) : []));
+  return tl.days.flatMap((d, i) => (d.round === round ? bagsOf(tl, i, 1) : []));
+}
+
+/** A day's stops from its `from`th bag on; a day without bags is only its end. */
+function bagsOf(tl: Timeline, day: number, from: number): Stop[] {
+  const n = tl.days[day].bags.length;
+  return n ? Array.from({ length: n - from + 1 }, (_, k) => ({ day, bag: from + k })) : [{ day, bag: 0 }];
+}
+
+/** What playback steps through: always bag by bag, over the whole season when zoomed out. */
+export function playStops(tl: Timeline, zoom: Zoom, at: Stop): Stop[] {
+  return zoom === 'season' ? tl.days.flatMap((_, i) => bagsOf(tl, i, 1)) : stopsFor(tl, zoom, at);
+}
+
+/** Where playback goes after `at`; null at the end. */
+export function nextPlayStop(tl: Timeline, zoom: Zoom, at: Stop): Stop | null {
+  const from = stopPosition(tl, at);
+  return playStops(tl, zoom, at).find((s) => stopPosition(tl, s) > from) ?? null;
+}
+
+/**
+ * The stop before `at`, to show who moved since: the day before at a day's end on the season,
+ * else the bag before. Null at the start.
+ */
+export function previousStop(tl: Timeline, zoom: Zoom, at: Stop): Stop | null {
+  const list = zoom === 'season' && isDayEnd(tl, at) ? stopsFor(tl, zoom, at) : playStops(tl, zoom, at);
+  const from = stopPosition(tl, at);
+  return list.filter((s) => stopPosition(tl, s) < from).pop() ?? null;
 }
 
 /** The stop in `list` nearest to a position on the x axis. */
@@ -155,9 +195,16 @@ export function nearestStop(tl: Timeline, list: Stop[], position: number): Stop 
 /**
  * The games and stat lines as they stood at a stop, to score like the live ones: games after it
  * haven't started, and the stop's day counts its games up to the stop's bag (a game is live once
- * its first pitch was before that bag).
+ * its first pitch was before that bag). A game with `plays` gets its whole line up to that moment
+ * from them; one without, just its hits.
  */
-export function scoresAt<G extends TimelineGame>(tl: Timeline, games: G[], stats: ScoreStat[], stop: Stop): { games: G[]; stats: ScoreStat[] } {
+export function scoresAt<G extends TimelineGame>(
+  tl: Timeline,
+  games: G[],
+  stats: ScoreStat[],
+  stop: Stop,
+  plays: PlayLine[] = [],
+): { games: G[]; stats: ScoreStat[] } {
   const day = tl.days[stop.day];
   const end = isDayEnd(tl, stop);
   // At the day's end its box scores count, not its hits.
@@ -173,13 +220,24 @@ export function scoresAt<G extends TimelineGame>(tl: Timeline, games: G[], stats
     return { ...g, status: Date.parse(g.start) <= cutoff ? 'Live' : 'Preview' };
   });
   const lines = new Map<string, ScoreStat>();
+  const lineOf = (gamePk: number, playerId: PlayerId) => {
+    const key = `${gamePk}:${playerId}`;
+    const line = lines.get(key) ?? { gamePk, playerId, tb: 0, ab: 0, h: 0, bb: 0, hbp: 0, sf: 0, hr: 0, r: 0, rbi: 0 };
+    lines.set(key, line);
+    return line;
+  };
+  const withPlays = new Set(plays.filter((p) => partial.has(p.gamePk)).map((p) => p.gamePk));
+  for (const p of plays) {
+    if (!withPlays.has(p.gamePk) || !p.endedAt || Date.parse(p.endedAt) > cutoff) continue;
+    const line = lineOf(p.gamePk, p.playerId);
+    for (const k of ['tb', 'ab', 'h', 'bb', 'hbp', 'sf', 'hr', 'r', 'rbi'] as const) line[k] = (line[k] ?? 0) + p[k];
+  }
   for (const b of bags) {
-    const key = `${b.gamePk}:${b.playerId}`;
-    const line = lines.get(key) ?? { gamePk: b.gamePk, playerId: b.playerId, tb: 0, h: 0, hr: 0 };
+    if (withPlays.has(b.gamePk)) continue;
+    const line = lineOf(b.gamePk, b.playerId);
     line.tb += b.bags;
     line.h = (line.h ?? 0) + 1;
     if (b.event === 'HR') line.hr = (line.hr ?? 0) + 1;
-    lines.set(key, line);
   }
   const later = new Set(shown.filter((g) => g.status === 'Preview').map((g) => g.gamePk));
   return {

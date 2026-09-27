@@ -78,6 +78,15 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   (2020–2024 backfilled by a migration, ~3,300 rows, about 1 MB of database), so opening a past
   season loads its rostered players' hits as well: ~500 rows, an estimated 50 KB. Even at 20
   past-season views a day that's ~30 MB a month.
+  Rebuilding the middle of a day exactly (tiebreakers included) takes the season's play-by-play
+  batting lines (`mlb_play_lines`, ~3,500–4,300 rows a season, all hitters). The app loads them for
+  the rostered players only, in one request, and only once the scrubber is in the middle of a day
+  or playing: an estimated 200–300 KB, kept for the session. Not loading them with the scores
+  (every app open) is the point: that would be over 1 GB a month. At ~10 scrubbing sessions a day
+  it's ~90 MB a month. During live games the live games' lines reload once a minute while wanted.
+  poll-games saves these lines from the play-by-play it already reads for the hits, plus one more
+  read of each game 10 minutes after it ends: ~15 extra MLB requests a postseason day, no extra
+  Edge Function calls. The table is ~22,000 rows for 2020–2025 (~3 MB).
 - **Post PA and Post TB.** The draft table (draft room and Research) loads each hitter's postseason
   PA and TB once when it opens, summed in the database (`postseason_totals`): one small row per
   hitter who has batted, ~15 KB at most by the World Series. Research stays open once opened (see

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boxscoreBatting, clipsForHits, highlightClips, linescoreLive, linescoreRuns, playHits, savantHasVideo, scheduleGames } from '../supabase/functions/poll-games/feed.ts';
+import { boxscoreBatting, clipsForHits, highlightClips, linescoreLive, linescoreRuns, playHits, playLines, savantHasVideo, scheduleGames } from '../supabase/functions/poll-games/feed.ts';
 
 const team = (id: number, score?: number) => ({ team: { id }, score });
 
@@ -258,5 +258,47 @@ describe('savantHasVideo', () => {
     expect(savantHasVideo(withVideo)).toBe(true);
     expect(savantHasVideo('<div class="no-video">No Video Found</div>')).toBe(false);
     expect(savantHasVideo('')).toBe(false);
+  });
+});
+
+describe('playLines', () => {
+  // Shaped like /game/{gamePk}/playByPlay.
+  const play = (atBatIndex: number, eventType: string, batter: number, extra: object = {}) => ({
+    result: { eventType, rbi: 0 },
+    matchup: { batter: { id: batter } },
+    about: { atBatIndex, isComplete: true, endTime: `2025-10-28T00:0${atBatIndex}:00.000Z` },
+    runners: [],
+    ...extra,
+  });
+  const scored = (id: number) => ({ details: { runner: { id } }, movement: { end: 'score', isOut: false } });
+  const data = {
+    allPlays: [
+      play(0, 'walk', 1),
+      play(1, 'home_run', 2, { result: { eventType: 'home_run', rbi: 2 }, runners: [scored(1), scored(2)] }),
+      play(2, 'sac_fly', 3, { result: { eventType: 'sac_fly', rbi: 1 }, runners: [scored(4)] }),
+      play(3, 'strikeout', 5),
+      // A runner caught stealing to end the inning: not the batter's plate appearance.
+      play(4, 'caught_stealing_2b', 6),
+      play(5, 'single', 7, { about: { atBatIndex: 5, isComplete: false } }),
+    ],
+  };
+  const lines = playLines(9, data);
+  const of = (atBat: number, player: number) => lines.find((l) => l.at_bat === atBat && l.mlb_player_id === player);
+
+  it("adds up each batter's plate appearance as the box score counts it", () => {
+    expect(of(0, 1)).toMatchObject({ pa: 1, ab: 0, bb: 1, h: 0 });
+    expect(of(1, 2)).toMatchObject({ game_pk: 9, pa: 1, ab: 1, h: 1, tb: 4, hr: 1, r: 1, rbi: 2, ended_at: '2025-10-28T00:01:00.000Z' });
+    expect(of(2, 3)).toMatchObject({ pa: 1, ab: 0, sf: 1, rbi: 1 });
+    expect(of(3, 5)).toMatchObject({ pa: 1, ab: 1, h: 0 });
+  });
+
+  it('gives a run to each runner who scored, when the play ended', () => {
+    expect(of(1, 1)).toMatchObject({ pa: 0, ab: 0, r: 1 });
+    expect(of(2, 4)).toMatchObject({ pa: 0, r: 1 });
+  });
+
+  it('skips plays that are not plate appearances, and the one still in progress', () => {
+    expect(of(4, 6)).toBeUndefined();
+    expect(of(5, 7)).toBeUndefined();
   });
 });
