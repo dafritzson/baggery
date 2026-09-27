@@ -153,8 +153,8 @@ describe('playerSeries', () => {
         name: 'Wild Card',
         length: 3,
         games: [
-          { number: 1, tb: 5, live: false, teamId: 'A' },
-          { number: 2, tb: 0, live: false, teamId: 'A' },
+          { number: 1, tb: 5, live: false, teamId: 'A', dropped: false },
+          { number: 2, tb: 0, live: false, teamId: 'A', dropped: false },
         ],
         total: 5,
       },
@@ -164,7 +164,7 @@ describe('playerSeries', () => {
         name: 'Division Series',
         length: 5,
         // Game 2 hasn't started.
-        games: [{ number: 1, tb: 1, live: true, teamId: 'A' }],
+        games: [{ number: 1, tb: 1, live: true, teamId: 'A', dropped: false }],
         total: 1,
       },
     ]);
@@ -172,7 +172,7 @@ describe('playerSeries', () => {
 
   it('shows games before he was drafted with no team, so they counted for no one', () => {
     const series = playerSeries(GUERRERO, 141, games, stats, spells);
-    expect(series.map((s) => s.games)).toEqual([[{ number: 1, tb: 8, live: true, teamId: 'B' }]]);
+    expect(series.map((s) => s.games)).toEqual([[{ number: 1, tb: 8, live: true, teamId: 'B', dropped: false }]]);
     const late = playerSeries(GUERRERO, 141, games, stats, [{ ...spells[2], from: '2026-10-05T00:00:00Z' }]);
     expect(late[0].games[0].teamId).toBeNull();
   });
@@ -181,9 +181,22 @@ describe('playerSeries', () => {
     expect(playerSeries(DEVERS, 111, games, stats, spells).map((s) => s.games.map((g) => g.teamId))).toEqual([['B', 'B']]);
   });
 
+  it('tells games after he was dropped from games before he was drafted', () => {
+    // Judge on team A until after the Wild Card, then dropped: the Division Series game is his team's
+    // without him on any roster.
+    const dropped = playerSeries(JUDGE, 147, games, stats, [{ teamId: 'A', playerId: JUDGE, from: '2026-09-28T00:00:00Z', to: '2026-10-02T00:00:00Z' }]);
+    expect(dropped.map((s) => s.games.map((g) => [g.teamId, g.dropped]))).toEqual([
+      [['A', false], ['A', false]],
+      [[null, true]],
+    ]);
+    // Not drafted until after his first game: that one is undrafted, not dropped.
+    const late = playerSeries(GUERRERO, 141, games, stats, [{ ...spells[2], from: '2026-10-05T00:00:00Z' }]);
+    expect(late[0].games[0]).toMatchObject({ teamId: null, dropped: false });
+  });
+
   it('marks games his team played without him', () => {
     const benched = playerSeries(JUDGE, 147, games, stats.filter((s) => !(s.gamePk === 2 && s.playerId === JUDGE)), spells);
-    expect(benched[0].games[1]).toEqual({ number: 2, tb: null, live: false, teamId: 'A' });
+    expect(benched[0].games[1]).toEqual({ number: 2, tb: null, live: false, teamId: 'A', dropped: false });
     expect(benched[0].total).toBe(5);
   });
 
