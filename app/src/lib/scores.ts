@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { createContext, createElement, type ReactNode, use, useCallback, useEffect, useRef, useState } from 'react';
 
 import { type ScoreChanges, type Scores, applyChanges, toGame, toLine, toStat } from '@core/score-feed.ts';
 import type { RosterSpell } from '@core/scoring.ts';
 
-import type { SeasonData } from '@/lib/season';
+import { type SeasonData, useSeason } from '@/lib/season';
 import { supabase } from '@/lib/supabase';
 
 export type { BattingLine, GameInfo, Scores } from '@core/score-feed.ts';
@@ -14,7 +14,7 @@ export function coreSpells(data: SeasonData): RosterSpell[] {
 }
 
 const GAME_COLUMNS =
-  'game_pk, game_type, series_game_number, start_time, start_time_tbd, official_date, status, detailed_state, home_team_id, away_team_id, home_score, away_score, live, games_in_series';
+  'game_pk, game_type, series_game_number, start_time, start_time_tbd, official_date, status, detailed_state, home_team_id, away_team_id, home_score, away_score, live, games_in_series, final_seen_at';
 
 /**
  * One subscription to the "scores" broadcast, shared by every useScores (Games and Standings can
@@ -50,12 +50,51 @@ function listenForScores(listener: (changes: ScoreChanges) => void): () => void 
   };
 }
 
+interface ScoresState {
+  scores: Scores | null;
+  refetch: () => Promise<void>;
+}
+
+const ScoresContext = createContext<ScoresState>({ scores: null, refetch: async () => {} });
+
+/** Called with each poll's changes and the scores from before they were applied. */
+type ChangeListener = (before: Scores, changes: ScoreChanges) => void;
+const changeListeners = new Set<ChangeListener>();
+
+/**
+ * Loads the selected season's scores once for the whole app (Games, Standings and bag
+ * celebrations share them) and keeps them live.
+ */
+export function ScoresProvider({ children }: { children: ReactNode }) {
+  const { data } = useSeason();
+  return createElement(ScoresContext, { value: useLiveScores(data) }, children);
+}
+
+export function useScores(): ScoresState {
+  return use(ScoresContext);
+}
+
+/** Hears each poll's changes as they arrive, with the scores from just before. */
+export function useScoreChanges(listener: ChangeListener) {
+  const latest = useRef(listener);
+  useEffect(() => {
+    latest.current = listener;
+  }, [listener]);
+  useEffect(() => {
+    const l: ChangeListener = (before, changes) => latest.current(before, changes);
+    changeListeners.add(l);
+    return () => {
+      changeListeners.delete(l);
+    };
+  }, []);
+}
+
 /**
  * The season's postseason games and the rostered players' TB in them, kept live. The whole
  * season loads once (and again after a reconnect, or when the rostered players change); after
  * that, poll-games broadcasts each poll's changed rows in one message, which is applied as is.
  */
-export function useScores(data: SeasonData | null): { scores: Scores | null; refetch: () => Promise<void> } {
+function useLiveScores(data: SeasonData | null): ScoresState {
   const year = data?.season.year;
   // Reload when the set of rostered players changes, not on every season reload.
   const playerKey = data ? [...new Set(data.spells.map((s) => s.mlb_player_id))].sort().join(',') : '';
@@ -108,6 +147,8 @@ export function useScores(data: SeasonData | null): { scores: Scores | null; ref
       const started = (changes.games ?? []).some(
         (row) => row.status === 'Live' && current.current?.games.find((g) => g.gamePk === row.game_pk)?.status !== 'Live',
       );
+      const before = current.current;
+      if (before) for (const l of changeListeners) l(before, changes);
       setScores((s) => (s ? applyChanges(s, changes, year, rostered) : s));
       if (started) scheduleReload();
     });

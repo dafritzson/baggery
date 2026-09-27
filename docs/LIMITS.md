@@ -58,6 +58,15 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   sign-in is renewed), `lib/season.ts` retries up to 6 times over about a minute, then stops. A good
   start costs nothing extra; a bad one at most 6 more loads (~1 MB), and a lasting server error
   can't turn into endless reloads.
+  The scores load once per app open for every screen (`ScoresProvider` in `lib/scores.ts`), not
+  each time Games or Standings mounts, so bag celebrations can use them anywhere. That's the same
+  single load for anyone who opens either tab (most visits) and saves the second load when both
+  are mounted. The `scores` broadcast is now heard on every screen, not just those two: one
+  message per open app per poll either way, far below the realtime limits.
+  Bag celebrations add almost nothing: bags are found in the broadcast the app already gets, and
+  the popup's stats come from the loaded scores. Each of your hitters' bags reads this device's
+  spoiler delay (one tiny `push_subscriptions` row, only with alerts on), no Edge Function call.
+  Tapping a bag alert opens the app as it always did, with the bag in the link.
   The season also reloads once when the app's realtime connection comes back after dropping, as it
   does whenever a phone locks or leaves the app for a while; otherwise picks and roster changes
   made meanwhile would never show. A season load is estimated at ~100 KB (not yet measured; the

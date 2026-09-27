@@ -24,6 +24,10 @@ export async function loadPushState(): Promise<PushState> {
   return { kind: 'unsupported' };
 }
 
+export async function pushDelaySeconds(): Promise<number> {
+  return 0;
+}
+
 /** Turns alerts on (asking for permission) or changes their choices. Returns an error to show. */
 export async function savePush(_prefs: Prefs): Promise<string | null> {
   return 'Bag alerts need the web app for now.';

@@ -70,6 +70,7 @@ describe('score feed', () => {
       detailedState: 'In Progress',
       live: { inning: 3 },
       gamesInSeries: 5,
+      finalSeenAt: null,
     });
   });
 

@@ -12,16 +12,18 @@ import { OwnerBadge } from '@/components/owner-badge';
 import { Screen } from '@/components/screen';
 import { TeamNameField } from '@/components/team-name-sheet';
 import { ThemedText } from '@/components/themed-text';
+import { Toggle } from '@/components/toggle';
 import { Spacing } from '@/constants/theme';
 import { MAX_PHOTO_BYTES, removePhoto, uploadPhoto } from '@/lib/avatars';
 import { useAuth } from '@/lib/auth';
+import { saveCelebrationsEnabled, useCelebrationsEnabled } from '@/lib/bag-celebrations';
 import { useSeason } from '@/lib/season';
 import { supabase } from '@/lib/supabase';
 import { suggestTeamName, teamName } from '@/lib/teams';
 
 /**
- * Your settings: your photo, your team name for the season being viewed, bag alerts on this device,
- * and (commissioner) past seasons and their managers.
+ * Your settings: your photo, your team name for the season being viewed, bag alerts and
+ * celebrations on this device, and (commissioner) past seasons and their managers.
  */
 export default function SettingsScreen() {
   const { data, loading, refetch } = useSeason();
@@ -68,6 +70,7 @@ export default function SettingsScreen() {
         )}
       </Card>
       <BagAlertsCard />
+      <CelebrationsCard />
       <ImportSeasonCard />
       <PastManagersCard />
     </Screen>
@@ -125,7 +128,30 @@ function PhotoCard() {
   );
 }
 
+/** Bag celebrations on this device: the rain and "You got 2 bags!" popup when your hitter gets a bag. */
+function CelebrationsCard() {
+  const on = useCelebrationsEnabled();
+  return (
+    <Card title="Bag celebrations">
+      <ThemedText themeColor="textSecondary">
+        Bags rain down and a popup shows the hit when one of your hitters gets a bag while Baggery is open.
+      </ThemedText>
+      <View style={styles.toggleRow}>
+        <Toggle
+          options={[
+            { value: true, label: 'On' },
+            { value: false, label: 'Off' },
+          ]}
+          value={on}
+          onChange={saveCelebrationsEnabled}
+        />
+      </View>
+    </Card>
+  );
+}
+
 const styles = StyleSheet.create({
+  toggleRow: { flexDirection: 'row' },
   photoRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   photoActions: { flex: 1, gap: Spacing.two, alignItems: 'flex-start' },
 });

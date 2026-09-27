@@ -1,0 +1,224 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  type BagHit,
+  bagKey,
+  bagParam,
+  bagSummary,
+  bagsInChanges,
+  hitHeadline,
+  ordinal,
+  parseBagParam,
+  rainCount,
+} from '../supabase/functions/_shared/core/bag-celebration.ts';
+import { type Row, type Scores, toGame } from '../supabase/functions/_shared/core/score-feed.ts';
+import type { RosterSpell } from '../supabase/functions/_shared/core/scoring.ts';
+
+const OHTANI = 660271;
+const HARPER = 547180;
+const NOW = Date.parse('2026-10-04T23:30:00Z');
+
+const gameRow = (gamePk: number, over: Row = {}): Row => ({
+  game_pk: gamePk,
+  season_year: 2026,
+  game_type: 'D',
+  series_game_number: 1,
+  start_time: '2026-10-04T22:08:00+00:00',
+  start_time_tbd: false,
+  official_date: '2026-10-04',
+  status: 'Live',
+  detailed_state: 'In Progress',
+  home_team_id: 119,
+  away_team_id: 143,
+  home_score: 1,
+  away_score: 0,
+  live: null,
+  games_in_series: 5,
+  final_seen_at: null,
+  ...over,
+});
+
+const statRow = (playerId: number, over: Row = {}): Row => ({
+  game_pk: 1,
+  mlb_player_id: playerId,
+  tb: 0,
+  ab: 1,
+  h: 0,
+  doubles: 0,
+  triples: 0,
+  hr: 0,
+  bb: 0,
+  hbp: 0,
+  sf: 0,
+  r: 0,
+  rbi: 0,
+  ...over,
+});
+
+/** Ohtani is on "mine", Harper on "theirs". */
+const spells: RosterSpell[] = [
+  { teamId: 'mine', playerId: OHTANI, from: '2026-09-28T00:00:00Z', to: null },
+  { teamId: 'theirs', playerId: HARPER, from: '2026-09-28T00:00:00Z', to: null },
+];
+
+function scores(over: Partial<Scores> = {}): Scores {
+  return {
+    games: [toGame(gameRow(1))],
+    // Ohtani has a single so far.
+    stats: [{ gamePk: 1, playerId: OHTANI, tb: 1 }],
+    lines: [{ gamePk: 1, playerId: OHTANI, ab: 2, h: 1, doubles: 0, triples: 0, hr: 0, bb: 0 }],
+    ...over,
+  };
+}
+
+describe('bagsInChanges', () => {
+  it('finds a home run by your hitter', () => {
+    const changes = { stats: [statRow(OHTANI, { tb: 5, ab: 3, h: 2, hr: 1 })] };
+    expect(bagsInChanges(scores(), changes, spells, 'mine', NOW)).toEqual([
+      { gamePk: 1, playerId: OHTANI, tb: 5, bags: 4, singles: 0, doubles: 0, triples: 0, hr: 1 },
+    ]);
+  });
+
+  it("ignores other teams' hitters", () => {
+    const changes = { stats: [statRow(HARPER, { tb: 2, h: 1, doubles: 1 })] };
+    expect(bagsInChanges(scores(), changes, spells, 'mine', NOW)).toEqual([]);
+    expect(bagsInChanges(scores(), changes, spells, 'theirs', NOW)).toHaveLength(1);
+  });
+
+  it('ignores lines whose total bases did not go up', () => {
+    const changes = { stats: [statRow(OHTANI, { tb: 1, ab: 3, h: 1 })] };
+    expect(bagsInChanges(scores(), changes, spells, 'mine', NOW)).toEqual([]);
+  });
+
+  it('ignores a scoring change that takes a bag away', () => {
+    const changes = { stats: [statRow(OHTANI, { tb: 0, ab: 2, h: 0 })] };
+    expect(bagsInChanges(scores(), changes, spells, 'mine', NOW)).toEqual([]);
+  });
+
+  it('counts a line it had not seen as starting from nothing', () => {
+    const changes = { stats: [statRow(OHTANI, { tb: 2, h: 1, doubles: 1 })] };
+    expect(bagsInChanges(scores({ stats: [], lines: [] }), changes, spells, 'mine', NOW)).toEqual([
+      { gamePk: 1, playerId: OHTANI, tb: 2, bags: 2, singles: 0, doubles: 1, triples: 0, hr: 0 },
+    ]);
+  });
+
+  it('counts bags for the team that had the hitter when the game started', () => {
+    const traded: RosterSpell[] = [
+      { teamId: 'theirs', playerId: OHTANI, from: '2026-09-28T00:00:00Z', to: '2026-10-05T00:00:00Z' },
+      { teamId: 'mine', playerId: OHTANI, from: '2026-10-05T00:00:00Z', to: null },
+    ];
+    const changes = { stats: [statRow(OHTANI, { tb: 2, ab: 3, h: 2 })] };
+    expect(bagsInChanges(scores(), changes, traded, 'mine', NOW)).toEqual([]);
+    expect(bagsInChanges(scores(), changes, traded, 'theirs', NOW)).toHaveLength(1);
+  });
+
+  it('counts a bag read just after the game ended, not a scoring change hours later', () => {
+    const changes = (finalSeenAt: string) => ({
+      games: [gameRow(1, { status: 'Final', final_seen_at: finalSeenAt })],
+      stats: [statRow(OHTANI, { tb: 2, ab: 3, h: 2 })],
+    });
+    expect(bagsInChanges(scores(), changes('2026-10-04T23:25:00Z'), spells, 'mine', NOW)).toHaveLength(1);
+    expect(bagsInChanges(scores(), changes('2026-10-04T20:00:00Z'), spells, 'mine', NOW)).toEqual([]);
+  });
+
+  it('guesses the hit when the line from before is gone', () => {
+    const changes = { stats: [statRow(OHTANI, { tb: 3, ab: 3, h: 2, doubles: 1 })] };
+    expect(bagsInChanges(scores({ lines: [] }), changes, spells, 'mine', NOW)[0]).toMatchObject({ bags: 2, doubles: 1, singles: 0 });
+  });
+
+  it('finds nothing in a reload', () => {
+    expect(bagsInChanges(scores(), { reload: true }, spells, 'mine', NOW)).toEqual([]);
+  });
+
+  it('skips games it does not know yet', () => {
+    const changes = { stats: [statRow(OHTANI, { game_pk: 2, tb: 4, h: 1, hr: 1 })] };
+    expect(bagsInChanges(scores(), changes, spells, 'mine', NOW)).toEqual([]);
+  });
+});
+
+describe('bag links', () => {
+  const bag: BagHit = { gamePk: 776123, playerId: OHTANI, tb: 6, bags: 4, singles: 0, doubles: 0, triples: 0, hr: 1 };
+
+  it('round-trips a bag', () => {
+    expect(parseBagParam(bagParam(bag))).toEqual(bag);
+  });
+
+  it('keeps negative hit counts from a scoring change', () => {
+    const change = { ...bag, bags: 1, singles: -1, doubles: 1, hr: 0 };
+    expect(parseBagParam(bagParam(change))).toEqual(change);
+  });
+
+  it('rejects anything else', () => {
+    expect(parseBagParam(undefined)).toBeNull();
+    expect(parseBagParam('')).toBeNull();
+    expect(parseBagParam('1.2.3')).toBeNull();
+    expect(parseBagParam('1.2.x.1.1.0.0.0')).toBeNull();
+    expect(parseBagParam('1.2.3.0.0.0.0.0')).toBeNull();
+  });
+
+  it('names a bag by game, player and total bases', () => {
+    expect(bagKey(bag)).toBe(`776123-${OHTANI}-6`);
+  });
+});
+
+describe('hitHeadline', () => {
+  it('names the hit', () => {
+    expect(hitHeadline({ singles: 0, doubles: 0, triples: 0, hr: 1 })).toBe('Home run!');
+    expect(hitHeadline({ singles: 2, doubles: 0, triples: 0, hr: 0 })).toBe('2 singles!');
+    expect(hitHeadline({ singles: -1, doubles: 1, triples: 0, hr: 0 })).toBe('Scoring change');
+  });
+});
+
+describe('rainCount', () => {
+  const hit = (over: Partial<BagHit>): BagHit => ({ gamePk: 1, playerId: 1, tb: 1, bags: 1, singles: 1, doubles: 0, triples: 0, hr: 0, ...over });
+
+  it('rains harder for more bags, hardest for a home run', () => {
+    const single = rainCount(hit({}));
+    const double = rainCount(hit({ bags: 2, singles: 0, doubles: 1 }));
+    const homer = rainCount(hit({ bags: 4, singles: 0, hr: 1 }));
+    expect(single).toBeLessThan(double);
+    expect(double).toBeLessThan(homer);
+  });
+});
+
+describe('bagSummary', () => {
+  const games = [toGame(gameRow(1, { game_type: 'L' })), toGame(gameRow(2, { start_time: '2026-09-30T22:00:00+00:00', status: 'Final' }))];
+  const teams = [
+    { id: 'mine', eliminatedAfterRound: null },
+    { id: 'theirs', eliminatedAfterRound: null },
+    { id: 'gone', eliminatedAfterRound: 1 },
+  ];
+  const stats = [
+    { gamePk: 1, playerId: OHTANI, tb: 5, ab: 3, h: 2, hr: 1, rbi: 3 },
+    { gamePk: 2, playerId: OHTANI, tb: 2, ab: 4, h: 1 },
+    { gamePk: 1, playerId: HARPER, tb: 6, ab: 4, h: 3 },
+  ];
+
+  it("gives the hitter's game, postseason and team's place in the round", () => {
+    expect(bagSummary({ gamePk: 1, playerId: OHTANI }, { games, stats, lines: [] }, spells, teams)).toEqual({
+      game: stats[0],
+      postseason: { bags: 7, games: 2 },
+      // Championship Series (round 2): the team out after round 1 isn't in it.
+      team: { teamId: 'mine', bags: 5, rank: 2, tied: false, of: 2 },
+    });
+  });
+
+  it('says when the place is shared', () => {
+    const even = [...stats.slice(0, 2), { ...stats[0], playerId: HARPER }];
+    expect(bagSummary({ gamePk: 1, playerId: OHTANI }, { games, stats: even, lines: [] }, spells, teams).team).toMatchObject({
+      rank: 1,
+      tied: true,
+    });
+  });
+
+  it('leaves out the team for a hitter nobody had', () => {
+    const summary = bagSummary({ gamePk: 1, playerId: 1 }, { games, stats, lines: [] }, spells, teams);
+    expect(summary).toEqual({ game: null, postseason: { bags: 0, games: 0 }, team: null });
+  });
+});
+
+describe('ordinal', () => {
+  it('adds the suffix', () => {
+    expect([1, 2, 3, 4, 11, 12, 13, 21, 22].map(ordinal)).toEqual(['1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd']);
+  });
+});
