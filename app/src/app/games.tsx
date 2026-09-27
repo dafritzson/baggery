@@ -457,7 +457,13 @@ function FinalCard({ data, scores, game, fill }: { data: SeasonData; scores: Sco
 function LiveGlow({ live, fill, children }: { live: boolean; fill?: boolean; children: ReactNode }) {
   if (!live) return children;
   // dataSet isn't in React Native's types; react-native-web turns it into data-* attributes.
-  return <View style={fill && styles.fill} {...({ dataSet: { liveGlow: '' } } as object)}>{children}</View>;
+  return (
+    <View style={fill && styles.fill} {...({ dataSet: { liveGlow: '' } } as object)}>
+      {/* The spinning rainbow, behind the card; the ring is the edge of it the card doesn't cover. */}
+      <View pointerEvents="none" style={StyleSheet.absoluteFill} {...({ dataSet: { liveRing: '' } } as object)} />
+      {children}
+    </View>
+  );
 }
 
 /** A game that's on or still to come: who's up, the score, and the baggers so far. */
