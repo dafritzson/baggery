@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
-import { Loader } from '@/components/loader';
 import { Sheet } from '@/components/sheet';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -29,7 +28,8 @@ export const savantUrl = (playId: string) => `https://baseballsavant.mlb.com/spo
  * A hitter's hits in one game, each with the videos that are up: MLB's official clip once one is
  * posted (most home runs, within a minute or two) and Savant's video of the play, which every hit
  * gets the day after the game (poll-games checks). A hit with neither yet is listed without links.
- * Loaded when opened, so it costs nothing until someone taps ▶. Both open in the browser.
+ * Loaded when opened, so it costs nothing until someone taps ▶. Both open in the browser. The sheet
+ * opens once they're in, at its full height: around the loader it opened tall and then dropped.
  */
 export function HitVideosSheet({ gamePk, playerId, title, onClose }: { gamePk: number; playerId: number; title: string; onClose: () => void }) {
   const [hits, setHits] = useState<Hit[] | null>(null);
@@ -50,8 +50,7 @@ export function HitVideosSheet({ gamePk, playerId, title, onClose }: { gamePk: n
   }, [gamePk, playerId]);
 
   return (
-    <Sheet visible title={title} onClose={onClose}>
-      {hits === null && <Loader />}
+    <Sheet visible={hits !== null} title={title} onClose={onClose}>
       {hits?.length === 0 && (
         <ThemedText themeColor="textSecondary">His hits show up here a few seconds after they happen.</ThemedText>
       )}
