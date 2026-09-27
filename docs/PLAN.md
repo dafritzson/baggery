@@ -60,7 +60,7 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
 | 3 | Before DS redraft | Redrafts (drop+add, yield, lock at first pitch), eliminations, standings-based order, autodraft |
 | 3.5 | Done | 2020–2025 history imported from the Google Sheets (Settings → Past seasons) |
 | 3.6 | Now | Almanac tab: champions, records, careers, head-to-head, scouting stats and badges (`core/almanac.ts`). Next: more stats |
-| 3.7 | Now | Bag alerts: web push when a hitter gets a bag (Settings → Bag alerts; Android browsers, iPhone from the Home Screen), with a spoiler delay |
+| 3.7 | Now | Bag alerts: web push when a hitter gets a bag (Settings → Bag alerts; Android browsers, iPhone from the Home Screen), with a spoiler delay. Bag celebrations: bag emoji rain and a "You got 2 bags!" popup in the app (`core/bag-celebration.ts`), also on tapping an alert |
 | 4 | Later | Chat, money tracker, iOS app via EAS |
 
 ## iOS app notes
@@ -84,4 +84,6 @@ Things to change when the iOS app (phase 4) gets built, because the web can only
   none (`push.ts`). On iOS, register with `expo-notifications` and save the Expo push token next
   to `push_subscriptions`, then have `poll-games/alerts.ts` send those through Expo's push
   service. The queue (`private.bag_alerts`) and the alert text (`core/bag-alerts.ts`) stay as
-  they are.
+  they are. Tapping one opens `/games?bag=...`, which shows its bag celebration: open that link
+  from the notification there too (`expo-notifications` response listener), and read the spoiler
+  delay from wherever the Expo token is kept (`pushDelaySeconds` in `push.ts`).

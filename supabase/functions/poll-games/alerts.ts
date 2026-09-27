@@ -2,6 +2,7 @@
 // batting line's total bases go up). poll-games calls it after each poll.
 
 import { bagAlert } from '../_shared/core/bag-alerts.ts';
+import { bagParam } from '../_shared/core/bag-celebration.ts';
 import { sql } from '../_shared/db.ts';
 import { sendPush } from '../_shared/push.ts';
 
@@ -14,7 +15,7 @@ export async function sendBagAlerts(): Promise<number> {
       returning event_id, endpoint, fantasy_team_id, send_at
     )
     select s.endpoint, s.p256dh, s.auth, s.user_id,
-           p.full_name as player, e.bags, e.singles, e.doubles, e.triples, e.hr,
+           p.full_name as player, e.game_pk, e.mlb_player_id, e.tb, e.bags, e.singles, e.doubles, e.triples, e.hr,
            coalesce(t.name, 'Team ' || t.slot) as team, t.user_id as team_user_id,
            pr.display_name as manager
     from taken d
@@ -44,7 +45,19 @@ export async function sendBagAlerts(): Promise<number> {
           manager: row.manager,
           yours: row.team_user_id === row.user_id,
         });
-        const result = await sendPush(row as { endpoint: string; p256dh: string; auth: string }, { ...alert, url: '/games' });
+        // Tapping it opens the Games tab, which shows the bag's popup.
+        const bag = bagParam({
+          gamePk: row.game_pk,
+          playerId: row.mlb_player_id,
+          tb: row.tb,
+          bags: row.bags,
+          singles: row.singles,
+          doubles: row.doubles,
+          triples: row.triples,
+          hr: row.hr,
+        });
+        const url = `/games?bag=${bag}`;
+        const result = await sendPush(row as { endpoint: string; p256dh: string; auth: string }, { ...alert, url });
         if (result === 'gone') gone.add(row.endpoint);
         return result;
       }),

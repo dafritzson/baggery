@@ -72,7 +72,7 @@ export function roundColumns(round: FantasyRound, games: ScoreGame[]): ScoreColu
 const columnKey = (gameType: GameType, number: number) => `${gameType}${number}`;
 
 /** The team whose roster had the player when the game started, if any. */
-function ownerAt(spells: RosterSpell[], playerId: PlayerId, start: string): TeamId | undefined {
+export function ownerAt(spells: RosterSpell[], playerId: PlayerId, start: string): TeamId | undefined {
   const t = Date.parse(start);
   return spells.find(
     (s) => s.playerId === playerId && Date.parse(s.from) <= t && (s.to === null || t < Date.parse(s.to)),

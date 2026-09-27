@@ -61,6 +61,15 @@ export async function loadPushState(): Promise<PushState> {
   return data ? { kind: 'on', scope: data.scope, delaySeconds: data.delay_seconds } : { kind: 'off' };
 }
 
+/** This device's spoiler delay in seconds, or 0 with alerts off. Reads only the table, no function call. */
+export async function pushDelaySeconds(): Promise<number> {
+  if (!supported() || Notification.permission !== 'granted') return 0;
+  const sub = await (await worker()).pushManager.getSubscription();
+  if (!sub) return 0;
+  const { data } = await supabase.from('push_subscriptions').select('delay_seconds').eq('endpoint', sub.endpoint).maybeSingle();
+  return data?.delay_seconds ?? 0;
+}
+
 export async function savePush(prefs: Prefs): Promise<string | null> {
   if (!supported()) return "This browser can't show notifications.";
   // Asked first, straight from the tap: iPhone only shows the prompt in response to one.

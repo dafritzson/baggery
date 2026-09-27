@@ -2,6 +2,7 @@ import { type ReactNode, useState } from 'react';
 import { type LayoutChangeEvent, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
+import { BAG_EMOJI } from '@core/bag-celebration.ts';
 import type { LiveState } from '@core/live.ts';
 import { postseasonSeries } from '@core/schedule.ts';
 import { SERIES } from '@core/scoreboard.ts';
@@ -49,7 +50,7 @@ const level = (z: Zoom) => LEVELS.findIndex((l) => l.value === z);
  */
 export default function GamesScreen() {
   const { data, loading } = useSeason();
-  const { scores } = useScores(data);
+  const { scores } = useScores();
   const wide = useLayout() === 'wide';
   const [picked, setPicked] = useState<string | null>(null);
   const [pickedRound, setPickedRound] = useState<GameType | null>(null);
@@ -200,8 +201,6 @@ function MenuChip<T extends string>({
   );
 }
 
-const BAGS = ['👜', '💼', '🎒', '🛍️', '👝', '🧳'];
-
 /**
  * One bag emoji per total base, each picked at random. Seeded by player, game and position, so a
  * row doesn't reshuffle every time the live scores refresh.
@@ -211,7 +210,7 @@ function bagEmojis(tb: number, playerId: number, gamePk: number): string[] {
     let h = (playerId ^ Math.imul(gamePk, 0x9e3779b1) ^ Math.imul(i + 1, 0x85ebca6b)) >>> 0;
     h = Math.imul(h ^ (h >>> 16), 0x7feb352d) >>> 0;
     h = Math.imul(h ^ (h >>> 15), 0x846ca68b) >>> 0;
-    return BAGS[((h ^ (h >>> 16)) >>> 0) % BAGS.length];
+    return BAG_EMOJI[((h ^ (h >>> 16)) >>> 0) % BAG_EMOJI.length];
   });
 }
 
@@ -615,8 +614,8 @@ function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; gam
         style={[styles.bagText, styles.measure]}
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
-        onLayout={onShownWidth((width) => setBagWidth(rememberBagWidth(width / BAGS.length)))}>
-        {BAGS.join('')}
+        onLayout={onShownWidth((width) => setBagWidth(rememberBagWidth(width / BAG_EMOJI.length)))}>
+        {BAG_EMOJI.join('')}
       </ThemedText>
       {players.map((p) => (
         <BaggerCard key={p.id} data={data} playerId={p.id} team={p.team} tb={p.tb} gamePk={game.gamePk} bagWidth={bagWidth} />

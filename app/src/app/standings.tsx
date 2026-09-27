@@ -23,7 +23,7 @@ import { teamName } from '@/lib/teams';
  */
 export default function StandingsScreen() {
   const { data, loading, refetch } = useSeason();
-  const { scores } = useScores(data);
+  const { scores } = useScores();
   const wide = useLayout() === 'wide';
   const theme = useTheme();
   const [round, setRound] = useState<FantasyRound | null>(null);

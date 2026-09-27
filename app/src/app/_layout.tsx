@@ -2,6 +2,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { View } from 'react-native';
 
 import { AppHeader, UnderAppHeader } from '@/components/app-header';
+import { BagCelebrations } from '@/components/bag-celebration';
 import { BottomTabBar } from '@/components/section-nav';
 import { StatusBarBackdrop } from '@/components/status-bar-backdrop';
 import { ThemedView } from '@/components/themed-view';
@@ -9,6 +10,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLayout } from '@/hooks/use-layout';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { PlayerProvider } from '@/lib/player';
+import { ScoresProvider } from '@/lib/scores';
 import { SeasonProvider } from '@/lib/season';
 
 export default function RootLayout() {
@@ -53,13 +55,16 @@ function RootStack() {
   // Remount on sign-in/out so season data is loaded for the right user.
   return (
     <SeasonProvider key={session.user.id}>
-      <PlayerProvider>
-        <ThemedView style={{ flex: 1 }}>
-          <AppHeader />
-          <UnderAppHeader value>{stack}</UnderAppHeader>
-          {layout === 'compact' && <BottomTabBar />}
-        </ThemedView>
-      </PlayerProvider>
+      <ScoresProvider>
+        <PlayerProvider>
+          <ThemedView style={{ flex: 1 }}>
+            <AppHeader />
+            <UnderAppHeader value>{stack}</UnderAppHeader>
+            {layout === 'compact' && <BottomTabBar />}
+            <BagCelebrations />
+          </ThemedView>
+        </PlayerProvider>
+      </ScoresProvider>
     </SeasonProvider>
   );
 }
