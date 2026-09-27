@@ -25,7 +25,10 @@ export interface SeriesState {
 }
 
 export interface TeamOdds {
-  /** Chance to win the series it's in or waiting for. */
+  /**
+   * Chance to get through the fantasy round it's in: win the Division Series (round 1: Wild Card
+   * and Division Series), the LCS (round 2) or the World Series (round 3).
+   */
   advance: number;
   /** Expected games still to play this postseason. */
   games: number;
@@ -40,6 +43,8 @@ const SEASON_GAMES = 162;
 const HOME_WIN = 0.52;
 
 const BEST_OF: Record<GameType, number> = { F: 3, D: 5, L: 7, W: 7 };
+/** The series that ends each series' fantasy round. */
+const ROUND_ENDS_WITH: Record<GameType, GameType> = { F: 'D', D: 'D', L: 'L', W: 'W' };
 /** Which games the higher seed hosts: Wild Card all 3; 2-2-1; 2-3-2. */
 const HOSTS: Record<number, boolean[]> = {
   3: [true, true, true],
@@ -102,17 +107,20 @@ export function postseasonOdds(teams: OddsTeam[], series: SeriesState[]): Map<nu
   if (al.includes(undefined) || nl.includes(undefined)) return null;
 
   const games = new Map<number, number>(teams.map((t) => [t.teamId, 0]));
-  const advance = new Map<number, number>();
+  // Each team's current series (the first one it's in that isn't decided yet) and its chance of
+  // being in it; teams that lost a series are out.
+  const current = new Map<number, { type: GameType; p: number }>();
+  const out = new Set<number>();
+  // Who wins each kind of series, with their chances.
+  const winners = new Map<GameType, Field>();
   const find = (type: GameType, a: number, b: number) =>
     series.find((s) => s.gameType === type && s.teams.includes(a) && s.teams.includes(b));
 
   /** Plays one slot of the bracket between two fields; returns who comes out of it. */
   const play = (type: GameType, fieldA: Field, fieldB: Field, hostsFirst: (a: number, b: number) => boolean): Field => {
-    const out: Field = new Map();
-    // Chances the team is in this slot with the series still open, and wins it from there.
+    const won: Field = new Map();
+    // Chance the team is in this slot with the series still open.
     const open = new Map<number, number>();
-    const winsOpen = new Map<number, number>();
-    const lostDecided = new Set<number>();
     const add = (m: Map<number, number>, id: number, p: number) => m.set(id, (m.get(id) ?? 0) + p);
     for (const [a, pa] of fieldA) {
       for (const [b, pb] of fieldB) {
@@ -126,7 +134,7 @@ export function postseasonOdds(teams: OddsTeam[], series: SeriesState[]): Map<nu
         if (decided) {
           win = state!.winner === high ? 1 : 0;
           left = 0;
-          lostDecided.add(win ? low : high);
+          out.add(win ? low : high);
         } else {
           const w: [number, number] = state ? (state.teams[0] === high ? state.wins : [state.wins[1], state.wins[0]]) : [0, 0];
           ({ win, games: left } = seriesOdds(strength(byId.get(high)!.wins), strength(byId.get(low)!.wins), BEST_OF[type], w));
@@ -136,18 +144,16 @@ export function postseasonOdds(teams: OddsTeam[], series: SeriesState[]): Map<nu
         if (!decided) {
           add(open, high, p);
           add(open, low, p);
-          add(winsOpen, high, p * win);
-          add(winsOpen, low, p * (1 - win));
         }
-        add(out, high, p * win);
-        add(out, low, p * (1 - win));
+        add(won, high, p * win);
+        add(won, low, p * (1 - win));
       }
     }
-    // A team's current series is the first one it's in that isn't decided yet; a team that lost
-    // one is out (0%).
-    for (const id of lostDecided) if (!advance.has(id)) advance.set(id, 0);
-    for (const [id, p] of open) if (!advance.has(id)) advance.set(id, winsOpen.get(id)! / p);
-    return out;
+    for (const [id, p] of open) if (!current.has(id) && !out.has(id)) current.set(id, { type, p });
+    const all = winners.get(type) ?? new Map();
+    for (const [id, p] of won) all.set(id, (all.get(id) ?? 0) + p);
+    winners.set(type, all);
+    return won;
   };
 
   const one = (id: number): Field => new Map([[id, 1]]);
@@ -166,7 +172,12 @@ export function postseasonOdds(teams: OddsTeam[], series: SeriesState[]): Map<nu
   const betterRecord = (a: number, b: number) => byId.get(a)!.wins >= byId.get(b)!.wins;
   const champion = play('W', alChamp, nlChamp, betterRecord);
 
+  const advance = (id: number) => {
+    const now = current.get(id);
+    if (!now || out.has(id)) return 0;
+    return (winners.get(ROUND_ENDS_WITH[now.type])?.get(id) ?? 0) / now.p;
+  };
   return new Map(
-    teams.map((t) => [t.teamId, { advance: advance.get(t.teamId) ?? 0, games: games.get(t.teamId) ?? 0, title: champion.get(t.teamId) ?? 0 }]),
+    teams.map((t) => [t.teamId, { advance: advance(t.teamId), games: games.get(t.teamId) ?? 0, title: champion.get(t.teamId) ?? 0 }]),
   );
 }

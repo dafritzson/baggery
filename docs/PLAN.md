@@ -51,7 +51,8 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
   (`season_mlb_teams`, set by `sync-pool`) and the series so far: regular-season win % shrunk
   toward .500 by 70 games, log5 plus a small home edge per game, the real series formats and
   home-field patterns, and MLB's fixed bracket. The draft table shows **Adv%** (his team's chance
-  to win its current series) and **xBags** (expected TB for the rest of the postseason: RDSLG ×
+  to get through the current fantasy round: reach the LCS in round 1, which a Wild Card team does
+  by winning two series) and **xBags** (expected TB for the rest of the postseason: RDSLG ×
   his AB per game × his team's expected games left). Both are hidden without a full 6 seeds per
   league, so re-sync the pool after the seeds exist. Which table columns show is each person's choice, saved in their browser. `season_mlb_teams` holds each team's wins and Wild Card bye.
 - `drafts`, `draft_actions`: every pick or yield, numbered. `unique(draft_id, action_number)`

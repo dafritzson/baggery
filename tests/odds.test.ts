@@ -76,10 +76,15 @@ describe('postseasonOdds', () => {
     expect(total).toBeCloseTo(1, 6);
   });
 
-  it('gives bye teams their Division Series odds and more games for better teams', () => {
+  it('gives each team its chance to get through fantasy round 1, and more games to better teams', () => {
     const odds = postseasonOdds(bracket('Astros', 'Phillies'), [])!;
+    // A bye team only has the Division Series to win.
     expect(odds.get(id('Brewers'))!.advance).toBeGreaterThan(0.55);
-    expect(odds.get(id('Yankees'))!.advance).toBeGreaterThan(0.5); // hosts the Red Sox
+    // A Wild Card team has to win the Wild Card and then the Division Series.
+    const yankees = odds.get(id('Yankees'))!.advance;
+    expect(yankees).toBeGreaterThan(0.2);
+    expect(yankees).toBeLessThan(0.35);
+    expect(yankees).toBeLessThan(odds.get(id('Guardians'))!.advance);
     expect(odds.get(id('Brewers'))!.games).toBeGreaterThan(odds.get(id('Phillies'))!.games);
     // Every team plays its first series: at least 2 Wild Card or 3 Division Series games.
     for (const [, o] of odds) expect(o.games).toBeGreaterThan(2);
@@ -92,12 +97,32 @@ describe('postseasonOdds', () => {
       { gameType: 'F', teams: [id('Astros'), id('White Sox')], wins: [1, 0], winner: null },
     ];
     const odds = postseasonOdds(teams, series)!;
+    const before = postseasonOdds(teams, [])!;
     expect(odds.get(id('Yankees'))).toEqual({ advance: 0, games: 0, title: 0 });
     // The Red Sox won their Wild Card: now it's the Division Series against the Rays.
     expect(odds.get(id('Red Sox'))!.advance).toBeLessThan(0.5);
     expect(odds.get(id('Red Sox'))!.games).toBeGreaterThan(3);
-    // Up 1-0, hosting game 2.
-    expect(odds.get(id('Astros'))!.advance).toBeGreaterThan(0.7);
+    // Up 1-0 in the Wild Card, hosting game 2: better placed to reach the LCS than at 0-0.
+    expect(odds.get(id('Astros'))!.advance).toBeGreaterThan(before.get(id('Astros'))!.advance + 0.1);
+    // Still round 1 for everyone: nobody's past the Division Series yet.
+    for (const [, o] of odds) expect(o.advance).toBeLessThan(0.7);
+  });
+
+  it('asks about the LCS once round 2 starts', () => {
+    const teams = bracket('Astros', 'Phillies');
+    // The Rays reached the ALCS: their Adv% is now the chance to win it.
+    const series: SeriesState[] = [
+      { gameType: 'F', teams: [id('Yankees'), id('Red Sox')], wins: [2, 0], winner: id('Yankees') },
+      { gameType: 'F', teams: [id('Astros'), id('White Sox')], wins: [2, 1], winner: id('Astros') },
+      { gameType: 'D', teams: [id('Rays'), id('Yankees')], wins: [3, 1], winner: id('Rays') },
+      { gameType: 'D', teams: [id('Guardians'), id('Astros')], wins: [1, 3], winner: id('Astros') },
+    ];
+    const odds = postseasonOdds(teams, series)!;
+    const rays = odds.get(id('Rays'))!;
+    const alcs = seriesOdds(strength(98), strength(79), 7);
+    expect(rays.advance).toBeCloseTo(alcs.win, 6);
+    expect(odds.get(id('Astros'))!.advance).toBeCloseTo(1 - alcs.win, 6);
+    expect(odds.get(id('Guardians'))!.advance).toBe(0);
   });
 
   it('needs a full 6 seeds per league', () => {

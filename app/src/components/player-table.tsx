@@ -15,7 +15,7 @@ export interface PlayerRow {
   name: string;
   team: string;
   wins: number | null;
-  /** His team's chance (0–100) to win the series it's in or waiting for; null without seeds. */
+  /** His team's chance (0–100) to get through the current fantasy round; null without seeds. */
   adv: number | null;
   /** Expected TB for the rest of the postseason (core/stats.ts expectedBags). */
   xBags: number | null;
@@ -93,7 +93,7 @@ const rate = (key: ColumnKey, label: string, title: string, width = 52): Column 
 });
 
 export const COLUMNS: Column[] = [
-  { ...count('adv', 'Adv%', "His team's chance to win its current series", 54), format: (v) => `${Math.round(v)}%`, default: true, odds: true },
+  { ...count('adv', 'Adv%', "His team's chance to get through this fantasy round", 54), format: (v) => `${Math.round(v)}%`, default: true, odds: true },
   { ...count('xBags', 'xBags', 'Expected TB across the rest of the postseason', 58), format: oneDecimal, default: true, odds: true },
   count('wins', 'Wins', 'Team wins', 50),
   { key: 'bye', label: 'Bye', title: 'Team has a Wild Card bye', width: 44, value: (r) => (r.bye ? 1 : 0), format: (v) => (v ? '✓' : ''), default: true, flag: { yes: 'Bye', no: 'No bye' }, draft1: true },
