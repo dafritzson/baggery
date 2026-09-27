@@ -237,9 +237,9 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
               {player(p.playerId)}
               <ThemedText type="small" themeColor="textSecondary"> {p.years.join(', ')}</ThemedText>
             </Line>
-            <View style={[styles.track, { backgroundColor: theme.background }]}>
-              <View style={[styles.fill, { width: `${(p.tb / players[0].tb) * 100}%`, backgroundColor: color }]} />
-            </View>
+            <ThemedText style={styles.bags} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              {'👜'.repeat(p.tb)}
+            </ThemedText>
           </View>
         ))}
       </Card>
@@ -282,6 +282,5 @@ const styles = StyleSheet.create({
   heroStat: { flex: 1, backgroundColor: 'rgba(0,0,0,0.18)', borderRadius: Radius.md, paddingVertical: Spacing.two, alignItems: 'center' },
   heroStatValue: { color: '#fff', fontSize: 20, lineHeight: 24, fontWeight: '800' },
   heroStatLabel: { color: '#fff', fontSize: 11, opacity: 0.85 },
-  track: { height: 6, borderRadius: 3, overflow: 'hidden' },
-  fill: { height: 6, borderRadius: 3 },
+  bags: { fontSize: 13, lineHeight: 18 },
 });
