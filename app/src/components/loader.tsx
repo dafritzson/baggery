@@ -74,7 +74,7 @@ export function Loader({ size = 112 }: { size?: number }) {
     let frame = 0;
     let start: number | null = null;
     const tick = (now: number) => {
-      start ??= now;
+      if (start === null) start = now;
       setElapsed((now - start) / 1000);
       frame = requestAnimationFrame(tick);
     };

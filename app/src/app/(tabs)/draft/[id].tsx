@@ -33,7 +33,7 @@ export default function DraftRoomScreen() {
   const { data, loading, refetch, requestedYear } = useSeason();
   const draft = data?.drafts.find((d) => d.id === id);
   // Back to the season's drafts, keeping the year in the URL.
-  const goToDrafts = () => router.replace(requestedYear ? { pathname: '/draft', params: { year: requestedYear } } : '/draft');
+  const goToDrafts = () => router.dismissTo(requestedYear ? { pathname: '/draft', params: { year: requestedYear } } : '/draft');
 
   if (loading) return <Screen><Loader /></Screen>;
   if (!data || !draft) {

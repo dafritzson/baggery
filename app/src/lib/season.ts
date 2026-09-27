@@ -287,7 +287,10 @@ function useLiveSeason(): SeasonState {
     // over about a minute. An empty list is believed after a few tries. Capped so a lasting
     // server error can't have every open app re-download the season forever (docs/LIMITS.md).
     for (let tries = 0; tries < 6 && (!next || (userId && next.years.length === 0 && tries < 3)); tries++) {
-      await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** tries));
+      // Not inline: the React Compiler skips a hook whose callback reads a loop counter it bumps,
+      // and unmemoized, this hook's value changes on every navigation and re-renders every screen.
+      const wait = 1000 * 2 ** tries;
+      await new Promise((resolve) => setTimeout(resolve, wait));
       if (fetchId !== latestFetch.current) return;
       next = await fetchSeason(userId, requestedYear);
     }

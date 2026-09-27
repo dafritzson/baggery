@@ -1,75 +1,184 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { type Href, router, usePathname } from 'expo-router';
+import { router, type Tabs, useIsFocused, usePathname } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useEffect, useRef, useState } from 'react';
-import { Animated, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { type ComponentProps, type ReactNode, type RefObject, createContext, use, useLayoutEffect, useState } from 'react';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { liquidBackdrop } from '@/lib/liquid-lens';
 import { useSeason } from '@/lib/season';
 
+/** What the tab navigator ((tabs)/_layout.tsx) hands its tab bar: its state, and its navigation. */
+export type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
+
+type TabRoute = TabBarProps['state']['routes'][number];
+
 interface Section {
   label: string;
-  href: Href;
+  /** The section's tab in the tab navigator. */
+  route: 'draft' | 'standings' | 'games' | 'research' | 'almanac';
+  /** Its own page: pages opened from it (a draft room) are under this path too. */
+  path: string;
+  /** Whether it's a stack, which pages open on top of (Draft, Almanac). */
+  stack?: boolean;
   /** Icon in the phone tab bar. */
   icon: SymbolViewProps['name'];
-  /** Whether this section owns the current path. */
-  matches: (pathname: string) => boolean;
 }
 
 /** The app's top-level sections: tabs in the header on desktops, a bottom tab bar on phones. */
 const SECTIONS: Section[] = [
   {
     label: 'Draft',
-    href: '/draft',
+    route: 'draft',
+    path: '/draft',
+    stack: true,
     icon: { ios: 'list.number', android: 'format_list_numbered', web: 'format_list_numbered' },
-    matches: (p) => p.startsWith('/draft'),
   },
   {
     label: 'Standings',
-    href: '/standings',
+    route: 'standings',
+    path: '/standings',
     icon: { ios: 'trophy', android: 'leaderboard', web: 'leaderboard' },
-    matches: (p) => p.startsWith('/standings'),
   },
   {
     label: 'Games',
-    href: '/games',
+    route: 'games',
+    path: '/games',
     icon: { ios: 'baseball', android: 'sports_baseball', web: 'sports_baseball' },
-    matches: (p) => p.startsWith('/games'),
   },
   {
     label: 'Research',
-    href: '/research',
+    route: 'research',
+    path: '/research',
     icon: { ios: 'chart.line.uptrend.xyaxis', android: 'query_stats', web: 'query_stats' },
-    matches: (p) => p.startsWith('/research'),
   },
   {
     label: 'Almanac',
-    href: '/almanac',
+    route: 'almanac',
+    path: '/almanac',
+    stack: true,
     icon: { ios: 'book.closed', android: 'menu_book', web: 'menu_book' },
-    matches: (p) => p.startsWith('/almanac'),
   },
 ];
+
+/**
+ * The tab navigator's latest tab bar props, kept by TabBar for the header's tabs (desktop), which
+ * sit outside the navigator.
+ */
+export const TabBarContext = createContext<RefObject<TabBarProps | null>>({ current: null });
+
+/** The season a tab is showing: the year in the URL of the page it's on, if any. */
+function seasonShown(route: TabRoute): number | undefined {
+  let params: Record<string, unknown> = {};
+  for (let r: TabRoute | undefined = route; r; r = r.state?.routes[r.state.index ?? r.state.routes.length - 1] as TabRoute) {
+    params = { ...params, ...r.params };
+  }
+  return Number(params.year) || undefined;
+}
+
+/** `params` with the season set to `year` (none: the latest). */
+function withYear(params: object | undefined, year: number | undefined): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...params };
+  delete next.year;
+  return year ? { ...next, year: String(year) } : next;
+}
+
+/**
+ * Shows section `s` the way a phone's tab bar does: the page its tab was left on, just as it was
+ * left (scrolled, filtered, on the day picked), in the season being viewed. The tab that's already
+ * on show goes back to its own page instead (from a draft room, say), or up to the top of it.
+ */
+function switchTab({ state, navigation }: TabBarProps, s: Section, year: number | undefined) {
+  const route = state.routes.find((r) => r.name === s.route);
+  if (!route) return;
+  // A stack's state here can be the partial one it was opened with from a link, without a key until
+  // it's first changed.
+  const nested = route.state;
+  const stackKey = s.stack ? nested?.key : undefined;
+  const shown = nested?.routes[nested.index ?? nested.routes.length - 1];
+  // The tab's own page, for this season (the one under what's on top, if it's there).
+  const ownParams = withYear(nested?.routes.find((r) => r.name === 'index')?.params, year);
+  if (state.routes[state.index].key === route.key) {
+    // Tapped again: from a page opened on top of the tab's own, back to it (the router finds the
+    // stack even from a link); on its own page, up to the top (Screen's useScrollToTop).
+    if (s.stack && shown && shown.name !== 'index') router.dismissTo({ pathname: s.path as never, params: ownParams as never });
+    else navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+  } else if (seasonShown(route) === year) {
+    // Keeps its params, and anything opened on top.
+    navigation.navigate({ name: route.name, params: undefined, merge: true });
+  } else if (!s.stack) {
+    navigation.navigate({ name: route.name, params: withYear(route.params, year) });
+  } else if (stackKey) {
+    // A page opened on top belongs to the season it was opened in (a draft room).
+    navigation.dispatch({ type: 'POP_TO', payload: { name: 'index', params: ownParams }, target: stackKey });
+    navigation.navigate({ name: route.name, params: undefined, merge: true });
+  } else {
+    navigation.navigate({ name: route.name, params: { screen: 'index', params: withYear(undefined, year) } });
+  }
+}
+
+/**
+ * Starts drawing a tab that hasn't been opened yet as soon as its button is pressed, so that it's
+ * ready, or nearly, by the time the press ends and switchTab shows it.
+ */
+function preloadTab({ state, navigation }: TabBarProps, s: Section, year: number | undefined) {
+  const route = state.routes.find((r) => r.name === s.route);
+  if (!route || route.state || state.preloadedRouteKeys.includes(route.key) || state.history.some((h) => h.key === route.key)) return;
+  navigation.preload(route.name, s.stack ? { screen: 'index', params: withYear(undefined, year) } : withYear(route.params, year));
+}
 
 function useSections() {
   const pathname = usePathname();
   const { requestedYear } = useSeason();
-  const active = SECTIONS.find((s) => s.matches(pathname));
-  // Keep the season being viewed when switching sections.
-  const go = (s: Section) =>
-    router.navigate(requestedYear && typeof s.href === 'string' ? { pathname: s.href as never, params: { year: requestedYear } } : s.href);
-  return { sections: SECTIONS.length > 1 ? SECTIONS : [], active, go };
+  const tabBarRef = use(TabBarContext);
+  const active = SECTIONS.find((s) => pathname.startsWith(s.path));
+  const go = (s: Section) => {
+    if (tabBarRef.current) switchTab(tabBarRef.current, s, requestedYear);
+    else router.navigate({ pathname: s.path as never, params: requestedYear ? { year: requestedYear } : {} });
+  };
+  const preload = (s: Section) => {
+    if (tabBarRef.current) preloadTab(tabBarRef.current, s, requestedYear);
+  };
+  return { sections: SECTIONS, active, go, preload };
+}
+
+/**
+ * The tab navigator's tab bar: the floating one on phones. Desktops have their tabs in the header
+ * instead, which switch tabs through this too.
+ */
+export function TabBar(props: TabBarProps) {
+  const tabBarRef = use(TabBarContext);
+  const compact = useLayout() === 'compact';
+  useLayoutEffect(() => {
+    tabBarRef.current = props;
+  });
+  return compact ? <BottomTabBar /> : null;
+}
+
+/**
+ * A tab's page. Once opened it stays mounted, hidden while another tab is on show, so going back
+ * to it is immediate and finds it as it was left. It's hidden with content-visibility (global.css),
+ * which skips drawing it but keeps its layout for when it's back; display: none would throw that
+ * away, and the whole page would be laid out again on every switch.
+ */
+export function TabScreen({ children }: { children: ReactNode }) {
+  const focused = useIsFocused();
+  return (
+    <View style={styles.tabScreen} {...(focused ? null : ({ dataSet: { tabHidden: '' } } as object))}>
+      {children}
+    </View>
+  );
 }
 
 /** Desktop: section tabs inline in the app header. */
 export function HeaderTabs() {
   const theme = useTheme();
-  const { sections, active, go } = useSections();
-  if (!sections.length) return null;
+  const { sections, active, go, preload } = useSections();
   return (
     <View style={styles.headerTabs} accessibilityRole="tablist">
       {sections.map((s) => {
@@ -78,7 +187,8 @@ export function HeaderTabs() {
           <Pressable
             key={s.label}
             accessibilityRole="tab"
-            accessibilityState={{ selected }}
+            aria-selected={selected}
+            onPressIn={() => preload(s)}
             onPress={() => go(s)}
             style={[styles.headerTab, selected && { borderBottomColor: theme.text }]}>
             <ThemedText type="smallBold" themeColor={selected ? 'text' : 'textSecondary'}>{s.label}</ThemedText>
@@ -96,39 +206,20 @@ export const BOTTOM_TAB_BAR_SPACE = 88;
  * Phone: a floating "liquid glass" pill of section buttons (icon and label) over the bottom of the
  * screen. Content scrolls behind it: clear, saturated glass with a bright rim and a sheen, and in
  * Chromium a lens that bends what's behind the edges. The selected tab is a glass bubble that
- * springs over to whichever tab you pick.
+ * springs over to whichever tab you pick: on web a CSS transition of its transform (global.css),
+ * which the browser runs off the main thread, so it keeps moving while the new tab draws.
  */
-export function BottomTabBar() {
+function BottomTabBar() {
   const dark = useColorScheme() === 'dark';
   const pathname = usePathname();
-  const { sections, active, go } = useSections();
+  const { sections, active, go, preload } = useSections();
   // Readable over whatever's behind it: the theme's glass over plain pages, a darker glass with
   // white labels over artwork (Home's ballpark), in either theme.
   const look = OVER_ARTWORK(pathname) ? LOOKS.overArtwork : dark ? LOOKS.dark : LOOKS.light;
   // Where each tab sits in the bar, for the bubble to slide to.
   const [frames, setFrames] = useState<Record<string, { x: number; width: number }>>({});
-  const [bubbleX] = useState(() => new Animated.Value(0));
-  const [bubbleWidth] = useState(() => new Animated.Value(0));
-  const placed = useRef(false);
   const target = active && frames[active.label];
 
-  useEffect(() => {
-    if (!target) return;
-    if (!placed.current) {
-      // First time: put it straight there rather than sliding in from the left.
-      bubbleX.setValue(target.x);
-      bubbleWidth.setValue(target.width);
-      placed.current = true;
-      return;
-    }
-    const spring = { speed: 14, bounciness: 7, useNativeDriver: false };
-    Animated.parallel([
-      Animated.spring(bubbleX, { toValue: target.x, ...spring }),
-      Animated.spring(bubbleWidth, { toValue: target.width, ...spring }),
-    ]).start();
-  }, [target, bubbleX, bubbleWidth]);
-
-  if (!sections.length) return null;
   return (
     <SafeAreaView
       edges={['bottom', 'left', 'right']}
@@ -151,17 +242,18 @@ export function BottomTabBar() {
           pointerEvents="none"
         />
         {target && (
-          <Animated.View
+          <View
             pointerEvents="none"
             style={[
               styles.bubble,
               {
-                left: bubbleX,
-                width: bubbleWidth,
+                width: target.width,
+                transform: [{ translateX: target.x }],
                 backgroundColor: look.bubble,
                 boxShadow: look.bubbleRim,
               },
             ]}
+            {...({ dataSet: { tabBubble: '' } } as object)}
           />
         )}
         {sections.map((s) => {
@@ -171,8 +263,9 @@ export function BottomTabBar() {
             <Pressable
               key={s.label}
               accessibilityRole="tab"
-              accessibilityState={{ selected }}
+              aria-selected={selected}
               accessibilityLabel={s.label}
+              onPressIn={() => preload(s)}
               onPress={() => go(s)}
               onLayout={(e) => {
                 const { x, width } = e.nativeEvent.layout;
@@ -239,6 +332,7 @@ const LOOKS = {
 };
 
 const styles = StyleSheet.create({
+  tabScreen: { flex: 1 },
   headerTabs: { flexDirection: 'row', alignSelf: 'stretch', gap: Spacing.three, marginLeft: Spacing.three },
   headerTab: { justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
   // Kept inside the screen's side margins: with five sections, the tabs shrink to fit a phone.
@@ -251,7 +345,8 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   round: { borderRadius: 999 },
-  bubble: { position: 'absolute', top: 5, bottom: 5, borderRadius: 999 },
+  // Placed by its transform, which slides.
+  bubble: { position: 'absolute', top: 5, bottom: 5, left: 0, borderRadius: 999 },
   bottomTab: {
     alignItems: 'center',
     gap: Spacing.half,

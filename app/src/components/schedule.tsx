@@ -175,9 +175,11 @@ function GameSquare({
   const final = game.status === 'Final';
   const postponed = game.detailedState === 'Postponed';
   const winner = final ? gameWinner(game) : null;
-  const high = Math.max(game.homeScore ?? 0, game.awayScore ?? 0);
-  const low = Math.min(game.homeScore ?? 0, game.awayScore ?? 0);
-  const leader = (game.homeScore ?? 0) === (game.awayScore ?? 0) ? null : (game.homeScore ?? 0) > (game.awayScore ?? 0) ? game.homeTeamId : game.awayTeamId;
+  const home = game.homeScore ?? 0;
+  const away = game.awayScore ?? 0;
+  const high = Math.max(home, away);
+  const low = Math.min(home, away);
+  const leader = home === away ? null : home > away ? game.homeTeamId : game.awayTeamId;
   const score = `${high}–${low}`;
 
   let lines: { text: string; bold?: boolean; color?: string; big?: boolean }[];

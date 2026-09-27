@@ -107,7 +107,12 @@ Things to change when the iOS app (phase 4) gets built, because the web can only
   an SVG lens (`app/src/lib/liquid-lens.ts`). On iOS, render it with `GlassView` from
   `expo-glass-effect` (already a dependency) for Apple's real Liquid Glass on iOS 26, which also
   adapts its tint to what's behind it, so the per-page "over artwork" style isn't needed there.
-  Keep the web version for the web.
+  Keep the web version for the web. The selected tab's bubble slides with a CSS transition
+  (`data-tab-bubble` in `app/src/global.css`), which native ignores, so it just jumps there:
+  animate it with Reanimated, or use the native tab bar.
+- **Hidden tabs.** Tabs stay mounted once opened, and on the web the ones not on show are hidden
+  with CSS `content-visibility` (`TabScreen` in `section-nav.tsx`). Native needs nothing: the tab
+  navigator detaches inactive screens with react-native-screens.
 - **Live game ring.** Live games on the Games tab get a spinning rainbow ring, which is CSS in
   `app/src/global.css` (`data-live-glow`). Native ignores it, so draw it there too, e.g. a
   rotating `expo-linear-gradient` behind the card or a Skia sweep gradient.

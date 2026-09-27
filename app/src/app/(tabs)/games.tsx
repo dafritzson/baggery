@@ -20,13 +20,19 @@ import { Toggle } from '@/components/toggle';
 import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
-import { dayKey, dayLabel, gameDay } from '@/lib/game-day';
+import { dayLabel, gameDay, useToday } from '@/lib/game-day';
 import { type BattingLine, type GameInfo, type ScoreHit, type Scores, useScores } from '@/lib/scores';
 import { type SeasonData, useSeason } from '@/lib/season';
 import { ownerName, teamName } from '@/lib/teams';
 import { zoom, zoomFixed, zoomKey, zoomView } from '@/lib/zoom';
 
 const STATUS_ORDER: Record<string, number> = { Live: 0, Preview: 1, Final: 2 };
+
+/** Live games first, then the ones still to come, then the finished ones; by start time within each. */
+function byStatusThenStart(a: GameInfo, b: GameInfo): number {
+  const status = (g: GameInfo) => STATUS_ORDER[g.status] ?? 1;
+  return status(a) - status(b) || a.start.localeCompare(b.start);
+}
 
 /** Today if there are games today, else the next day with games, else the last one. */
 function defaultDay(days: string[], today: string): string | undefined {
@@ -53,6 +59,7 @@ export default function GamesScreen() {
   const { data, loading } = useSeason();
   const { scores } = useScores();
   const wide = useLayout() === 'wide';
+  const today = useToday();
   const [picked, setPicked] = useState<string | null>(null);
   const [pickedRound, setPickedRound] = useState<GameType | null>(null);
   const [view, setView] = useState<Zoom>('day');
@@ -62,13 +69,9 @@ export default function GamesScreen() {
   }
   if (!data || !scores) return <Screen width="wide"><ThemedText>No season set up yet.</ThemedText></Screen>;
 
-  const today = dayKey(new Date().toISOString());
   const days = [...new Set(scores.games.map(gameDay))].sort();
   const day = picked && days.includes(picked) ? picked : defaultDay(days, today);
-  const games = scores.games
-    .filter((g) => day && gameDay(g) === day)
-    // Live games first, then the ones still to come, then the finished ones; by start time within each.
-    .sort((a, b) => (STATUS_ORDER[a.status] ?? 1) - (STATUS_ORDER[b.status] ?? 1) || a.start.localeCompare(b.start));
+  const games = scores.games.filter((g) => day && gameDay(g) === day).sort(byStatusThenStart);
 
   const series = postseasonSeries(scores.games);
   const rounds = SERIES.filter((r) => series.some((s) => s.gameType === r.gameType));

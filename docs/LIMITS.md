@@ -40,8 +40,9 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   Polling live games every 5 s would roughly double that, close to or over the quota. That's why
   it's 10 s. If more headroom is needed, staging could poll live games less often.
   `player-stats` (the player popup) caches its results in memory, and `draft` runs only on draft
-  actions; both are small next to the poller. `almanac` runs once per Almanac visit, at most every
-  5 minutes per open app (the app caches it): a few thousand calls a month.
+  actions; both are small next to the poller. `almanac` runs when the Almanac tab is first opened
+  in an open app (the tab stays open after that), and when a manager's page opens more than 5
+  minutes after the last call (the app caches it): a few thousand calls a month at most.
 - **The Almanac.** The `almanac` function reads every season's rows next to the database and sends
   back only the computed Almanac, an estimated ~100 KB (not yet measured), where the app used to
   download the raw rows itself (~0.5–1 MB, dominated by box scores and the player pool). At ~15
@@ -74,9 +75,17 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   ~0.9 GB a month, less with compression. Scores already reload on reconnect the same way.
 - **Post PA and Post TB.** The draft table (draft room and Research) loads each hitter's postseason
   PA and TB once when it opens, summed in the database (`postseason_totals`): one small row per
-  hitter who has batted, ~15 KB at most by the World Series. At ~15 people opening it ~10 times a
-  day, that's ~70 MB a month. It doesn't follow live games, so it adds nothing per poll; the
+  hitter who has batted, ~15 KB at most by the World Series. Research stays open once opened (see
+  Tabs), so that's once per app open rather than per visit. At ~15 people opening it ~10 times a
+  day, that's ~70 MB a month at most. It doesn't follow live games, so it adds nothing per poll; the
   poller's box score rows just carry one more number (PA).
+- **Tabs.** Like a phone app's, each tab stays mounted once it's opened (`TabScreen` in
+  `app/src/components/section-nav.tsx`), so going back to one loads nothing, where every switch
+  used to open it anew and reload what it loads for itself (Research's Post PA and TB, the
+  Almanac after 5 minutes). A tab that isn't on show starts no loads of its own; the season and
+  scores it shows are the app-wide ones. Pressing a tab's button starts drawing it before the press
+  ends, so a press that slides off still opens that tab in the background, with its first load.
+  Fewer loads than before, and no new realtime channels or Edge Function calls.
 - **Adv% and xBags.** Computed in the app from the season and scores it already loads. The season
   load gains each team's seed and league (a few bytes per team). No new calls, polling or storage.
 - **The player popup's Baggery section.** Each time the popup opens it loads the player's MLB
