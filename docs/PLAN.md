@@ -64,7 +64,9 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
 
 `mlb_hits` keeps every postseason hit's play: batter, type, inning and the play ID of the pitch
 put in play, from MLB's play-by-play. Baseball Savant has a video of every pitch by play ID
-(`baseballsavant.mlb.com/sporty-videos?playId=…`), and MLB posts official clips of many hits
+(`baseballsavant.mlb.com/sporty-videos?playId=…`), published in a batch 13–25 hours after the game
+(`poll-games` checks one hit per game hourly from 12 hours after first pitch and sets
+`savant_ready` for the game's hits; until then the link is hidden), and MLB posts official clips of many hits
 (all home runs we've checked, about half the doubles, few singles) whose `guid` is the play ID;
 `poll-games` stores the clip's slug (`mlb.com/video/<slug>`) once it's posted, usually a minute or
 two after a big hit in a big game, later in others. On Games, ▶ on a hitter lists his hits in

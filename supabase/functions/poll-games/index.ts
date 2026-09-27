@@ -18,7 +18,7 @@ import { autoCloseRounds } from '../_shared/close-round.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
 import { sendBagAlerts } from './alerts.ts';
-import { boxscoreBatting, clipsForHits, highlightClips, linescoreLive, linescoreRuns, playHits, scheduleGames } from './feed.ts';
+import { boxscoreBatting, clipsForHits, highlightClips, linescoreLive, linescoreRuns, playHits, savantHasVideo, scheduleGames } from './feed.ts';
 
 const MLB = 'https://statsapi.mlb.com/api/v1';
 const LEAGUES: Record<number, 'AL' | 'NL'> = { 103: 'AL', 104: 'NL' };
@@ -155,6 +155,36 @@ async function saveVideos(gamePk: number, force: boolean): Promise<number> {
 }
 
 /**
+ * Whether Savant has a finished game's play videos yet. Savant publishes them in a batch 13–25
+ * hours after the game, all of a game's at once, so this loads one not-yet-ready hit's page and,
+ * once it has the video, marks every hit of the game ready (the ▶ sheet only links ready ones).
+ * Unless `force` (reloading a season), only from 12 hours after first pitch, at most hourly and 48
+ * times per game.
+ */
+async function checkSavant(gamePk: number, force: boolean): Promise<boolean> {
+  const [hit] = await sql`
+    select h.play_id from mlb_hits h
+    join mlb_games g using (game_pk)
+    left join private.video_reads r using (game_pk)
+    where h.game_pk = ${gamePk} and not h.savant_ready
+      and (${force} or (g.status = 'Final' and g.start_time < now() - interval '12 hours'
+           and coalesce(r.savant_checks, 0) < 48
+           and (r.savant_checked_at is null or r.savant_checked_at < now() - interval '1 hour')))
+    order by h.ended_at
+    limit 1`;
+  if (!hit) return false;
+  const res = await fetch(`https://baseballsavant.mlb.com/sporty-videos?playId=${hit.play_id}`);
+  const ready = res.ok && savantHasVideo(await res.text());
+  await sql.begin(async (tx) => {
+    if (ready) await tx`update mlb_hits set savant_ready = true where game_pk = ${gamePk} and not savant_ready`;
+    await tx`
+      insert into private.video_reads (game_pk, savant_checked_at, savant_checks) values (${gamePk}, now(), 1)
+      on conflict (game_pk) do update set savant_checked_at = now(), savant_checks = private.video_reads.savant_checks + 1`;
+  });
+  return ready;
+}
+
+/**
  * Reads the schedule if it's due (private.schedule_due), then the box score of every live game
  * and of finished games due a re-check. A reload (`all`) reads the schedule and every game that
  * has started, and treats finished games as settled so the cron job leaves them alone.
@@ -190,6 +220,23 @@ async function poll(year: number, all: boolean) {
           await saveVideos(r.game_pk as number, false);
         } catch (e) {
           console.error('videos', r.game_pk, e);
+        }
+      }
+      // Yesterday's games whose Savant videos may be up by now (a few at a time).
+      const savantDue = await sql`
+        select distinct h.game_pk from mlb_hits h
+        join mlb_games g using (game_pk)
+        left join private.video_reads r using (game_pk)
+        where g.season_year = ${year} and not h.savant_ready and g.status = 'Final'
+          and g.start_time < now() - interval '12 hours'
+          and coalesce(r.savant_checks, 0) < 48
+          and (r.savant_checked_at is null or r.savant_checked_at < now() - interval '1 hour')
+        limit 4`;
+      for (const r of savantDue) {
+        try {
+          await checkSavant(r.game_pk as number, false);
+        } catch (e) {
+          console.error('savant', r.game_pk, e);
         }
       }
     }
@@ -310,7 +357,10 @@ serve(async (req) => {
       where season_year = ${season.year} and status in ('Live', 'Final') and game_pk > ${body.after ?? 0}
       order by game_pk limit 4`;
     let hits = 0;
-    for (const g of games) hits += await saveVideos(g.game_pk as number, true);
+    for (const g of games) {
+      hits += await saveVideos(g.game_pk as number, true);
+      await checkSavant(g.game_pk as number, true).catch((e) => console.error('savant', g.game_pk, e));
+    }
     return json({ hits, next: games.length === 4 ? games[3].game_pk : null });
   }
   return json(await poll(season.year, true));

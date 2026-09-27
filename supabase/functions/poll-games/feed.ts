@@ -225,3 +225,8 @@ export function clipsForHits(hits: Pick<HitRow, 'play_id' | 'mlb_player_id'>[], 
   }
   return out;
 }
+
+/** Savant's play page (`sporty-videos?playId=…`) has the video: the page links its mp4. */
+export function savantHasVideo(html: string): boolean {
+  return /https:\/\/sporty-clips\.mlb\.com\/[^"'\s<>]+\.mp4/.test(html);
+}
