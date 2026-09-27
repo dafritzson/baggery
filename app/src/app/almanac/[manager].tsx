@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { TeamSeason } from '@core/almanac.ts';
@@ -15,6 +15,7 @@ import { ordinal } from '@/components/manager-link';
 import { Screen } from '@/components/screen';
 import { StatTable } from '@/components/stat-table';
 import { ThemedText } from '@/components/themed-text';
+import { Toggle } from '@/components/toggle';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { type AlmanacData, managerSlug, useAlmanac } from '@/lib/almanac';
@@ -58,6 +59,7 @@ const signed = (n: number) => {
 
 function Career({ data, managerKey }: { data: AlmanacData; managerKey: string }) {
   const theme = useTheme();
+  const [topBy, setTopBy] = useState<'season' | 'career'>('career');
   const a = data.almanac;
   const slugOf = (key: string) => (key.includes(':') ? key : managerSlug(data.managers.get(key) ?? key));
   const color = managerColor(data, managerKey);
@@ -74,7 +76,15 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
     );
   }
   const seasons = a.teamSeasons.filter((t) => t.managerKey === managerKey).sort((x, y) => y.year - x.year);
-  const players = (a.playersByManager.get(managerKey) ?? []).slice(0, 10);
+  // Top players: a player's bags across every season with this manager, or his best single seasons.
+  const managerPlayers = a.playersByManager.get(managerKey) ?? [];
+  const players =
+    topBy === 'career'
+      ? managerPlayers.slice(0, 10).map((p) => ({ key: `${p.playerId}`, playerId: p.playerId, tb: p.tb, years: p.years }))
+      : managerPlayers
+          .flatMap((p) => p.seasons.map((s) => ({ key: `${p.playerId}-${s.year}`, playerId: p.playerId, tb: s.tb, years: [s.year] })))
+          .sort((x, y) => y.tb - x.tb)
+          .slice(0, 10);
   const moves = a.redrafts.filter((m) => m.managerKey === managerKey);
   const net = moves.reduce((sum, m) => sum + m.addedTb - m.droppedTb, 0);
   const byGain = [...moves].sort((x, y) => y.addedTb - y.droppedTb - (x.addedTb - x.droppedTb));
@@ -230,9 +240,22 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
         />
       </Card>
 
-      <Card title="Top players">
+      <Card
+        title="Top baggers"
+        action={
+          <Toggle
+            options={[{ value: 'season', label: 'Season' }, { value: 'career', label: 'Career' }]}
+            value={topBy}
+            onChange={setTopBy}
+          />
+        }>
+        <ThemedText type="small" themeColor="textSecondary">
+          {topBy === 'career'
+            ? `Each bagger's bags for ${name}, every season added up.`
+            : `The most bags a bagger got for ${name} in one season.`}
+        </ThemedText>
         {players.map((p) => (
-          <View key={p.playerId} style={{ gap: 3 }}>
+          <View key={p.key} style={{ gap: 3 }}>
             <Line right={`${p.tb} bags`}>
               {player(p.playerId)}
               <ThemedText type="small" themeColor="textSecondary"> {p.years.join(', ')}</ThemedText>

@@ -241,7 +241,7 @@ const Duel = memo(function Duel({ h, data }: { h: Duel_; data: AlmanacData }) {
       </Card>
 
       {h.sharedPlayers.length > 0 && (
-        <Card title="Players they’ve both had">
+        <Card title="Baggers they’ve both had">
           {h.sharedPlayers.slice(0, 8).map((p) => (
             <View key={p.playerId} style={styles.shared}>
               <View style={styles.sharedLine}>
