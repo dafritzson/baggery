@@ -14,21 +14,15 @@
   <radialGradient id="icon-light" cx="0.5" cy="0.5" r="0.5">
   <stop offset="0" stop-color="#FFF1CF" stop-opacity="0.7"/><stop offset="1" stop-color="#FFF1CF" stop-opacity="0"/>
   </radialGradient>
-  <radialGradient id="icon-pool" cx="0.5" cy="0.5" r="0.5">
-  <stop offset="0" stop-color="#FFF4DC" stop-opacity="0.4"/>
-  <stop offset="0.3" stop-color="#FFF4DC" stop-opacity="0.340"/>
-  <stop offset="0.6" stop-color="#FFF4DC" stop-opacity="0.180"/>
-  <stop offset="0.85" stop-color="#FFF4DC" stop-opacity="0.048"/>
-  <stop offset="1" stop-color="#FFF4DC" stop-opacity="0"/>
-  </radialGradient>
-  <filter id="icon-dglow" x="-50%" y="-100%" width="200%" height="300%"><feGaussianBlur stdDeviation="5"/></filter>
+  <filter id="icon-spot" filterUnits="userSpaceOnUse" x="-60" y="-60" width="220" height="220"><feGaussianBlur stdDeviation="16 13"/></filter>
+  <filter id="icon-dglow" x="-50%" y="-100%" width="200%" height="300%"><feGaussianBlur stdDeviation="9"/></filter>
   </defs>
   <rect width="100" height="100" fill="url(#icon-mow)"/>
   <rect width="100" height="100" fill="url(#icon-sky)"/>
-  <ellipse cx="50" cy="52" rx="60" ry="48" fill="url(#icon-pool)"/>
+  <ellipse cx="50" cy="50" rx="30" ry="24" fill="#FFF4DC" fill-opacity="0.413" filter="url(#icon-spot)"/>
   <circle cx="4" cy="2" r="30" fill="url(#icon-light)"/>
   <circle cx="96" cy="2" r="30" fill="url(#icon-light)"/>
-  <ellipse cx="50" cy="69" rx="44" ry="14" fill="#FFE2A8" opacity="0.28" filter="url(#icon-dglow)"/>
+  <ellipse cx="50" cy="68" rx="34.1" ry="12.3" fill="#FFE2A8" opacity="0.2" filter="url(#icon-dglow)"/>
   <defs>
   <linearGradient id="icon-top" x1="0.25" y1="0" x2="0.55" y2="1">
   <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ece6dc"/>
