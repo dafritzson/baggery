@@ -123,7 +123,7 @@ export function FinishChart({ years, places, teams, color }: {
             years.map((yr, i) => {
               const p = places[side].get(yr);
               if (p === undefined) return null;
-              // Side by side when they finished in the same place... which can't happen, but ties can.
+              // A trophy for a title, a dot for any other finish. Managers tied for a place share one spot.
               return p === 1 ? (
                 <SvgText fontFamily={Fonts.sans} key={`${side}${yr}`} x={x(i)} y={y(1) + 6} fontSize={18} textAnchor="middle">🏆</SvgText>
               ) : (
