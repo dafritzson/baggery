@@ -405,11 +405,14 @@ function ownerOf(data: SeasonData, playerId: number, game: GameInfo): string | u
   )?.fantasy_team_id;
 }
 
-/** "1-3 HR BB": hits-at bats, then the extra-base hits and walks. Empty before a first time up. */
+/**
+ * "1-3 HR 2B": hits-at bats, then the extra-base hits. Only what makes bags: a hit that isn't
+ * listed is a single, and walks are left out. Empty before a first time up.
+ */
 function lineScore(line: BattingLine | undefined): string {
   if (!line) return '';
   const times = (n: number, label: string) => (n === 0 ? [] : [n === 1 ? label : `${n}${label}`]);
-  return [`${line.h}-${line.ab}`, ...times(line.hr, 'HR'), ...times(line.triples, '3B'), ...times(line.doubles, '2B'), ...times(line.bb, 'BB')].join(' ');
+  return [`${line.h}-${line.ab}`, ...times(line.hr, 'HR'), ...times(line.triples, '3B'), ...times(line.doubles, '2B')].join(' ');
 }
 
 /** `fill` stretches the card to the height of its row (desktop). */
