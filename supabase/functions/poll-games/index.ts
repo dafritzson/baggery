@@ -76,16 +76,16 @@ async function saveGame(gamePk: number): Promise<number> {
     await tx`
       insert into player_game_stats ${tx(
         rows,
-        'game_pk', 'mlb_player_id', 'mlb_team_id', 'ab', 'h', 'doubles', 'triples', 'hr', 'bb', 'hbp', 'sf', 'tb', 'r', 'rbi',
+        'game_pk', 'mlb_player_id', 'mlb_team_id', 'pa', 'ab', 'h', 'doubles', 'triples', 'hr', 'bb', 'hbp', 'sf', 'tb', 'r', 'rbi',
       )}
       on conflict (game_pk, mlb_player_id) do update set
-        mlb_team_id = excluded.mlb_team_id, ab = excluded.ab, h = excluded.h, doubles = excluded.doubles,
+        mlb_team_id = excluded.mlb_team_id, pa = excluded.pa, ab = excluded.ab, h = excluded.h, doubles = excluded.doubles,
         triples = excluded.triples, hr = excluded.hr, bb = excluded.bb, hbp = excluded.hbp, sf = excluded.sf,
         tb = excluded.tb, r = excluded.r, rbi = excluded.rbi, updated_at = now()
-      where (player_game_stats.ab, player_game_stats.h, player_game_stats.doubles, player_game_stats.triples,
+      where (player_game_stats.pa, player_game_stats.ab, player_game_stats.h, player_game_stats.doubles, player_game_stats.triples,
              player_game_stats.hr, player_game_stats.bb, player_game_stats.hbp, player_game_stats.sf,
              player_game_stats.tb, player_game_stats.r, player_game_stats.rbi)
-        is distinct from (excluded.ab, excluded.h, excluded.doubles, excluded.triples, excluded.hr, excluded.bb,
+        is distinct from (excluded.pa, excluded.ab, excluded.h, excluded.doubles, excluded.triples, excluded.hr, excluded.bb,
                           excluded.hbp, excluded.sf, excluded.tb, excluded.r, excluded.rbi)`;
   });
   return rows.length;

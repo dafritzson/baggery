@@ -72,6 +72,11 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   made meanwhile would never show. A season load is estimated at ~100 KB (not yet measured; the
   player pool is most of it). At ~15 people coming back to the app ~20 times a day, that's up to
   ~0.9 GB a month, less with compression. Scores already reload on reconnect the same way.
+- **Post PA and Post TB.** The draft table (draft room and Research) loads each hitter's postseason
+  PA and TB once when it opens, summed in the database (`postseason_totals`): one small row per
+  hitter who has batted, ~15 KB at most by the World Series. At ~15 people opening it ~10 times a
+  day, that's ~70 MB a month. It doesn't follow live games, so it adds nothing per poll; the
+  poller's box score rows just carry one more number (PA).
 - **Realtime messages per second.** The old per-row Postgres Changes could burst 150–250 messages
   right after a poll on a busy day. One broadcast per poll keeps it to about one message per open
   app every 10 seconds. The draft room still uses Postgres Changes on low-traffic tables

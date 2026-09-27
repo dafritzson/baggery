@@ -30,6 +30,8 @@ export interface BattingRow {
   game_pk: number;
   mlb_player_id: number;
   mlb_team_id: number;
+  /** Plate appearances. */
+  pa: number;
   ab: number;
   h: number;
   doubles: number;
@@ -98,6 +100,7 @@ export function boxscoreBatting(gamePk: number, data: any): { rows: BattingRow[]
         game_pk: gamePk,
         mlb_player_id: p.person.id,
         mlb_team_id: teamId,
+        pa: b.plateAppearances ?? 0,
         ab: b.atBats ?? 0,
         h: b.hits ?? 0,
         doubles: b.doubles ?? 0,

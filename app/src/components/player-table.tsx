@@ -16,6 +16,9 @@ export interface PlayerRow {
   team: string;
   wins: number | null;
   bye: boolean;
+  /** This postseason so far: null before it has any games (or PA from before it was stored). */
+  postPa: number | null;
+  postTb: number | null;
   g: number | null;
   pa: number;
   ab: number | null;
@@ -56,6 +59,8 @@ export interface Column {
   default?: boolean;
   /** A yes/no column (value 1 or 0): filtered by these two choices rather than by bounds. */
   flag?: { yes: string; no: string };
+  /** This postseason's stats: left out until it has games, so Draft 1 doesn't show empty columns. */
+  postseason?: boolean;
 }
 
 /** Bounds per column, from the filter menus in the header. */
@@ -82,6 +87,8 @@ const rate = (key: ColumnKey, label: string, title: string, width = 52): Column 
 export const COLUMNS: Column[] = [
   { ...count('wins', 'Wins', 'Team wins', 50), default: true },
   { key: 'bye', label: 'Bye', title: 'Team has a Wild Card bye', width: 44, value: (r) => (r.bye ? 1 : 0), format: (v) => (v ? '✓' : ''), default: true, flag: { yes: 'Bye', no: 'No bye' } },
+  { ...count('postPa', 'Post PA', 'Plate appearances this postseason', 66), default: true, postseason: true },
+  { ...count('postTb', 'Post TB', 'Total bases this postseason', 66), default: true, postseason: true },
   count('g', 'G', 'Games'),
   { ...count('pa', 'PA', 'Plate appearances', 44), default: true },
   count('ab', 'AB', 'At-bats', 44),

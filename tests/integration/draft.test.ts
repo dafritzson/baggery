@@ -322,11 +322,36 @@ describe('live stats poller', () => {
       .single();
     expect(freeman!.hr).toBeGreaterThanOrEqual(1);
     expect(freeman!.tb).toBeGreaterThanOrEqual(4);
+    // 18 innings: more plate appearances than at-bats, from the box score's own count.
+    const { data: freemanPa } = await admin.from('player_game_stats').select('pa, ab').eq('game_pk', ws![2].game_pk).eq('mlb_player_id', 518692).single();
+    expect(freemanPa!.pa).toBeGreaterThanOrEqual(freemanPa!.ab);
 
     // Wild Card series are best of 3.
     const { data: wc } = await admin.from('mlb_games').select('series_game_number, games_in_series').eq('season_year', 2025).eq('game_type', 'F');
     expect(wc!.length).toBeGreaterThanOrEqual(8);
     expect(wc!.every((g) => g.games_in_series === 3 && g.series_game_number! <= 3)).toBe(true);
+  });
+
+  it("sums each hitter's postseason PA and TB for the draft table, up to a draft's lock", async () => {
+    const FREEMAN = 518692;
+    const { data: lines } = await admin.from('player_game_stats').select('pa, tb, mlb_games!inner(season_year)').eq('mlb_player_id', FREEMAN).eq('mlb_games.season_year', 2025);
+    const kyle = clients.get('Kyle')!;
+    const { data: totals, error } = await kyle.rpc('postseason_totals', { p_year: 2025 });
+    expect(error).toBeNull();
+    const freeman = totals!.find((t: { mlb_player_id: number }) => t.mlb_player_id === FREEMAN);
+    expect(freeman).toEqual({
+      mlb_player_id: FREEMAN,
+      pa: lines!.reduce((sum, l) => sum + l.pa!, 0),
+      tb: lines!.reduce((sum, l) => sum + l.tb, 0),
+    });
+
+    // Before the World Series started, his World Series TB don't count yet.
+    const { data: ws1 } = await admin.from('mlb_games').select('start_time').eq('season_year', 2025).eq('game_type', 'W').eq('series_game_number', 1).single();
+    const { data: before } = await kyle.rpc('postseason_totals', { p_year: 2025, p_before: ws1!.start_time });
+    expect(before!.find((t: { mlb_player_id: number }) => t.mlb_player_id === FREEMAN)!.tb).toBeLessThan(freeman!.tb);
+
+    const anon = createClient(url, publishableKey, { auth: { persistSession: false } });
+    expect((await anon.rpc('postseason_totals', { p_year: 2025 })).error).not.toBeNull();
   });
 
   it("broadcasts a poll's changes to open apps in one message", async () => {
