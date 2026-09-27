@@ -1,11 +1,15 @@
-// Bag alerts on this device: web push, so web only (push.web.ts). An iOS app would use
-// expo-notifications; until then Settings doesn't offer them there.
+// Alerts on this device (bag, sub and cut alerts): web push, so web only (push.web.ts). An iOS app
+// would use expo-notifications; until then Settings doesn't offer them there.
 
 export type Scope = 'mine' | 'league';
 
 export interface Prefs {
   scope: Scope;
   delaySeconds: number;
+  /** Sub alerts: 👀 a hitter came off the bench, 😠 one was replaced. */
+  subs: boolean;
+  /** Cut alerts: 🥵 on the hot seat, 😮‍💨 off the chopping block. */
+  cut: boolean;
 }
 
 /**
@@ -30,7 +34,7 @@ export async function pushDelaySeconds(): Promise<number> {
 
 /** Turns alerts on (asking for permission) or changes their choices. Returns an error to show. */
 export async function savePush(_prefs: Prefs): Promise<string | null> {
-  return 'Bag alerts need the web app for now.';
+  return 'Alerts need the web app for now.';
 }
 
 export async function turnOffPush(): Promise<string | null> {
@@ -38,5 +42,5 @@ export async function turnOffPush(): Promise<string | null> {
 }
 
 export async function sendTestPush(): Promise<string | null> {
-  return 'Bag alerts need the web app for now.';
+  return 'Alerts need the web app for now.';
 }

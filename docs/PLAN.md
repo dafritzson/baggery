@@ -95,7 +95,7 @@ load and broadcast carry rostered players' hits.
 | 3 | Before DS redraft | Redrafts (drop+add, yield, lock at first pitch), eliminations, standings-based order, autodraft |
 | 3.5 | Done | 2020–2025 history imported from the Google Sheets (Settings → Past seasons) |
 | 3.6 | Now | Almanac tab: champions, records, careers, head-to-head, scouting stats and badges (`core/almanac.ts`). Next: more stats |
-| 3.7 | Now | Bag alerts: web push when a hitter gets a bag (Settings → Bag alerts; Android browsers, iPhone from the Home Screen), with a spoiler delay. Bag celebrations: bag emoji rain and a "You got 2 bags!" popup in the app (`core/bag-celebration.ts`), also on tapping an alert |
+| 3.7 | Now | Bag alerts: web push when a hitter gets a bag (Settings → Bag alerts; Android browsers, iPhone from the Home Screen), with a spoiler delay. Sub alerts (👀 off the bench, 😠 replaced, from the box score) and cut alerts (🥵 on the hot seat, 😮‍💨 off the chopping block, after each game ends) go with them, each with its own switch (`core/game-alerts.ts`). Bag celebrations: bag emoji rain and a "You got 2 bags!" popup in the app (`core/bag-celebration.ts`), also on tapping an alert |
 | 3.8 | Now | Standings time slider: a season chart with a slider under the table that moves the standings to any moment, day by day or bag by bag, with playback (`core/timeline.ts`). 2020–2024 hits backfilled from MLB's play-by-play (`scripts/history/hits.ts`); every play's batting lines too (`mlb_play_lines`, `scripts/history/play-lines.ts`), so mid-game moments have exact tiebreakers |
 | 4 | Later | Chat, money tracker, iOS app via EAS |
 
@@ -124,7 +124,7 @@ Things to change when the iOS app (phase 4) gets built, because the web can only
 - **Bag alerts.** They're web push (`app/src/lib/push.web.ts`, `app/public/sw.js`); native offers
   none (`push.ts`). On iOS, register with `expo-notifications` and save the Expo push token next
   to `push_subscriptions`, then have `poll-games/alerts.ts` send those through Expo's push
-  service. The queue (`private.bag_alerts`) and the alert text (`core/bag-alerts.ts`) stay as
-  they are. Tapping one opens `/games?bag=...`, which shows its bag celebration: open that link
-  from the notification there too (`expo-notifications` response listener), and read the spoiler
-  delay from wherever the Expo token is kept (`pushDelaySeconds` in `push.ts`).
+  service. The queues (`private.bag_alerts`, `private.push_queue`) and the alert text
+  (`core/bag-alerts.ts`, `core/game-alerts.ts`) stay as they are. Tapping a bag alert opens
+  `/games?bag=...`, which shows its bag celebration: open the alert's link from the notification
+  there too (`expo-notifications` response listener), and read the spoiler delay from wherever the Expo token is kept (`pushDelaySeconds` in `push.ts`).

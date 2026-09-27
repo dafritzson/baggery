@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boxscoreBatting, clipsForHits, highlightClips, linescoreLive, linescoreRuns, playHits, playLines, savantHasVideo, scheduleGames } from '../supabase/functions/poll-games/feed.ts';
+import { boxscoreBatting, boxscoreSubs, clipsForHits, highlightClips, linescoreLive, linescoreRuns, playHits, playLines, savantHasVideo, scheduleGames } from '../supabase/functions/poll-games/feed.ts';
 
 const team = (id: number, score?: number) => ({ team: { id }, score });
 
@@ -117,6 +117,43 @@ describe('box score feed', () => {
       pa: 5, ab: 4, h: 2, doubles: 1, triples: 0, hr: 1, bb: 1, hbp: 0, sf: 0, tb: 7, r: 2, rbi: 3,
     });
     expect(rows[1]).toMatchObject({ mlb_player_id: 3, mlb_team_id: 119, pa: 7, ab: 5, hbp: 1, sf: 1, tb: 0 });
+  });
+});
+
+describe('box score lineup changes', () => {
+  const player = (id: number, name: string, battingOrder: string | undefined, position: string) => ({
+    person: { id, fullName: name },
+    battingOrder,
+    position: { abbreviation: position },
+    allPositions: [{ abbreviation: position }],
+  });
+
+  it('finds who came off the bench and who they replaced', () => {
+    const data = {
+      teams: {
+        away: {
+          players: {
+            ID1: player(1, 'Mookie Betts', '100', 'SS'),
+            ID2: player(2, 'Kiké Hernández', '101', 'PH'),
+            ID3: player(3, 'Miguel Rojas', '102', 'SS'),
+            ID4: player(4, 'Freddie Freeman', '300', '1B'),
+            ID5: player(5, 'Yoshinobu Yamamoto', undefined, 'P'),
+          },
+        },
+        home: { players: { ID6: player(6, 'Vladimir Guerrero Jr.', '300', '1B') } },
+      },
+    };
+    expect(boxscoreSubs(data)).toEqual([
+      { mlb_player_id: 1, full_name: 'Mookie Betts', kind: 'out', position: 'PH', replacement: 'Kiké Hernández' },
+      { mlb_player_id: 2, full_name: 'Kiké Hernández', kind: 'in', position: 'PH', replacement: null },
+      { mlb_player_id: 2, full_name: 'Kiké Hernández', kind: 'out', position: 'SS', replacement: 'Miguel Rojas' },
+      { mlb_player_id: 3, full_name: 'Miguel Rojas', kind: 'in', position: 'SS', replacement: null },
+    ]);
+  });
+
+  it('finds nothing before any changes', () => {
+    expect(boxscoreSubs({ teams: { away: { players: { ID1: player(1, 'Mookie Betts', '100', 'SS') } } } })).toEqual([]);
+    expect(boxscoreSubs({})).toEqual([]);
   });
 });
 

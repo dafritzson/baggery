@@ -16,6 +16,11 @@ const SCOPES: { value: Scope | 'off'; label: string }[] = [
   { value: 'league', label: 'Everyone’s' },
 ];
 
+const ON_OFF = [
+  { value: true, label: 'On' },
+  { value: false, label: 'Off' },
+];
+
 const DELAYS = [
   { value: 0, label: 'None' },
   { value: 30, label: '30s' },
@@ -64,8 +69,10 @@ function reachWarning(standing: Standing, scope: Scope | 'off', email: string | 
 }
 
 /**
- * Bag alerts on this device: a notification ("👜 Shohei Ohtani got a bag") when your hitters, or
- * anyone's, get a bag. Web push, so web only for now; on iPhone it takes the Home Screen app.
+ * Alerts on this device: a notification ("👜 Shohei Ohtani got a bag") when your hitters, or
+ * anyone's, get a bag, and with them sub alerts (👀 off the bench, 😠 replaced) and cut alerts (🥵 on
+ * the hot seat, 😮‍💨 off the chopping block), each of which can be turned off. Web push, so web only
+ * for now; on iPhone it takes the Home Screen app.
  */
 export function BagAlertsCard() {
   const [state, setState] = useState<PushState | null>(null);
@@ -108,10 +115,11 @@ export function BagAlertsCard() {
   }
 
   const on = state.kind === 'on' ? state : null;
+  const prefs: Prefs | null = on && { scope: on.scope, delaySeconds: on.delaySeconds, subs: on.subs, cut: on.cut };
   const warning = reachWarning(standing, on?.scope ?? 'off', session?.user.email);
 
   return (
-    <Card title="Bag alerts">
+    <Card title="Alerts">
       {state.kind === 'install' ? (
         <ThemedText themeColor="textSecondary">
           On iPhone, alerts need Baggery on your Home Screen. In Safari, tap Share, then Add to Home Screen. Open
@@ -138,7 +146,7 @@ export function BagAlertsCard() {
               onChange={(v) => {
                 if (busy) return;
                 if (v === 'off') run(turnOffPush, { kind: 'off' }, 'Off on this device.');
-                else choose({ scope: v, delaySeconds: on?.delaySeconds ?? 0 });
+                else choose({ scope: v, delaySeconds: on?.delaySeconds ?? 0, subs: on?.subs ?? true, cut: on?.cut ?? true });
               }}
             />
           </View>
@@ -150,11 +158,25 @@ export function BagAlertsCard() {
                 <Toggle
                   options={DELAYS}
                   value={on.delaySeconds}
-                  onChange={(v) => !busy && choose({ scope: on.scope, delaySeconds: v })}
+                  onChange={(v) => !busy && choose({ ...prefs!, delaySeconds: v })}
                 />
               </View>
               <ThemedText type="small" themeColor="textSecondary">
                 Holds alerts back if you watch on a stream that runs behind.
+              </ThemedText>
+              <ThemedText type="smallBold" themeColor="textSecondary">Subs</ThemedText>
+              <View style={styles.row}>
+                <Toggle options={ON_OFF} value={on.subs} onChange={(v) => !busy && choose({ ...prefs!, subs: v })} />
+              </View>
+              <ThemedText type="small" themeColor="textSecondary">
+                👀 when a hitter comes off the bench, 😠 when one is taken out of the game.
+              </ThemedText>
+              <ThemedText type="smallBold" themeColor="textSecondary">Cut line</ThemedText>
+              <View style={styles.row}>
+                <Toggle options={ON_OFF} value={on.cut} onChange={(v) => !busy && choose({ ...prefs!, cut: v })} />
+              </View>
+              <ThemedText type="small" themeColor="textSecondary">
+                🥵 when a team drops below the cut, 😮‍💨 when it climbs back above. Checked after each game ends.
               </ThemedText>
               <View style={styles.row}>
                 <Button

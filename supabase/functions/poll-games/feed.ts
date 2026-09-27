@@ -118,6 +118,60 @@ export function boxscoreBatting(gamePk: number, data: any): { rows: BattingRow[]
   return { rows, players };
 }
 
+/** A lineup change for sub alerts: a player who came off the bench, or one who was replaced. */
+export interface LineupChange {
+  mlb_player_id: number;
+  full_name: string;
+  kind: 'in' | 'out';
+  /** 'in': the position he came in at (PH, PR, SS, ...). 'out': his replacement's. */
+  position: string | null;
+  /** 'out': who replaced him. */
+  replacement: string | null;
+}
+
+/**
+ * The lineup changes so far in a box score. Each player in the game has a `battingOrder` like
+ * "300": the hundreds are his lineup spot, and the rest counts who took it (300 started there, 301
+ * replaced him, 302 replaced 301). So anyone not at 00 came off the bench, and anyone with a
+ * higher number in his spot was replaced.
+ */
+// deno-lint-ignore no-explicit-any
+export function boxscoreSubs(data: any): LineupChange[] {
+  const changes: LineupChange[] = [];
+  for (const side of ['away', 'home'] as const) {
+    const spots = new Map<number, { order: number; id: number; name: string; position: string | null }[]>();
+    // deno-lint-ignore no-explicit-any
+    for (const p of Object.values(data?.teams?.[side]?.players ?? {}) as any[]) {
+      const order = Number(p?.battingOrder);
+      if (!p?.person?.id || !Number.isInteger(order) || order < 100) continue;
+      const spot = Math.floor(order / 100);
+      spots.set(spot, [
+        ...(spots.get(spot) ?? []),
+        {
+          order,
+          id: p.person.id,
+          name: p.person.fullName ?? `Player ${p.person.id}`,
+          // The first position he played is how he came in (PH, then 1B, say).
+          position: p.allPositions?.[0]?.abbreviation ?? p.position?.abbreviation ?? null,
+        },
+      ]);
+    }
+    for (const players of spots.values()) {
+      players.sort((a, b) => a.order - b.order);
+      players.forEach((p, i) => {
+        if (p.order % 100 !== 0) {
+          changes.push({ mlb_player_id: p.id, full_name: p.name, kind: 'in', position: p.position, replacement: null });
+        }
+        const next = players[i + 1];
+        if (next) {
+          changes.push({ mlb_player_id: p.id, full_name: p.name, kind: 'out', position: next.position, replacement: next.name });
+        }
+      });
+    }
+  }
+  return changes;
+}
+
 // deno-lint-ignore no-explicit-any
 function livePlayer(p: any): LivePlayer | null {
   return p?.id ? { id: p.id, name: p.fullName ?? `Player ${p.id}` } : null;

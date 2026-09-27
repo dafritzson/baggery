@@ -5,7 +5,8 @@
 //                            games. The cron job calls every 10 seconds while there's something to
 //                            fetch (private.poll_due): live games every call, the schedule every
 //                            minute while games are on (10 otherwise), finished games every 10.
-//                            Then sends the bag alerts that are due (alerts.ts).
+//                            Then queues the cut alerts of games just finished and sends the
+//                            alerts that are due (bag, sub and cut alerts: alerts.ts).
 // POST { setup: true }       from the deploy: records this function's URL for the cron job.
 // POST { seasonId }          commissioner: reloads every game of that season's postseason.
 // POST { seasonId, videos: true, after? }
@@ -17,8 +18,8 @@ import { requireCommissioner, requireUser } from '../_shared/auth.ts';
 import { autoCloseRounds } from '../_shared/close-round.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
-import { sendBagAlerts } from './alerts.ts';
-import { boxscoreBatting, clipsForHits, highlightClips, linescoreLive, linescoreRuns, playHits, playLines, savantHasVideo, scheduleGames } from './feed.ts';
+import { queueCutAlerts, queueSubAlerts, sendBagAlerts, sendQueuedAlerts } from './alerts.ts';
+import { boxscoreBatting, boxscoreSubs, clipsForHits, highlightClips, linescoreLive, linescoreRuns, playHits, playLines, savantHasVideo, scheduleGames } from './feed.ts';
 
 const MLB = 'https://statsapi.mlb.com/api/v1';
 const LEAGUES: Record<number, 'AL' | 'NL'> = { 103: 'AL', 104: 'NL' };
@@ -50,8 +51,11 @@ async function knownTeamIds(year: number): Promise<Set<number>> {
   return new Set(rows.map((r) => r.id as number));
 }
 
-/** Saves a game's box score (everyone's batting line) and its live state (inning, bases, due up). */
-async function saveGame(gamePk: number): Promise<number> {
+/**
+ * Saves a game's box score (everyone's batting line) and its live state (inning, bases, due up).
+ * With `alerts` (the regular polls, not a reload), queues sub alerts for its lineup changes.
+ */
+async function saveGame(gamePk: number, alerts: boolean): Promise<number> {
   const [boxscore, linescore] = await Promise.all([mlb(`/game/${gamePk}/boxscore`), mlb(`/game/${gamePk}/linescore`)]);
   // The live state and the score (the schedule, which also has it, is only read once a minute
   // during games), in one update.
@@ -73,6 +77,10 @@ async function saveGame(gamePk: number): Promise<number> {
   await sql`
     insert into private.box_reads (game_pk, read_at) values (${gamePk}, now())
     on conflict (game_pk) do update set read_at = excluded.read_at`;
+  if (alerts) {
+    // A failure here mustn't stop the scores.
+    await queueSubAlerts(gamePk, boxscoreSubs(boxscore)).catch((e) => console.error('sub alerts', gamePk, e));
+  }
   const { rows, players } = boxscoreBatting(gamePk, boxscore);
   if (!rows.length) return 0;
   await sql.begin(async (tx) => {
@@ -231,7 +239,7 @@ async function poll(year: number, all: boolean) {
     // A few at a time, to be gentle with the MLB API.
     const pending = due.map((r) => r.game_pk as number);
     while (pending.length) {
-      const counts = await Promise.all(pending.splice(0, 4).map(saveGame));
+      const counts = await Promise.all(pending.splice(0, 4).map((pk) => saveGame(pk, !all)));
       batted += counts.reduce((a, b) => a + b, 0);
     }
     // Videos only on the regular polls; a reload reads them in batches of their own (CPU limits).
@@ -356,14 +364,26 @@ serve(async (req) => {
         } catch (e) {
           console.error('auto-close', e);
         }
-        // Push notifications for the bags this poll (or an earlier one, after a spoiler delay) found.
+        // Push notifications for the bags this poll (or an earlier one, after a spoiler delay) found,
+        // and the lineup changes and cut line crossings.
         let bagAlerts = 0;
         try {
           bagAlerts = await sendBagAlerts();
         } catch (e) {
           console.error('bag alerts', e);
         }
-        return { ...result, closedRounds, bagAlerts };
+        try {
+          await queueCutAlerts();
+        } catch (e) {
+          console.error('cut alerts', e);
+        }
+        let otherAlerts = 0;
+        try {
+          otherAlerts = await sendQueuedAlerts();
+        } catch (e) {
+          console.error('alerts', e);
+        }
+        return { ...result, closedRounds, bagAlerts, otherAlerts };
       }),
     );
   }
