@@ -83,6 +83,18 @@ finalist fills the slots its eliminated hitters leave from a thin undrafted pool
 bags per WS game (4.2, or 4.8 with the redraft) land between the finalists' (5.0, 4.4 and 3.6). An
 eliminated manager has no hitter still alive about 5% of the time.
 
+With a ghost of 2 (raised 2026-09-27, `--two-hitters`), each pair of eliminated managers gives 1
+hitter: the 2 out after the DS give the best one still alive on either roster, then the 2 out
+after the CS do the same. Otherwise it's the same as above.
+
+| | Chance the ghost wins |
+|---|---|
+| No redraft | 3.2% |
+| The DS-out pair redrafts a hitter knocked out in the CS | 3.6% |
+
+That's just over the 2–3% target, and holds with only 2012–2025 seasons or each season's real
+bracket (3.0–3.4% and 3.3–3.8%). A pair has no hitter still alive about 0.2% of the time.
+
 Still open:
 
 - What the ghost wins, e.g. a share of the pot.

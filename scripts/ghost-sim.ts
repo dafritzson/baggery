@@ -9,11 +9,14 @@
 // from their own roster whose team is still alive. A manager with none drafts an undrafted hitter
 // with the last pick of that draft, after everyone else, and so does a DS-out manager replacing a
 // hitter knocked out in the CS (the redraft version). There's no trigger in this version.
+// --two-hitters is the same with a ghost of 2: each pair of eliminated managers (the 2 out after
+// the DS, then the 2 out after the CS) gives 1 hitter, the best one still alive on either roster.
 //
 //   npx tsx scripts/ghost-sim.ts                          1995–2025, 20,000 runs per season
 //   npx tsx scripts/ghost-sim.ts --from 2012 --runs 5000 --seed 7 --by-year
 //   npx tsx scripts/ghost-sim.ts --real-brackets          each season's real postseason bracket
 //   npx tsx scripts/ghost-sim.ts --own-rosters            Alex's version
+//   npx tsx scripts/ghost-sim.ts --two-hitters            Alex's version with a ghost of 2
 //
 // Each run takes a real season and plays today's 12-team postseason with its teams: in each
 // league the 3 division winners (seeds 1–3, the top 2 with byes) and the 3 best other records.
@@ -65,7 +68,8 @@ const RUNS = arg('runs', 20000);
 const SEED = arg('seed', 1);
 const REAL_BRACKETS = process.argv.includes('--real-brackets');
 const BY_YEAR = process.argv.includes('--by-year');
-const OWN_ROSTERS = process.argv.includes('--own-rosters');
+const TWO_HITTERS = process.argv.includes('--two-hitters');
+const OWN_ROSTERS = TWO_HITTERS || process.argv.includes('--own-rosters');
 const POSTSEASON_HITTING = arg('postseason-hitting', 0.88);
 const SERIES_SHRINK = arg('series-shrink', 0.5);
 const SWING = arg('swing', 0.14);
@@ -321,7 +325,10 @@ interface Run {
   regularsLeft: number[];
   /** Bags from the Wild Card through the CS: the 3 finalists', and the 4 eliminated managers'. */
   bagsToCS: number[];
-  /** With --own-rosters: DS-out and CS-out managers who had no hitter still alive to give. */
+  /**
+   * With --own-rosters: DS-out and CS-out managers (pairs, with --two-hitters) who had no hitter
+   * still alive to give.
+   */
   noneAlive: number[];
 }
 
@@ -437,13 +444,24 @@ function simulate(ps: Postseason): Run {
     for (const i of rosters[m]) if (plays(r, i) && (pick < 0 || opinion(m, r, i) > opinion(m, r, pick))) pick = i;
     return pick;
   };
+  // Who gives the ghost a hitter: each eliminated manager, or with --two-hitters each pair, whose
+  // best hitter still alive on either roster goes in. The lower-ranked manager comes first.
+  const givers = (out: number[]) => (TWO_HITTERS ? [out] : out.map((m) => [m]));
+  const give = (ms: number[], r: number) => {
+    let pick: { i: number; by: number } | null = null;
+    for (const m of ms) {
+      const i = ownPick(m, r);
+      if (i >= 0 && (!pick || opinion(m, r, i) > opinion(pick.by, r, pick.i))) pick = { i, by: m };
+    }
+    return pick;
+  };
   const noneAlive = [0, 0];
   const ghostCS: { i: number; by: number }[] = [];
   const draftCS: number[] = [];
-  for (const m of dsOut) {
-    const own = OWN_ROSTERS ? ownPick(m, L) : -1;
-    if (own >= 0) ghostCS.push({ i: own, by: m });
-    else draftCS.push(m);
+  for (const ms of givers(dsOut)) {
+    const own = OWN_ROSTERS ? give(ms, L) : null;
+    if (own) ghostCS.push(own);
+    else draftCS.push(ms[0]);
   }
   if (OWN_ROSTERS) noneAlive[0] = draftCS.length;
   for (const m of draftCS) {
@@ -463,7 +481,7 @@ function simulate(ps: Postseason): Run {
   const sum = (ms: number[]) => ms.reduce((s, m) => s + total[m], 0);
   const ghostCSBags = ghostCS.reduce((s, g) => s + bags(L, g.i), 0);
   const trigger = !OWN_ROSTERS && sum(dsOut) + ghostCSBags + sum(csOut) > sum(finalists);
-  if (OWN_ROSTERS) noneAlive[1] = csOut.filter((m) => ownPick(m, W) < 0).length;
+  if (OWN_ROSTERS) noneAlive[1] = givers(csOut).filter((ms) => !give(ms, W)).length;
 
   // Draft 4 and the WS round, with the ghost picking last or first, with or without redrafting
   // CS picks whose team is out. Every version sees the same games and the same bags.
@@ -481,15 +499,15 @@ function simulate(ps: Postseason): Run {
           }
         }
       }
-      for (const m of csOut) {
-        const own = OWN_ROSTERS ? ownPick(m, W) : -1;
-        if (own >= 0) {
-          ghost.push({ i: own, by: m });
+      for (const ms of givers(csOut)) {
+        const own = OWN_ROSTERS ? give(ms, W) : null;
+        if (own) {
+          ghost.push(own);
           continue;
         }
-        const add = best(m, W, d);
+        const add = best(ms[0], W, d);
         if (add >= 0) {
-          ghost.push({ i: add, by: m });
+          ghost.push({ i: add, by: ms[0] });
           d[add] = 1;
         }
       }
@@ -676,14 +694,18 @@ console.log(
 );
 const REDRAFT_LABELS = ['no redraft', 'redraft dead CS picks'];
 if (OWN_ROSTERS) {
-  console.log("Chance the ghost wins the WS round (each eliminated manager gives a hitter from their own roster)");
+  const [givers, who] = TWO_HITTERS ? [1, 'pairs'] : [2, 'managers'];
+  console.log(
+    `Chance the ghost wins the WS round (each eliminated ${TWO_HITTERS ? 'pair' : 'manager'} gives a hitter ` +
+      'from their own roster)',
+  );
   REDRAFT_LABELS.forEach((label, redraft) => {
     const p = all.wins[redraft][0] / all.runs;
     console.log(`  ${label.padEnd(26)}${`${pct(p)} ${margin(p, all.runs)}`.padStart(20)}`);
   });
   console.log(
-    `\nNo hitter still alive to give: ${pct(all.noneAlive[0] / (2 * all.runs), 1)} of DS-out managers and ` +
-      `${pct(all.noneAlive[1] / (2 * all.runs), 1)} of CS-out managers (they draft with the last pick instead).`,
+    `\nNo hitter still alive to give: ${pct(all.noneAlive[0] / (givers * all.runs), 1)} of DS-out ${who} and ` +
+      `${pct(all.noneAlive[1] / (givers * all.runs), 1)} of CS-out ${who} (they draft with the last pick instead).`,
   );
 } else {
   console.log('Chance the ghost wins the WS round');
