@@ -35,12 +35,24 @@ export interface BattingLine {
   bb: number;
 }
 
+/** One hit by a player who has been on a fantasy roster, from mlb_hits: the bags come in these. */
+export interface ScoreHit {
+  playId: string;
+  gamePk: number;
+  playerId: number;
+  event: '1B' | '2B' | '3B' | 'HR';
+  /** When the play ended, which orders a player's hits in a game. */
+  endedAt: string | null;
+}
+
 export interface Scores {
   games: GameInfo[];
   /** Box-score TB of players who have been on a fantasy roster this season. */
   stats: ScoreStat[];
   /** Every batter's line in the games being played now. */
   lines: BattingLine[];
+  /** Their hits, one by one (a few seconds behind the box score while poll-games matches them). */
+  hits?: ScoreHit[];
 }
 
 /** A table row as realtime and the API send it. */
@@ -67,6 +79,10 @@ export function toGame(g: Row): GameInfo {
   };
 }
 
+export function toHit(h: Row): ScoreHit {
+  return { playId: h.play_id, gamePk: h.game_pk, playerId: h.mlb_player_id, event: h.event, endedAt: h.ended_at ?? null };
+}
+
 export function toLine(l: Row): BattingLine {
   return { gamePk: l.game_pk, playerId: l.mlb_player_id, ab: l.ab, h: l.h, doubles: l.doubles, triples: l.triples, hr: l.hr, bb: l.bb };
 }
@@ -81,6 +97,7 @@ function upsert<T>(list: T[], item: T, same: (a: T) => boolean): T[] {
 export interface ScoreChanges {
   games?: Row[];
   stats?: Row[];
+  hits?: Row[];
   /** Too much changed (or a row was deleted) to send; reload everything. */
   reload?: boolean;
 }
@@ -105,7 +122,7 @@ export function toStat(row: any): ScoreStat {
 
 /** Folds one poll's changed rows into the scores, so a live game costs no refetch. */
 export function applyChanges(scores: Scores, changes: ScoreChanges, year: number, rostered: Set<number>): Scores {
-  let { games, stats, lines } = scores;
+  let { games, stats, lines, hits } = scores;
   for (const row of changes.games ?? []) {
     if (row.season_year !== year || row.series_game_number === null) continue;
     games = upsert(games, toGame(row), (g) => g.gamePk === row.game_pk);
@@ -121,5 +138,11 @@ export function applyChanges(scores: Scores, changes: ScoreChanges, year: number
       lines = upsert(lines, line, (l) => l.gamePk === line.gamePk && l.playerId === line.playerId);
     }
   }
-  return { games, stats, lines };
+  const inSeason = new Set(games.map((g) => g.gamePk));
+  for (const row of changes.hits ?? []) {
+    if (!rostered.has(row.mlb_player_id) || !inSeason.has(row.game_pk)) continue;
+    const hit = toHit(row);
+    hits = upsert(hits ?? [], hit, (h) => h.playId === hit.playId);
+  }
+  return { games, stats, lines, hits };
 }

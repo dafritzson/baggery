@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  BAG_EMOJI,
   type BagHit,
   bagKey,
   bagParam,
   bagSummary,
   bagsInChanges,
+  hitBags,
   hitHeadline,
   ordinal,
   parseBagParam,
@@ -220,5 +222,58 @@ describe('bagSummary', () => {
 describe('ordinal', () => {
   it('adds the suffix', () => {
     expect([1, 2, 3, 4, 11, 12, 13, 21, 22].map(ordinal)).toEqual(['1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd']);
+  });
+});
+
+describe('hitBags', () => {
+  /** The bags split into runs of the same emoji. */
+  const runs = (bags: string[]) =>
+    bags.reduce<string[][]>((out, b) => {
+      if (out.length && out[out.length - 1][0] === b) out[out.length - 1].push(b);
+      else out.push([b]);
+      return out;
+    }, []);
+
+  it('draws every bag of a hit alike, hit by hit, in order', () => {
+    // A double, a single and a homer: 2 + 1 + 4.
+    const bags = hitBags(7, ['2B', '1B', 'HR'], OHTANI, 813032);
+    expect(bags).toHaveLength(7);
+    expect(runs(bags).map((r) => r.length)).toEqual([2, 1, 4]);
+    for (const b of bags) expect(BAG_EMOJI).toContain(b);
+  });
+
+  it("never repeats the previous hit's bag, across many players and games", () => {
+    for (let player = 1; player <= 200; player++) {
+      const bags = hitBags(8, ['1B', '1B', '1B', '1B', '1B', '1B', '1B', '1B'], player, 700000 + player);
+      for (let i = 1; i < bags.length; i++) expect(bags[i]).not.toBe(bags[i - 1]);
+    }
+  });
+
+  it('uses all six bags', () => {
+    const seen = new Set<string>();
+    for (let player = 1; player <= 300; player++) seen.add(hitBags(1, ['1B'], player, 1)[0]);
+    expect(seen).toEqual(new Set(BAG_EMOJI));
+  });
+
+  it("keeps a row's bags as new hits come in", () => {
+    const before = hitBags(3, ['2B', '1B'], OHTANI, 1);
+    expect(hitBags(7, ['2B', '1B', 'HR'], OHTANI, 1).slice(0, 3)).toEqual(before);
+  });
+
+  it("draws TB the hits don't cover yet as the next hit, and stops at the box score's TB", () => {
+    // The box score has a homer that isn't matched to a play yet: drawn as one hit already,
+    // and the same bags once it is.
+    const early = hitBags(6, ['2B'], OHTANI, 1);
+    expect(runs(early).map((r) => r.length)).toEqual([2, 4]);
+    expect(hitBags(6, ['2B', 'HR'], OHTANI, 1)).toEqual(early);
+    // A scoring change took bags away before the plays were read again.
+    expect(hitBags(2, ['2B', 'HR'], OHTANI, 1)).toEqual(early.slice(0, 2));
+  });
+
+  it('draws each bag as its own hit when no hits are known', () => {
+    const bags = hitBags(5, [], OHTANI, 1);
+    expect(bags).toHaveLength(5);
+    for (let i = 1; i < bags.length; i++) expect(bags[i]).not.toBe(bags[i - 1]);
+    expect(hitBags(0, [], OHTANI, 1)).toEqual([]);
   });
 });
