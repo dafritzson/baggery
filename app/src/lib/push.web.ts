@@ -1,4 +1,4 @@
-// Bag alerts on this device, by web push: the service worker (public/sw.js) shows what poll-games
+// Alerts on this device (bag, sub and cut alerts), by web push: the service worker (public/sw.js) shows what poll-games
 // sends. Works in Chrome and Firefox (Android and desktop) and, on iPhone, once Baggery is opened
 // from the Home Screen (iOS 16.4+). The notifications Edge Function keeps each device's choices.
 
@@ -55,10 +55,12 @@ export async function loadPushState(): Promise<PushState> {
   // Only the signed-in user's own row is readable: someone else's alerts on this browser show as off.
   const { data } = await supabase
     .from('push_subscriptions')
-    .select('scope, delay_seconds')
+    .select('scope, delay_seconds, sub_alerts, cut_alerts')
     .eq('endpoint', sub.endpoint)
     .maybeSingle();
-  return data ? { kind: 'on', scope: data.scope, delaySeconds: data.delay_seconds } : { kind: 'off' };
+  return data
+    ? { kind: 'on', scope: data.scope, delaySeconds: data.delay_seconds, subs: data.sub_alerts, cut: data.cut_alerts }
+    : { kind: 'off' };
 }
 
 /** This device's spoiler delay in seconds, or 0 with alerts off. Reads only the table, no function call. */
@@ -109,6 +111,6 @@ export async function turnOffPush(): Promise<string | null> {
 
 export async function sendTestPush(): Promise<string | null> {
   const sub = supported() ? await (await worker()).pushManager.getSubscription() : null;
-  if (!sub) return 'Bag alerts are off on this device.';
+  if (!sub) return 'Alerts are off on this device.';
   return callFunction('notifications', { action: 'test', endpoint: sub.endpoint });
 }

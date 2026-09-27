@@ -1,9 +1,11 @@
-// Bag alerts on this device (Settings). poll-games sends the alerts themselves.
+// Alerts on this device (Settings): bag alerts, and sub and cut alerts with them. poll-games sends the alerts themselves.
 //
 // POST { action: 'key' }                          the public key browsers subscribe with.
-// POST { action: 'subscribe', subscription, scope, delaySeconds }
+// POST { action: 'subscribe', subscription, scope, delaySeconds, subs?, cut? }
 //                                                 signed in: saves this browser's subscription and
-//                                                 its choices (also to change them).
+//                                                 its choices (also to change them). `subs` and
+//                                                 `cut` turn sub and cut alerts on or off; left
+//                                                 out, they stay as they were (on at first).
 // POST { action: 'unsubscribe', endpoint }        signed in: this browser's alerts are off.
 // POST { action: 'test', endpoint }               signed in: sends this browser a test alert.
 
@@ -20,6 +22,8 @@ interface Body {
   subscription?: { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
   scope?: string;
   delaySeconds?: number;
+  subs?: boolean;
+  cut?: boolean;
   endpoint?: string;
 }
 
@@ -37,13 +41,18 @@ serve(async (req) => {
       if (body.scope !== 'mine' && body.scope !== 'league') throw new UserError('Choose whose bags to hear about.');
       const delay = body.delaySeconds ?? 0;
       if (!DELAYS.includes(delay)) throw new UserError('Choose a delay from the list.');
+      const subs = typeof body.subs === 'boolean' ? body.subs : null;
+      const cut = typeof body.cut === 'boolean' ? body.cut : null;
       // An endpoint belongs to one browser; whoever signs in there last gets its alerts.
       await sql`
-        insert into push_subscriptions (endpoint, user_id, p256dh, auth, scope, delay_seconds)
-        values (${endpoint}, ${userId}, ${keys.p256dh}, ${keys.auth}, ${body.scope}, ${delay})
+        insert into push_subscriptions (endpoint, user_id, p256dh, auth, scope, delay_seconds, sub_alerts, cut_alerts)
+        values (${endpoint}, ${userId}, ${keys.p256dh}, ${keys.auth}, ${body.scope}, ${delay},
+                coalesce(${subs}::boolean, true), coalesce(${cut}::boolean, true))
         on conflict (endpoint) do update set
           user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth,
-          scope = excluded.scope, delay_seconds = excluded.delay_seconds`;
+          scope = excluded.scope, delay_seconds = excluded.delay_seconds,
+          sub_alerts = coalesce(${subs}::boolean, push_subscriptions.sub_alerts),
+          cut_alerts = coalesce(${cut}::boolean, push_subscriptions.cut_alerts)`;
       return json({ ok: true });
     }
 
@@ -56,7 +65,7 @@ serve(async (req) => {
       const [sub] = await sql`
         select endpoint, p256dh, auth, scope from push_subscriptions
         where endpoint = ${body.endpoint ?? ''} and user_id = ${userId}`;
-      if (!sub) throw new UserError('Bag alerts are off on this device.');
+      if (!sub) throw new UserError('Alerts are off on this device.');
       const result = await sendPush(sub as { endpoint: string; p256dh: string; auth: string }, {
         ...testAlert(sub.scope),
         url: '/settings',

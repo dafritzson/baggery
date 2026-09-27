@@ -121,6 +121,16 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   type, time: ~120 bytes each), a few hundred rows by the World Series, so ~20–40 KB more per full
   load late in the postseason. Each new hit rides in the poll's one broadcast; a clip turning up
   doesn't send anything.
+- **Sub and cut alerts.** No new MLB requests: a hitter coming off the bench (👀) or being
+  replaced (😠) is read from the box score `poll-games` already fetches every 10 s. Each read runs
+  one small query that finds the drafted hitters' new changes (usually none, so a few bytes back).
+  Cut alerts (🥵 / 😮‍💨) rank the round once per finished game, when its final box score is read
+  again ~10 minutes after it ends: ~45 rankings a postseason, each reading the round's batting
+  lines (well under 100 KB) inside Supabase. The pushes go straight from the function to the
+  browsers' push services, ~1 KB each: a few dozen a day across the league. Alerts waiting out a
+  spoiler delay keep the cron job calling `poll-games` for up to 2 more minutes, as bag alerts do.
+  That's at most ~12 extra calls per finished game, ~500 a postseason per project. No new
+  realtime traffic or app downloads; Settings reads two more booleans from its own row.
 - **Realtime messages per second.** The old per-row Postgres Changes could burst 150–250 messages
   right after a poll on a busy day. One broadcast per poll keeps it to about one message per open
   app every 10 seconds. The draft room still uses Postgres Changes on low-traffic tables

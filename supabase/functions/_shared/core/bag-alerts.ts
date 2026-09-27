@@ -1,5 +1,5 @@
 // The text of a bag alert, the push notification poll-games sends when a drafted hitter gets a
-// bag. Pure, so the unit tests can run it without Supabase.
+// bag. Pure, so the unit tests can run it without Supabase. Sub and cut alerts: game-alerts.ts.
 
 /** A bag as private.bag_events records it, and whose team it counts for. */
 export interface Bag {
@@ -39,8 +39,19 @@ export function bagAlert(bag: Bag): Alert {
   const title = `${'👜'.repeat(Math.min(Math.max(bag.bags, 1), 4))} ${bag.player} got ${
     bag.bags === 1 ? 'a bag' : `${bag.bags} bags`
   }`;
-  const team = !bag.yours && bag.manager && bag.manager !== bag.team ? `${bag.team} (${bag.manager})` : bag.team;
-  return { title, body: `${capitalize(hitsText(bag))} for ${team}` };
+  return { title, body: `${capitalize(hitsText(bag))} for ${teamLabel(bag)}` };
+}
+
+/** Whose alert it is: the fantasy team, its manager's first name, and whether it's the recipient's own. */
+export interface Owner {
+  team: string;
+  manager: string | null;
+  yours: boolean;
+}
+
+/** "Bag Boys (Mike)"; your own team is just its name. */
+export function teamLabel(owner: Owner): string {
+  return !owner.yours && owner.manager && owner.manager !== owner.team ? `${owner.team} (${owner.manager})` : owner.team;
 }
 
 /**
@@ -59,7 +70,7 @@ export function hitsText(bag: Pick<Bag, 'singles' | 'doubles' | 'triples' | 'hr'
 /** The alert that confirms a device's alerts work (Settings → Send a test). */
 export function testAlert(scope: 'mine' | 'league'): Alert {
   return {
-    title: '👜 Bag alerts are on',
+    title: '👜 Alerts are on',
     body: scope === 'mine' ? "You'll get one when one of your hitters gets a bag." : "You'll get one when anyone's hitter gets a bag.",
   };
 }
