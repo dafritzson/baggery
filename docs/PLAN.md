@@ -71,6 +71,10 @@ two after a big hit in a big game, later in others. On Games, ▶ on a hitter li
 that game with both links, which open in the browser (nothing is embedded or stored). Settings
 → Games reloads a season's games and videos (commissioner).
 
+The Games tab's bags come from the same hits: one emoji per TB, hit by hit in order, every bag of
+a hit alike and never the previous hit's (`hitBags` in `core/bag-celebration.ts`). So the scores
+load and broadcast carry rostered players' hits.
+
 ## Phases
 
 | Phase | Deadline | Scope |

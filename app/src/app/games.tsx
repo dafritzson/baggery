@@ -2,7 +2,7 @@ import { type ReactNode, useState } from 'react';
 import { type LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
-import { BAG_EMOJI } from '@core/bag-celebration.ts';
+import { BAG_EMOJI, hitBags } from '@core/bag-celebration.ts';
 import type { LiveState } from '@core/live.ts';
 import { postseasonSeries } from '@core/schedule.ts';
 import { SERIES } from '@core/scoreboard.ts';
@@ -21,7 +21,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { dayKey, dayLabel, gameDay } from '@/lib/game-day';
-import { type BattingLine, type GameInfo, type Scores, useScores } from '@/lib/scores';
+import { type BattingLine, type GameInfo, type ScoreHit, type Scores, useScores } from '@/lib/scores';
 import { type SeasonData, useSeason } from '@/lib/season';
 import { ownerName, teamName } from '@/lib/teams';
 import { zoom, zoomFixed, zoomKey, zoomView } from '@/lib/zoom';
@@ -202,19 +202,6 @@ function MenuChip<T extends string>({
   );
 }
 
-/**
- * One bag emoji per total base, each picked at random. Seeded by player, game and position, so a
- * row doesn't reshuffle every time the live scores refresh.
- */
-function bagEmojis(tb: number, playerId: number, gamePk: number): string[] {
-  return Array.from({ length: tb }, (_, i) => {
-    let h = (playerId ^ Math.imul(gamePk, 0x9e3779b1) ^ Math.imul(i + 1, 0x85ebca6b)) >>> 0;
-    h = Math.imul(h ^ (h >>> 16), 0x7feb352d) >>> 0;
-    h = Math.imul(h ^ (h >>> 15), 0x846ca68b) >>> 0;
-    return BAG_EMOJI[((h ^ (h >>> 16)) >>> 0) % BAG_EMOJI.length];
-  });
-}
-
 /** How many bags fit in `width`, once a bag's width has been measured. */
 function bagsThatFit(width: number, bagWidth: number | null): number {
   return bagWidth ? Math.floor((width + 0.5) / bagWidth) : 0;
@@ -292,6 +279,7 @@ function BaggerCard({
   playerId,
   team,
   tb,
+  hits,
   gamePk,
   gameLabel,
   bagWidth,
@@ -300,6 +288,8 @@ function BaggerCard({
   playerId: number;
   team: SeasonData['teams'][number];
   tb: number | null;
+  /** His hits in the game, in order: each one's bags are drawn alike (core hitBags). */
+  hits: ScoreHit['event'][];
   gamePk: number;
   /** "World Series · Game 3", for the videos sheet. */
   gameLabel: string;
@@ -313,7 +303,7 @@ function BaggerCard({
   const [ownerRoom, setOwnerRoom] = useState(0);
   const mine = team.id === data.myTeam?.id;
   const owner = ownerName(data, team);
-  const bags = tb ? bagEmojis(tb, playerId, gamePk) : [];
+  const bags = tb ? hitBags(tb, hits, playerId, gamePk) : [];
   // Beside the name: only what the owner line can't hold.
   const high = Math.max(0, Math.min(bagsThatFit(nameRoom, bagWidth), bags.length - bagsThatFit(ownerRoom, bagWidth)));
   const low = bags.slice(high);
@@ -603,6 +593,11 @@ function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; gam
   const [bagWidth, setBagWidth] = useState<number | null>(measuredBagWidth);
   // Fantasy-rostered players on either team, with their TB in this game.
   const tb = new Map(scores.stats.filter((s) => s.gamePk === game.gamePk).map((s) => [s.playerId, s.tb]));
+  const hitsOf = (playerId: number) =>
+    (scores.hits ?? [])
+      .filter((h) => h.gamePk === game.gamePk && h.playerId === playerId)
+      .sort((a, b) => (a.endedAt ?? '').localeCompare(b.endedAt ?? ''))
+      .map((h) => h.event);
   const playerIds = [...new Set(data.spells.map((s) => s.mlb_player_id))];
   const players = playerIds
     .filter((id) => {
@@ -630,7 +625,17 @@ function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; gam
         {BAG_EMOJI.join('')}
       </ThemedText>
       {players.map((p) => (
-        <BaggerCard key={p.id} data={data} playerId={p.id} team={p.team} tb={p.tb} gamePk={game.gamePk} gameLabel={seriesLabel(game)} bagWidth={bagWidth} />
+        <BaggerCard
+          key={p.id}
+          data={data}
+          playerId={p.id}
+          team={p.team}
+          tb={p.tb}
+          hits={hitsOf(p.id)}
+          gamePk={game.gamePk}
+          gameLabel={seriesLabel(game)}
+          bagWidth={bagWidth}
+        />
       ))}
     </View>
   );

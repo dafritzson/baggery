@@ -120,6 +120,46 @@ export function hitHeadline(bag: Hits): string {
 /** The bag emoji the app draws for total bases (the Games tab, the rain). */
 export const BAG_EMOJI = ['👜', '💼', '🎒', '🛍️', '👝', '🧳'];
 
+const HIT_BASES = { '1B': 1, '2B': 2, '3B': 3, HR: 4 } as const;
+
+/** A number from player, game and position, spread evenly: the same inputs, the same number. */
+function bagHash(playerId: number, gamePk: number, i: number): number {
+  let h = (playerId ^ Math.imul(gamePk, 0x9e3779b1) ^ Math.imul(i + 1, 0x85ebca6b)) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 0x7feb352d) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x846ca68b) >>> 0;
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
+/**
+ * A player's bags in a game, one emoji per TB, hit by hit in the order they happened: every bag
+ * of a hit is the same bag, picked at random for that hit but never the previous hit's. So a
+ * double, a single and a homer read as 🎒🎒🧳👜👜👜👜.
+ *
+ * Seeded by player, game and hit number, so a row stays put as scores refresh and a new hit just
+ * adds its bags. TB the known hits don't cover yet (poll-games matches plays a few seconds after
+ * the box score) are drawn as the next hit. With no hits known at all (a past season before its
+ * videos are loaded), every bag is drawn as its own hit.
+ */
+export function hitBags(tb: number, events: (keyof typeof HIT_BASES)[], playerId: number, gamePk: number): string[] {
+  const sizes: number[] = events.map((e) => HIT_BASES[e]);
+  const known = sizes.reduce((a, b) => a + b, 0);
+  if (!sizes.length) sizes.push(...Array(Math.max(tb, 0)).fill(1));
+  else if (tb > known) sizes.push(tb - known);
+  const bags: string[] = [];
+  let previous = -1;
+  sizes.forEach((size, i) => {
+    const n = Math.min(size, tb - bags.length);
+    if (n <= 0) return;
+    const h = bagHash(playerId, gamePk, i);
+    // Any of the six for the first hit; after that, any of the five that aren't the last one.
+    let pick = previous < 0 ? h % BAG_EMOJI.length : h % (BAG_EMOJI.length - 1);
+    if (previous >= 0 && pick >= previous) pick += 1;
+    bags.push(...Array(n).fill(BAG_EMOJI[pick]));
+    previous = pick;
+  });
+  return bags;
+}
+
 /** How many bags rain down: more for more bags, a downpour for a home run. */
 export function rainCount(bag: BagHit): number {
   return bag.hr > 0 ? 72 : Math.min(24 + 12 * (bag.bags - 1), 60);

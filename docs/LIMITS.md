@@ -89,6 +89,10 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   after, until every hit has a clip. Those are downloads into the function, not egress. The app
   downloads a hitter's hits (well under 1 KB) only when someone taps ▶, and the videos stream
   from MLB and Savant, not us. The commissioner's Reload button costs about 10 calls per season.
+- **Bags hit by hit.** The scores load also brings rostered players' hits (play ID, game, player,
+  type, time: ~120 bytes each), a few hundred rows by the World Series, so ~20–40 KB more per full
+  load late in the postseason. Each new hit rides in the poll's one broadcast; a clip turning up
+  doesn't send anything.
 - **Realtime messages per second.** The old per-row Postgres Changes could burst 150–250 messages
   right after a poll on a busy day. One broadcast per poll keeps it to about one message per open
   app every 10 seconds. The draft room still uses Postgres Changes on low-traffic tables

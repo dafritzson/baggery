@@ -1,13 +1,13 @@
 import { createContext, createElement, type ReactNode, use, useCallback, useEffect, useRef, useState } from 'react';
 
-import { type ScoreChanges, type Scores, applyChanges, toGame, toLine, toStat } from '@core/score-feed.ts';
+import { type ScoreChanges, type Scores, applyChanges, toGame, toHit, toLine, toStat } from '@core/score-feed.ts';
 import type { ScoreGame, ScoreStat } from '@core/scoreboard.ts';
 import type { RosterSpell } from '@core/scoring.ts';
 
 import { type SeasonData, useSeason } from '@/lib/season';
 import { supabase } from '@/lib/supabase';
 
-export type { BattingLine, GameInfo, Scores } from '@core/score-feed.ts';
+export type { BattingLine, GameInfo, ScoreHit, Scores } from '@core/score-feed.ts';
 
 /** Roster spells in the shared core's format. */
 export function coreSpells(data: SeasonData): RosterSpell[] {
@@ -121,6 +121,15 @@ function useLiveScores(data: SeasonData | null): ScoresState {
             .in('game_pk', gamePks)
             .in('mlb_player_id', playerIds)
         : { data: [] };
+    // Their hits one by one, so the Games tab can draw bags hit by hit.
+    const { data: hits } =
+      gamePks.length && playerIds.length
+        ? await supabase
+            .from('mlb_hits')
+            .select('play_id, game_pk, mlb_player_id, event, ended_at')
+            .in('game_pk', gamePks)
+            .in('mlb_player_id', playerIds)
+        : { data: [] };
     const livePks = (games ?? []).filter((g) => g.status === 'Live').map((g) => g.game_pk as number);
     const { data: lines } = livePks.length
       ? await supabase.from('player_game_stats').select('game_pk, mlb_player_id, ab, h, doubles, triples, hr, bb').in('game_pk', livePks)
@@ -130,6 +139,7 @@ function useLiveScores(data: SeasonData | null): ScoresState {
       games: (games ?? []).filter((g) => g.series_game_number !== null).map(toGame),
       stats: (stats ?? []).map(toStat),
       lines: (lines ?? []).map(toLine),
+      hits: (hits ?? []).map(toHit),
     });
   }, [year, playerKey]);
 
