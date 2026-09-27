@@ -62,3 +62,16 @@ export function rankOf(all: ManagerScouting[], stat: ScoutingStat, s: ManagerSco
   const better = values.filter((x) => (stat.lowerWins ? x < v : x > v)).length;
   return { rank: better + 1, of: values.length };
 }
+
+/**
+ * For a stat with no better side: where a manager sits, counted from the nearer end,
+ * e.g. 2nd most or 3rd least (ties share a place).
+ */
+export function extremeOf(all: ManagerScouting[], stat: ScoutingStat, s: ManagerScouting): { place: number; side: 'most' | 'least' } | null {
+  const v = stat.value(s);
+  if (v === null) return null;
+  const values = all.map(stat.value).filter((x): x is number => x !== null);
+  const fromTop = values.filter((x) => x > v).length + 1;
+  const fromBottom = values.filter((x) => x < v).length + 1;
+  return fromTop <= fromBottom ? { place: fromTop, side: 'most' } : { place: fromBottom, side: 'least' };
+}

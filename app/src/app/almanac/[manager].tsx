@@ -18,7 +18,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { type AlmanacData, managerSlug, useAlmanac } from '@/lib/almanac';
-import { RADAR_AXES, SCOUTING_STATS, radarValues, rankOf } from '@/lib/scouting';
+import { RADAR_AXES, SCOUTING_STATS, extremeOf, radarValues, rankOf } from '@/lib/scouting';
 
 const median = (xs: number[]) => {
   const sorted = [...xs].sort((a, b) => a - b);
@@ -153,6 +153,12 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
                 const v = st.value(scout);
                 const rank = rankOf(data.scouting, st, scout);
                 if (v === null || !rank) return null;
+                // Style stats have no better side: say which end they're near, and never color it.
+                const extreme = st.neutral ? extremeOf(data.scouting, st, scout) : null;
+                const lead = !st.neutral && rank.rank === 1;
+                const pill = extreme
+                  ? extreme.place === 1 ? (extreme.side === 'most' ? 'Most' : 'Least') : `${ordinal(extreme.place)} ${extreme.side}`
+                  : ordinal(rank.rank);
                 return (
                   <View key={st.key} style={styles.statRow}>
                     <View style={{ flex: 1 }}>
@@ -160,13 +166,11 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
                       <ThemedText type="small" themeColor="textSecondary" style={styles.badgeReason}>{st.help}</ThemedText>
                     </View>
                     <ThemedText type="smallBold">{st.format(v)}</ThemedText>
-                    {!st.neutral && (
-                      <View style={[styles.rank, { backgroundColor: rank.rank === 1 ? color : theme.background }]}>
-                        <ThemedText type="smallBold" style={{ color: rank.rank === 1 ? '#fff' : theme.textSecondary, fontSize: 11 }}>
-                          {ordinal(rank.rank)}
-                        </ThemedText>
-                      </View>
-                    )}
+                    <View style={[styles.rank, { backgroundColor: lead ? color : theme.background }]}>
+                      <ThemedText type="smallBold" style={{ color: lead ? '#fff' : theme.textSecondary, fontSize: 11 }}>
+                        {pill}
+                      </ThemedText>
+                    </View>
                   </View>
                 );
               })}
