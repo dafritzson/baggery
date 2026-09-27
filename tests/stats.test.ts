@@ -57,10 +57,14 @@ describe('regressedSlg (RDSLG)', () => {
 });
 
 describe('regressedTb (RDTB)', () => {
-  it('adds 200 games of 1.5 TB, then scales to expected round-1 games', () => {
-    // (300 + 300) / (150 + 200) TB per game
-    expect(regressedTb(300, 150, true)).toBeCloseTo((600 / 350) * 4.125);
-    expect(regressedTb(300, 150, false)).toBeCloseTo((600 / 350) * 6.625);
+  it('adds 55 games of 1.5 TB, then scales to expected round-1 games', () => {
+    // (300 + 82.5) / (150 + 55) TB per game
+    expect(regressedTb(300, 150, true)).toBeCloseTo((382.5 / 205) * 4.125);
+    expect(regressedTb(300, 150, false)).toBeCloseTo((382.5 / 205) * 6.625);
+  });
+  it('pulls a full-season regular toward average about as hard as RDSLG does', () => {
+    // 2026 Pete Crow-Armstrong: 159 G, 355 TB. Keeps 159 / 214 of his gap from 1.5 TB a game.
+    expect(regressedTb(355, 159, true) / 4.125).toBeCloseTo(437.5 / 214);
   });
   it('is 1.5 TB a game with no games', () => {
     expect(regressedTb(0, 0, true)).toBeCloseTo(1.5 * 4.125);

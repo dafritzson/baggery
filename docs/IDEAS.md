@@ -8,17 +8,6 @@ move it into the code (and `RULES.md` or `PLAN.md` if it changes them) and delet
 The RDSLG, RDTB and TB·E[G]/162 columns (formulas in
 `supabase/functions/_shared/core/stats.ts`). Raised 2026-09-24.
 
-### RDTB regresses much harder than RDSLG
-
-Both add 200 of something to the player's season: 200 at-bats of .435 for RDSLG, 200 games of
-1.5 TB for RDTB. 200 AB is about a third of a season, but 200 games is more than a full one,
-so for RDTB the prior outweighs the player's own season. A full-season regular keeps about 76%
-of their gap from average in RDSLG but only about 44% in RDTB. For example, Pete
-Crow-Armstrong (2026: 159 G, 355 TB) goes from 2.23 TB/G to 1.82.
-
-Regulars average about 3.6 AB per game, so ~55 games would match RDSLG's 200 AB. Unsure whether
-the heavy regression is wanted, so it's unchanged.
-
 ### Expected games only fit Draft 1
 
 E[G] is the expected games in fantasy round 1 as seen before the Wild Card. Later drafts

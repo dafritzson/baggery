@@ -41,8 +41,13 @@ export function opsPlus(line: BattingLine, league: BattingLine): number | null {
 // "Regressed" stats add a fixed amount of league-average-ish performance to a player's season,
 // so small samples count for less.
 
-/** At-bats (for RDSLG) or games (for RDTB) of average performance added to every player. */
-export const REGRESSION_WEIGHT = 200;
+/** At-bats of average slugging RDSLG adds to every player: about a third of a season. */
+export const REGRESSION_AT_BATS = 200;
+/**
+ * Games of average TB RDTB adds to every player. Regulars get about 3.6 at-bats a game, so 55
+ * games is about RDSLG's 200 at-bats, and both pull a player toward average about as hard.
+ */
+export const REGRESSION_GAMES = 55;
 /** SLG that RDSLG regresses toward. */
 export const REGRESSION_SLG = 0.435;
 /** TB per game that RDTB regresses toward. */
@@ -65,12 +70,12 @@ export function expectedRound1Games(hasBye: boolean): number {
 
 /** RDSLG: SLG regressed toward .435 by 200 at-bats. */
 export function regressedSlg(tb: number, ab: number): number {
-  return (tb + REGRESSION_WEIGHT * REGRESSION_SLG) / (ab + REGRESSION_WEIGHT);
+  return (tb + REGRESSION_AT_BATS * REGRESSION_SLG) / (ab + REGRESSION_AT_BATS);
 }
 
-/** RDTB: TB per game regressed toward 1.5 by 200 games, times expected round-1 games. */
+/** RDTB: TB per game regressed toward 1.5 by 55 games, times expected round-1 games. */
 export function regressedTb(tb: number, games: number, hasBye: boolean): number {
-  return ((tb + REGRESSION_WEIGHT * REGRESSION_TB_PER_GAME) * expectedRound1Games(hasBye)) / (games + REGRESSION_WEIGHT);
+  return ((tb + REGRESSION_GAMES * REGRESSION_TB_PER_GAME) * expectedRound1Games(hasBye)) / (games + REGRESSION_GAMES);
 }
 
 /** "TB·E[G]/162": TB per game times expected round-1 games. Null with no games. */
