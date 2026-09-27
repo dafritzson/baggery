@@ -4,7 +4,9 @@ import type { ZoomDirection } from './zoom-marks';
 
 export { type ZoomDirection, zoomFixed, zoomKey, zoomView } from './zoom-marks';
 
-type ViewTransitionDocument = Document & { startViewTransition?: (update: () => void) => { finished: Promise<void> } };
+type ViewTransitionDocument = Document & {
+  startViewTransition?: (update: () => void) => { ready: Promise<void>; finished: Promise<void> };
+};
 
 /** The scrolling page the zooming view sits in: the zoom is cut off at its edges. */
 function scroller(): HTMLElement | null {
@@ -50,7 +52,8 @@ export function zoom(direction: ZoomDirection, update: () => void, focus?: strin
       ? ([...document.querySelectorAll<HTMLElement>(`[data-zoom-key="${CSS.escape(focus)}"]`)].find((el) => el.getClientRects().length > 0) ?? null)
       : null;
   const before = find();
-  root.style.setProperty('--zoom-from', originIn(before, page));
+  const from = originIn(before, page);
+  let to = from;
   if (before) before.style.viewTransitionName = 'zoom-focus';
   page.style.viewTransitionName = 'zoom-page';
   root.dataset.zoom = direction;
@@ -63,9 +66,21 @@ export function zoom(direction: ZoomDirection, update: () => void, focus?: strin
       if (!inSight(after, page)) after.scrollIntoView({ block: 'center' });
       after.style.viewTransitionName = 'zoom-focus';
     }
-    root.style.setProperty('--zoom-to', originIn(after, page));
+    to = originIn(after, page);
   });
+  // The page's old and new snapshots scale around the game, set on the snapshots themselves:
+  // a CSS variable on <html> would make Safari restyle the whole document, hidden tabs and all.
+  const origins: Animation[] = [];
+  transition.ready
+    .then(() => {
+      for (const [snapshot, origin] of [['old', from], ['new', to]]) {
+        const pseudoElement = `::view-transition-${snapshot}(zoom-page)`;
+        origins.push(root.animate({ transformOrigin: [origin, origin] }, { duration: 360, fill: 'both', pseudoElement }));
+      }
+    })
+    .catch(() => {});
   transition.finished.finally(() => {
+    for (const a of origins) a.cancel();
     delete root.dataset.zoom;
     page.style.viewTransitionName = '';
     if (after) after.style.viewTransitionName = '';

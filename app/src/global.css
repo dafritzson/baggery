@@ -220,6 +220,10 @@
  * are their own layers, so they stay put instead of zooming with the page. Nothing else changes,
  * so the rest of the screen isn't captured at all: it stays live underneath, which saves the
  * browser drawing and cross-fading two full-screen snapshots every frame.
+ *
+ * Where the page scales from is set on the page's snapshots by zoom.web.ts, not with a variable
+ * on <html>: Safari restyles every element under it for that, the hidden tabs' too (Research's
+ * table alone is thousands), which dropped frames at the start of every zoom.
  */
 :root[data-zoom] {
   view-transition-name: none;
@@ -244,12 +248,6 @@
 /* The game's old look is stretched to its new size, so it fades out quickly. */
 ::view-transition-old(zoom-focus) {
   animation-duration: 180ms;
-}
-:root[data-zoom]::view-transition-old(zoom-page) {
-  transform-origin: var(--zoom-from);
-}
-:root[data-zoom]::view-transition-new(zoom-page) {
-  transform-origin: var(--zoom-to);
 }
 :root[data-zoom='in']::view-transition-old(zoom-page) {
   animation: 360ms cubic-bezier(0.2, 0, 0, 1) both zoom-grow-out;
