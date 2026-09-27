@@ -488,7 +488,8 @@ function StatsBody({
  * His TB in each postseason game, a row per series, with his fantasy team (a player is on one
  * roster at most per season) as a link to it in Standings. Shows once his MLB team has played a
  * postseason game. Bags that counted for no one (before he was drafted, after he was dropped, or
- * once his fantasy team was out) are grayed out, with a line saying which.
+ * once his fantasy team was out) are grayed out. Then a line per stretch of series says whose
+ * bags they were, or why they didn't count; when all of them counted, the header says it all.
  */
 function BaggerySection({
   data,
@@ -529,17 +530,20 @@ function BaggerySection({
     muted: s.games.every((g) => !counted(g.teamId, s.gameType)),
     mine: !!myTeamId && s.games.some((g) => g.teamId === myTeamId && counted(g.teamId, s.gameType)),
   }));
-  // Why the grayed-out bags didn't count: a line per stretch of them, with its series.
-  const stretches: { why: string | null; labels: string[] }[] = [];
+  // Whose bags they were: a line per stretch of games on one roster (or none), with its series.
+  const stints: { teamId: string | null; out: boolean; dropped: boolean; labels: string[] }[] = [];
   for (const s of series) {
     for (const g of s.games) {
-      const why = g.teamId === null ? (g.dropped ? 'Dropped' : 'Undrafted') : counted(g.teamId, s.gameType) ? null : 'Eliminated';
-      const last = stretches.at(-1);
-      if (!last || last.why !== why) stretches.push({ why, labels: [s.label] });
-      else if (!last.labels.includes(s.label)) last.labels.push(s.label);
+      const last = stints.at(-1);
+      const out = g.teamId !== null && !counted(g.teamId, s.gameType);
+      if (!last || last.teamId !== g.teamId || last.out !== out || last.dropped !== g.dropped) {
+        stints.push({ teamId: g.teamId, out, dropped: g.dropped, labels: [s.label] });
+      } else if (!last.labels.includes(s.label)) {
+        last.labels.push(s.label);
+      }
     }
   }
-  const notes = stretches.filter((st) => st.why !== null);
+  const allCounted = stints.every((st) => st.teamId !== null && !st.out);
 
   const spell = data.spells.find((s) => s.mlb_player_id === playerId);
   const team = spell && data.teams.find((t) => t.id === spell.fantasy_team_id);
@@ -567,19 +571,34 @@ function BaggerySection({
       }
       action={<ThemedText type="small" themeColor="textSecondary">{series.reduce((a, s) => a + s.total, 0)} TB</ThemedText>}>
       <ScoreGrid columns={columns} rows={rows} labelHeader="" totalHeader="TB" labelWidth={48} rowHeight={32} />
-      {notes.length > 0 && (
+      {!allCounted && (
         <View style={styles.stints}>
-          {notes.map((st, i) => (
+          {stints.map((st, i) => (
             <ThemedText key={i} type="small" themeColor="textSecondary" numberOfLines={1}>
               <ThemedText type="smallBold" themeColor="textSecondary">{st.labels.join(', ')}</ThemedText>
               {'  '}
-              {st.why}
+              {stintTeam(data, st.teamId, st.out, st.dropped)}
             </ThemedText>
           ))}
         </View>
       )}
     </Section>
   );
+}
+
+/**
+ * "Big Bags (Kyle)", with "You" for my team (just the name when it's the manager's own), or why
+ * the bags didn't count: "Undrafted" (not drafted yet), "Dropped" (a team let him go), or
+ * "Big Bags (Kyle) · Eliminated".
+ */
+function stintTeam(data: SeasonData, teamId: string | null, out: boolean, dropped: boolean): string {
+  const team = teamId ? data.teams.find((t) => t.id === teamId) : undefined;
+  if (!team) return dropped ? 'Dropped' : 'Undrafted';
+  const name = teamName(team);
+  const owner = ownerName(data, team);
+  const label = owner && owner !== name ? `${name} (${owner})` : name;
+  if (out) return `${label} · Eliminated`;
+  return team.id === data.myTeam?.id ? `${label} · You` : label;
 }
 
 function Section({
