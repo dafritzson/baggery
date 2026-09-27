@@ -70,3 +70,30 @@ Still open:
 - Pick order between the 2 managers in each draft, and what happens to a pick they don't make
   (autodraft?).
 - How the Standings, tiebreakers and round closing handle a 4th team in round 3.
+
+## Smoother tab switching on phones
+
+Switching tabs feels slower than apps like Facebook. Looked at from the code on 2026-09-27; not
+measured yet. `scripts/bench-tabs.mjs` times each tab tap against local Supabase (phone viewport,
+4x CPU slowdown): time to settle, longest main-thread task, requests, and DOM nodes. Run it
+before and after a change. Ideas, biggest first:
+
+1. **The tabs are screens in a `Stack`** (`app/src/app/_layout.tsx`), and the tab bar
+   (`components/section-nav.tsx`) uses `router.navigate`. In recent Expo Router, `navigate`
+   seems to push a new screen instead of going back to one already open (not checked against the
+   installed source; the benchmark's DOM node count going up round after round would confirm
+   it). If so, every tap rebuilds the tab and forgets its state (scroll, Games' day,
+   Research's filters), and old copies stay mounted, re-rendering on every score broadcast.
+   Fix: Expo Router `Tabs` (or `expo-router/ui` headless tabs) with the existing
+   `BottomTabBar` as its tab bar, so each tab mounts once and then only shows or hides.
+2. **Data is mostly shared already:** `SeasonProvider` and `ScoresProvider` load once for the
+   app, so Draft, Standings and Games fetch nothing on a switch. Their cost is rendering.
+3. **Research** re-runs the `postseason_totals` RPC on every mount and renders the whole pool
+   as a non-virtualized table. Cache the totals like the Almanac does, and virtualize the rows.
+4. **Almanac** calls the `almanac` function on first visit (~100 KB est.), cached 5 minutes.
+   Start the load on the tab's press-in, and/or keep a copy on the device and revalidate it.
+   Prefetching on app start costs egress and invocations for every open (docs/LIMITS.md).
+5. **Games** renders all three zoom views on mount. Real tabs pay that once; otherwise mount
+   Round and Postseason just after the first paint.
+6. **App open:** keep the last season data on the device and show it at once while it
+   reloads (stale-while-revalidate). Same egress.
