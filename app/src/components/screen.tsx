@@ -15,6 +15,7 @@ export function Screen({
   refreshing = false,
   header,
   width = 'narrow',
+  tight = false,
 }: {
   children: ReactNode;
   onRefresh?: () => void;
@@ -23,6 +24,8 @@ export function Screen({
   header?: ReactNode;
   /** 'wide' for screens with a desktop layout; 'narrow' keeps one reading-width column. */
   width?: 'narrow' | 'wide';
+  /** Phones: narrower side margins, for screens that need the width (Research's table). */
+  tight?: boolean;
 }) {
   const underHeader = use(UnderAppHeader);
   const layout = useLayout();
@@ -30,15 +33,16 @@ export function Screen({
   const { bottom } = useSafeAreaInsets();
   // Phones: the tab bar floats over the bottom, so the end of the page can scroll clear of it.
   const paddingBottom = underHeader && layout === 'compact' ? BOTTOM_TAB_BAR_SPACE + bottom : Spacing.six;
+  const gutter = tight && layout === 'compact' ? { paddingHorizontal: Spacing.two, paddingTop: Spacing.two } : null;
   return (
     <ThemedView style={styles.fill}>
       <SafeAreaView style={styles.fill} edges={underHeader ? ['left', 'right'] : ['top', 'left', 'right']}>
-        {header && <View style={[styles.header, { maxWidth }]}>{header}</View>}
+        {header && <View style={[styles.header, { maxWidth }, gutter && { paddingHorizontal: Spacing.two }]}>{header}</View>}
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined}>
-          <View style={[styles.content, { maxWidth, paddingBottom }]}>{children}</View>
+          <View style={[styles.content, { maxWidth, paddingBottom }, gutter]}>{children}</View>
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
