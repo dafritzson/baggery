@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boxscoreBatting, linescoreLive, linescoreRuns, scheduleGames } from '../supabase/functions/poll-games/feed.ts';
+import { boxscoreBatting, clipsForHits, highlightClips, linescoreLive, linescoreRuns, playHits, scheduleGames } from '../supabase/functions/poll-games/feed.ts';
 
 const team = (id: number, score?: number) => ({ team: { id }, score });
 
@@ -162,5 +162,91 @@ describe('linescore feed', () => {
 
   it('has nothing before the first pitch', () => {
     expect(linescoreLive({ innings: [], teams: {} })).toBeNull();
+  });
+});
+
+describe('playHits', () => {
+  // Shaped like /game/{gamePk}/playByPlay: 2025 World Series Game 3.
+  const pitch = (playId: string) => ({ isPitch: true, playId });
+  const data = {
+    allPlays: [
+      {
+        result: { eventType: 'double' },
+        matchup: { batter: { id: 660271 } },
+        about: { inning: 1, isTopInning: false, endTime: '2025-10-28T00:15:02.000Z' },
+        playEvents: [pitch('aaaa0000-0000-0000-0000-000000000001'), { isPitch: false }, pitch('2dcfd28d-b1e1-35b2-bb39-bbb69e540cb0')],
+      },
+      { result: { eventType: 'strikeout' }, matchup: { batter: { id: 5 } }, about: { inning: 1 }, playEvents: [pitch('x')] },
+      {
+        result: { eventType: 'home_run' },
+        matchup: { batter: { id: 518692 } },
+        about: { inning: 18, halfInning: 'bottom', endTime: '2025-10-28T06:50:35.827Z' },
+        playEvents: [pitch('1b148aed-a2b7-3b9c-a0c4-6bb88a732ec8'), { isPitch: false, type: 'action' }],
+      },
+      // No pitch with a play ID: skipped rather than guessed.
+      { result: { eventType: 'single' }, matchup: { batter: { id: 7 } }, about: { inning: 2 }, playEvents: [{ isPitch: false }] },
+    ],
+  };
+
+  it("takes each hit's batter, type, inning and the play ID of the pitch put in play", () => {
+    expect(playHits(813032, data)).toEqual([
+      {
+        play_id: '2dcfd28d-b1e1-35b2-bb39-bbb69e540cb0', game_pk: 813032, mlb_player_id: 660271, event: '2B',
+        inning: 1, top_inning: false, ended_at: '2025-10-28T00:15:02.000Z',
+      },
+      {
+        play_id: '1b148aed-a2b7-3b9c-a0c4-6bb88a732ec8', game_pk: 813032, mlb_player_id: 518692, event: 'HR',
+        inning: 18, top_inning: false, ended_at: '2025-10-28T06:50:35.827Z',
+      },
+    ]);
+    expect(playHits(1, {})).toEqual([]);
+  });
+});
+
+describe('highlight clips', () => {
+  // Shaped like /game/{gamePk}/content.
+  const item = (guid: string | undefined, slug: string, headline: string, players: number[]) => ({
+    guid,
+    slug,
+    headline,
+    keywordsAll: [{ type: 'game_pk', value: '813032' }, ...players.map((p) => ({ type: 'player_id', value: String(p) }))],
+  });
+  const data = {
+    highlights: {
+      highlights: {
+        items: [
+          item('1b148aed-a2b7-3b9c-a0c4-6bb88a732ec8', 'freddie-freeman-s-walk-off-home-run', "Freddie Freeman's walk-off home run", [518692]),
+          item(undefined, 'field-view-freeman-walk-off', 'Field View: Freeman walk-off', [518692]),
+          // A single where a runner was thrown out: the defense's clip, then the batter's.
+          item('1006b1fa-38cf-3e3b-9a42-b49cb9dd5d3e', 'addison-barger-cuts-down-freddie-freeman', 'Addison Barger cuts down Freddie Freeman at the plate', [676391, 518692]),
+          item('1006b1fa-38cf-3e3b-9a42-b49cb9dd5d3e', 'will-smith-s-single', "Will Smith's single", [669257]),
+        ],
+      },
+    },
+  };
+
+  it('keeps clips of a play (with a guid) and their players', () => {
+    const clips = highlightClips(data);
+    expect(clips.map((c) => c.slug)).toEqual(['freddie-freeman-s-walk-off-home-run', 'addison-barger-cuts-down-freddie-freeman', 'will-smith-s-single']);
+    expect(clips[0]).toEqual({
+      playId: '1b148aed-a2b7-3b9c-a0c4-6bb88a732ec8',
+      slug: 'freddie-freeman-s-walk-off-home-run',
+      headline: "Freddie Freeman's walk-off home run",
+      playerIds: [518692],
+    });
+  });
+
+  it("matches each hit to its play's clip, preferring one of the batter", () => {
+    const matched = clipsForHits(
+      [
+        { play_id: '1b148aed-a2b7-3b9c-a0c4-6bb88a732ec8', mlb_player_id: 518692 },
+        { play_id: '1006b1fa-38cf-3e3b-9a42-b49cb9dd5d3e', mlb_player_id: 669257 },
+        { play_id: 'no-clip', mlb_player_id: 1 },
+      ],
+      highlightClips(data),
+    );
+    expect(matched.get('1b148aed-a2b7-3b9c-a0c4-6bb88a732ec8')?.slug).toBe('freddie-freeman-s-walk-off-home-run');
+    expect(matched.get('1006b1fa-38cf-3e3b-9a42-b49cb9dd5d3e')?.slug).toBe('will-smith-s-single');
+    expect(matched.has('no-clip')).toBe(false);
   });
 });

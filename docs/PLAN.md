@@ -60,6 +60,17 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
 - `roster_spells`: (team, player, from, to) intervals. `unique(season_id, mlb_player_id)`
   enforces "one roster ever". Stats count when `game.start_time` falls inside a spell.
 
+## Hit videos
+
+`mlb_hits` keeps every postseason hit's play: batter, type, inning and the play ID of the pitch
+put in play, from MLB's play-by-play. Baseball Savant has a video of every pitch by play ID
+(`baseballsavant.mlb.com/sporty-videos?playId=…`), and MLB posts official clips of many hits
+(all home runs we've checked, about half the doubles, few singles) whose `guid` is the play ID;
+`poll-games` stores the clip's slug (`mlb.com/video/<slug>`) once it's posted, usually a minute or
+two after a big hit in a big game, later in others. On Games, ▶ on a hitter lists his hits in
+that game with both links, which open in the browser (nothing is embedded or stored). Settings
+→ Games reloads a season's games and videos (commissioner).
+
 ## Phases
 
 | Phase | Deadline | Scope |

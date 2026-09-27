@@ -83,6 +83,12 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   team's postseason games (up to ~20 rows) and his TB in them, straight from the tables: ~5 KB. At
   ~15 people opening ~20 popups a day, that's ~45 MB a month. It doesn't follow live games (no
   realtime, no Edge Function call).
+- **Hit videos.** No new Edge Function calls on live days: `poll-games` reads a game's play-by-play
+  (0.6–1.2 MB from MLB) only when its box score has hits not yet matched to a play, at most every
+  20 s, and its highlights (~1 MB) every 2 minutes while live and every 10 minutes for 6 hours
+  after, until every hit has a clip. Those are downloads into the function, not egress. The app
+  downloads a hitter's hits (well under 1 KB) only when someone taps ▶, and the videos stream
+  from MLB and Savant, not us. The commissioner's Reload button costs about 10 calls per season.
 - **Realtime messages per second.** The old per-row Postgres Changes could burst 150–250 messages
   right after a poll on a busy day. One broadcast per poll keeps it to about one message per open
   app every 10 seconds. The draft room still uses Postgres Changes on low-traffic tables
