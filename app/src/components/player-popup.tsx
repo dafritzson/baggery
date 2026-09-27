@@ -307,13 +307,15 @@ function DraftChip({ label, onPress }: { label: string; onPress: () => void }) {
   );
 }
 
-/** Whose team he's on, or whether he can be drafted. */
+/** Whose team he's on (or was, before they dropped him), or whether he can be drafted. */
 function leagueStatus(data: SeasonData, playerId: number): { label: string; available: boolean } | null {
-  const spell = data.spells.find((s) => s.mlb_player_id === playerId && s.dropped_by_draft_id === null);
+  // One roster at most per season: a dropped player can't be drafted again.
+  const spell = data.spells.find((s) => s.mlb_player_id === playerId);
   const team = spell && data.teams.find((t) => t.id === spell.fantasy_team_id);
   if (team) {
     const owner = ownerName(data, team);
-    return { label: `${teamName(team)}${owner ? ` · ${owner}` : ''}`, available: false };
+    const label = `${teamName(team)}${owner ? ` · ${owner}` : ''}`;
+    return { label: spell.dropped_by_draft_id === null ? label : `Dropped by ${label}`, available: false };
   }
   const entry = data.poolByPlayer.get(playerId);
   if (!entry) return null;
