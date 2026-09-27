@@ -73,6 +73,11 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   made meanwhile would never show. A season load is estimated at ~100 KB (not yet measured; the
   player pool is most of it). At ~15 people coming back to the app ~20 times a day, that's up to
   ~0.9 GB a month, less with compression. Scores already reload on reconnect the same way.
+  The Standings scrubber (the chart and slider under the table) fetches nothing: it replays the
+  games, box scores and hits the scores load already has. Past seasons now have their hits too
+  (2020–2024 backfilled by a migration, ~3,300 rows, about 1 MB of database), so opening a past
+  season loads its rostered players' hits as well: ~500 rows, an estimated 50 KB. Even at 20
+  past-season views a day that's ~30 MB a month.
 - **Post PA and Post TB.** The draft table (draft room and Research) loads each hitter's postseason
   PA and TB once when it opens, summed in the database (`postseason_totals`): one small row per
   hitter who has batted, ~15 KB at most by the World Series. Research stays open once opened (see

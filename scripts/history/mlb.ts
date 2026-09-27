@@ -9,7 +9,7 @@ import { type BattingRow, type GameRow, boxscoreBatting, scheduleGames } from '.
 const MLB = 'https://statsapi.mlb.com/api/v1';
 const CACHE = join(import.meta.dirname, '../../history/.cache');
 
-async function mlb(path: string): Promise<any> {
+export async function mlb(path: string): Promise<any> {
   const file = join(CACHE, `${path.replace(/[^a-zA-Z0-9]+/g, '_')}.json`);
   if (existsSync(file)) return JSON.parse(readFileSync(file, 'utf8'));
   const res = await fetch(`${MLB}${path}`);
@@ -44,7 +44,7 @@ export interface Postseason {
   hitters: Map<number, Hitter>;
 }
 
-async function pool<T, R>(items: T[], size: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+export async function pool<T, R>(items: T[], size: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = [];
   for (let i = 0; i < items.length; i += size) out.push(...(await Promise.all(items.slice(i, i + size).map(fn))));
   return out;

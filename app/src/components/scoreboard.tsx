@@ -60,19 +60,31 @@ export function RoundChips({ round, onChange }: { round: FantasyRound; onChange:
   );
 }
 
-/** The round's standings: TB per game (WC1, DS1, ...) and the round total, with the cut line. */
+/**
+ * The round's standings: TB per game (WC1, DS1, ...) and the round total, with the cut line. The
+ * scores can be the season as it stood at some earlier moment (the scrubber below the table).
+ */
 export function StandingsTable({
   data,
   scores,
   round,
   selectedTeamId,
   onSelectTeam,
+  settled = true,
+  moves,
+  flash,
 }: {
   data: SeasonData;
   scores: Scores;
   round: FantasyRound;
   selectedTeamId?: string | null;
   onSelectTeam: (teamId: string) => void;
+  /** Whether the round's recorded result (who went out, drink-offs included) holds at this point. */
+  settled?: boolean;
+  /** How many places each team moved since the scrubber's previous stop (up is positive). */
+  moves?: Map<string, number>;
+  /** The cell of the bag the scrubber is on: its team and game column ("D3"). */
+  flash?: { teamId: string; column: string } | null;
 }) {
   // Teams eliminated in an earlier round aren't in this one.
   const teams = data.teams.filter((t) => t.eliminated_after_round === null || t.eliminated_after_round >= round);
@@ -84,7 +96,7 @@ export function StandingsTable({
   const [tieGroup, setTieGroup] = useState<number | null>(null);
   // Who's through: once the round is closed, whatever was recorded (a drink-off included);
   // until then, the ranking with its tiebreakers. Full ties across the cut are a drink-off.
-  const closed = teams.some((t) => t.eliminated_after_round === round);
+  const closed = settled && teams.some((t) => t.eliminated_after_round === round);
   const cut = eliminations(
     standings.map((s) => ({ ...s.totals, teamId: s.teamId, rank: s.rank })),
     Math.min(survivors, standings.length),
@@ -109,6 +121,7 @@ export function StandingsTable({
     const mine = team.id === data.myTeam?.id;
     const tied = ordered.some((o) => o !== s && o.rank === s.rank);
     const levelOnBags = started && tiedTotals.includes(s.total);
+    const moved = moves?.get(s.teamId) ?? 0;
     return {
       key: s.teamId,
       label: (
@@ -129,6 +142,13 @@ export function StandingsTable({
               <SymbolView name={{ ios: 'scalemass', android: 'balance', web: 'balance' }} size={18} tintColor={theme.accent} />
             </Pressable>
           )}
+          {moved !== 0 && (
+            <ThemedText
+              style={[styles.move, { color: moved > 0 ? theme.success : theme.danger }]}
+              accessibilityLabel={`${moved > 0 ? 'Up' : 'Down'} ${Math.abs(moved)}`}>
+              {moved > 0 ? `▲${moved}` : `▼${-moved}`}
+            </ThemedText>
+          )}
         </>
       ),
       cells: columns.map((c) => {
@@ -136,6 +156,7 @@ export function StandingsTable({
         return value === null || value === undefined ? '' : String(value);
       }),
       total: started ? String(s.total) : '',
+      highlight: flash?.teamId === s.teamId ? columns.findIndex((c) => `${c.gameType}${c.number}` === flash.column) : undefined,
       selected: team.id === selectedTeamId,
       mine,
       standing: started ? status(s.teamId) : undefined,
@@ -162,6 +183,7 @@ export function StandingsTable({
         totalHeader={`RD ${round}`}
         labelWidth={compact ? 160 : 220}
         rowHeight={48}
+        follow={columns.findLastIndex((c) => c.started)}
       />
       <TiebreakSheet
         title={tieGroup === null ? '' : `Tied at ${tieGroup} bags`}
@@ -317,6 +339,7 @@ function SeriesTable({ data, block }: { data: SeasonData; block: SeriesBlock }) 
 
 const styles = StyleSheet.create({
   tieButton: { marginLeft: Spacing.one, padding: 2 },
+  move: { marginLeft: 'auto', paddingLeft: Spacing.one, fontSize: 11, lineHeight: 14, fontWeight: 700, fontVariant: ['tabular-nums'] },
   chips: { flexDirection: 'row', gap: Spacing.one, flexWrap: 'wrap', minHeight: CHIPS_ROW, alignItems: 'center', alignContent: 'center' },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
   // Section heads are one line of fixed height, so tables side by side start level.

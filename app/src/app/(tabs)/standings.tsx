@@ -1,22 +1,38 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { currentRound } from '@core/scoreboard.ts';
+import { currentRound, roundStandings } from '@core/scoreboard.ts';
+import {
+  buildTimeline,
+  dayEnd,
+  isDayEnd,
+  nearestStop,
+  sameStop,
+  scoresAt,
+  type Stop,
+  stopPosition,
+  stopsFor,
+  type Zoom,
+} from '@core/timeline.ts';
 import type { FantasyRound } from '@core/types.ts';
 
 import { CloseRoundCard } from '@/components/close-round-card';
 import { Columns } from '@/components/columns';
 import { Loader } from '@/components/loader';
 import { RoundChips, StandingsTable, TeamScoreboard } from '@/components/scoreboard';
+import { SeasonScrubber, roundTeamIds } from '@/components/season-scrubber';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
-import { useScores } from '@/lib/scores';
-import { useSeason } from '@/lib/season';
+import { type Scores, coreSpells, useScores } from '@/lib/scores';
+import { type SeasonData, useSeason } from '@/lib/season';
 import { teamName } from '@/lib/teams';
+
+/** How long each step of playback takes, by zoom: a day, a bag in a round, a bag in a day. */
+const PLAY_MS: Record<Zoom, number> = { season: 700, round: 140, day: 450 };
 
 /**
  * Fantasy standings: each round's TB by game, and any team's TB by player. Desktops show both
@@ -25,12 +41,27 @@ import { teamName } from '@/lib/teams';
 export default function StandingsScreen() {
   const { data, loading, refetch } = useSeason();
   const { scores } = useScores();
+
+  if (loading || (data && !scores)) {
+    return <Screen width="wide"><Loader /></Screen>;
+  }
+  if (!data || !scores) return <Screen width="wide"><ThemedText>No season set up yet.</ThemedText></Screen>;
+  // A new season starts at its latest standings.
+  return <SeasonStandings key={data.season.id} data={data} scores={scores} refetch={refetch} />;
+}
+
+function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: Scores; refetch: () => void }) {
   const wide = useLayout() === 'wide';
   const theme = useTheme();
-  const [round, setRound] = useState<FantasyRound | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [view, setView] = useState<'standings' | 'team'>('standings');
   const { team: linkedTeam } = useLocalSearchParams<{ team?: string }>();
+  // A round picked that hasn't started (the scrubber only goes where games have been played).
+  const [futureRound, setFutureRound] = useState<FantasyRound | null>(null);
+  // Where the scrubber is; null for the latest moment, which keeps up with live games.
+  const [stop, setStop] = useState<Stop | null>(null);
+  const [zoom, setZoom] = useState<Zoom>('season');
+  const [playing, setPlaying] = useState(false);
 
   // A link to a team picks it, and on phones shows it. The param is then cleared, so the same link
   // works again after picking another team.
@@ -46,12 +77,80 @@ export default function StandingsScreen() {
     if (linkedTeam) router.setParams({ team: undefined });
   }, [linkedTeam]);
 
-  if (loading || (data && !scores)) {
-    return <Screen width="wide"><Loader /></Screen>;
-  }
-  if (!data || !scores) return <Screen width="wide"><ThemedText>No season set up yet.</ThemedText></Screen>;
+  const spells = coreSpells(data);
+  const timeline = buildTimeline(scores.games, scores.hits ?? [], spells, (teamId, round) =>
+    roundTeamIds(data, round).includes(teamId),
+  );
+  const days = timeline.days;
+  const latest = days.length ? dayEnd(timeline, days.length - 1) : null;
+  // A stop the timeline no longer has (a late hit reordered the day) falls back to the latest.
+  const valid = stop && stop.day < days.length && stop.bag <= days[stop.day].bags.length ? stop : null;
+  const at = valid ?? latest;
+  const atLatest = !at || !latest || sameStop(at, latest);
+  const shown: Scores = at && !atLatest ? { ...scores, ...scoresAt(timeline, scores.games, scores.stats, at) } : scores;
+  const round = futureRound ?? (at ? days[at.day].round : currentRound(scores.games));
+  const list = at ? stopsFor(timeline, zoom, at) : [];
+  const index = at ? list.findIndex((s) => sameStop(s, at)) : -1;
 
-  const shownRound = round ?? currentRound(scores.games);
+  const go = (s: Stop) => {
+    setFutureRound(null);
+    setStop(latest && sameStop(s, latest) ? null : s);
+  };
+
+  // Playback: a step at a time through the zoom's stops, stopping at the last.
+  const step = useRef<() => void>(() => {});
+  useEffect(() => {
+    step.current = () => {
+      const next = list[index + 1];
+      if (next) go(next);
+      if (!list[index + 2]) setPlaying(false);
+    };
+  });
+  useEffect(() => {
+    if (!playing) return;
+    const id = setInterval(() => step.current(), PLAY_MS[zoom]);
+    return () => clearInterval(id);
+  }, [playing, zoom]);
+  const play = () => {
+    if (playing) return setPlaying(false);
+    if (index >= list.length - 1 && list.length) go(list[0]);
+    setPlaying(true);
+  };
+  const zoomTo = (z: Zoom) => {
+    setPlaying(false);
+    setZoom(z);
+    if (!at) return;
+    const stops = stopsFor(timeline, z, at);
+    go(stops.find((s) => sameStop(s, at)) ?? nearestStop(timeline, stops, stopPosition(timeline, at)));
+  };
+  // A round chip goes to the end of that round (or the latest moment, for the one being played).
+  const pickRound = (r: FantasyRound) => {
+    setPlaying(false);
+    const last = days.findLastIndex((d) => d.round === r);
+    if (last < 0) return setFutureRound(r);
+    go(dayEnd(timeline, last));
+  };
+
+  // The recorded result (who went out) holds once the scrubber is past the round's last game.
+  const lastDay = days.findLastIndex((d) => d.round === round);
+  const settled = atLatest || (at !== null && (at.day > lastDay || (at.day === lastDay && isDayEnd(timeline, at))));
+  // Places moved since the previous stop in the same round.
+  const prev = index > 0 ? list[index - 1] : null;
+  const teamIds = roundTeamIds(data, round);
+  const moves = new Map<string, number>();
+  if (prev && days[prev.day].round === round && !futureRound) {
+    const before = scoresAt(timeline, scores.games, scores.stats, prev);
+    const rankBefore = new Map(roundStandings(round, teamIds, before.games, before.stats, spells).map((r) => [r.teamId, r.rank]));
+    for (const r of roundStandings(round, teamIds, shown.games, shown.stats, spells)) {
+      const was = rankBefore.get(r.teamId);
+      if (was !== undefined && was !== r.rank) moves.set(r.teamId, was - r.rank);
+    }
+  }
+  // Zoomed in, the cell the bag the scrubber is on went into.
+  const bag = at && zoom !== 'season' && at.bag > 0 ? days[at.day].bags[at.bag - 1] : null;
+  const bagGame = bag ? scores.games.find((g) => g.gamePk === bag.gamePk) : undefined;
+  const flash = bag && bagGame && bag.round === round ? { teamId: bag.teamId, column: `${bagGame.gameType}${bagGame.seriesGameNumber}` } : null;
+
   const teamId = picked ?? data.myTeam?.id ?? data.teams[0]?.id ?? null;
   const team = data.teams.find((t) => t.id === teamId);
   const selectTeam = (id: string) => {
@@ -61,9 +160,36 @@ export default function StandingsScreen() {
 
   const standings = (
     <View style={[styles.stack, wide && styles.wideStack]}>
-      <RoundChips round={shownRound} onChange={setRound} />
-      <StandingsTable data={data} scores={scores} round={shownRound} selectedTeamId={wide ? teamId : null} onSelectTeam={selectTeam} />
-      <CloseRoundCard data={data} scores={scores} round={shownRound} refetch={refetch} />
+      <RoundChips round={round} onChange={pickRound} />
+      <StandingsTable
+        data={data}
+        scores={shown}
+        round={round}
+        selectedTeamId={wide ? teamId : null}
+        onSelectTeam={selectTeam}
+        settled={settled}
+        moves={moves}
+        flash={flash}
+      />
+      {at && !futureRound && (
+        <SeasonScrubber
+          data={data}
+          timeline={timeline}
+          games={scores.games}
+          stats={scores.stats}
+          stop={at}
+          latest={atLatest}
+          zoom={zoom}
+          onStop={(s) => {
+            setPlaying(false);
+            go(s);
+          }}
+          onZoom={zoomTo}
+          playing={playing}
+          onPlay={play}
+        />
+      )}
+      {atLatest && <CloseRoundCard data={data} scores={scores} round={round} refetch={refetch} />}
       {scores.games.length === 0 && (
         <ThemedText type="small" themeColor="textSecondary">
           Scores fill in once the postseason schedule is out and games start.
