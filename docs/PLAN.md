@@ -62,7 +62,7 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
 
 ## Export
 
-Settings → Export saves the season picked in the top bar as `baggery-<year>.json`, in the same
+Settings → Export saves the season picked in the top bar as `baggery-<year>-exported-<date>.json`, in the same
 format the Past seasons import takes (`exportSeason` in `core/season-import.ts`): managers (and
 team names), every draft's order and picks, and who went out when, with the players and MLB
 teams they name. That's everything the league enters; games and stats are MLB's and load again.

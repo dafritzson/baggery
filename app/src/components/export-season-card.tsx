@@ -54,7 +54,8 @@ function download(name: string, text: string) {
 }
 
 /**
- * Saves the picked season's own data as baggery-<year>.json: the managers, every draft's order
+ * Saves the picked season's own data as baggery-<year>-exported-<date>.json (dated, so exports
+ * never share a name; the browser keeps both anyway): the managers, every draft's order
  * and picks, and who went out when (core exportSeason). MLB's games and stats aren't in it; they
  * can always be loaded again. A finished season's file imports again (Settings → Past seasons).
  */
@@ -72,7 +73,12 @@ export function ExportSeasonCard() {
         <Button
           label={`Export ${year}`}
           variant="secondary"
-          onPress={() => download(`baggery-${year}.json`, `${JSON.stringify(exportSeason(seasonRecord(data)), null, 2)}\n`)}
+          onPress={() =>
+            download(
+              `baggery-${year}-exported-${new Date().toISOString().slice(0, 10)}.json`,
+              `${JSON.stringify(exportSeason(seasonRecord(data)), null, 2)}\n`,
+            )
+          }
         />
       ) : (
         <ThemedText themeColor="textSecondary">Export from the web app.</ThemedText>
