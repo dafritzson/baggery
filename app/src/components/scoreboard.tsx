@@ -115,6 +115,7 @@ export function StandingsTable({
   // Before a round's first pitch there's nothing to rank.
   const started = columns.some((c) => c.started);
 
+  const anyMoved = ordered.some((s) => (moves?.get(s.teamId) ?? 0) !== 0);
   const rows: GridRow[] = ordered.map((s, i) => {
     const team = byId.get(s.teamId)!;
     const owner = ownerLine(data, team);
@@ -142,12 +143,17 @@ export function StandingsTable({
               <SymbolView name={{ ios: 'scalemass', android: 'balance', web: 'balance' }} size={18} tintColor={theme.accent} />
             </Pressable>
           )}
-          {moved !== 0 && (
-            <ThemedText
-              style={[styles.move, { color: moved > 0 ? theme.success : theme.danger }]}
-              accessibilityLabel={`${moved > 0 ? 'Up' : 'Down'} ${Math.abs(moved)}`}>
-              {moved > 0 ? `▲${moved}` : `▼${-moved}`}
-            </ThemedText>
+          {/* Every row keeps the slot while any team moved, so the tiebreaker icons line up. */}
+          {anyMoved && (
+            <View style={styles.moveSlot}>
+              {moved !== 0 && (
+                <ThemedText
+                  style={[styles.move, { color: moved > 0 ? theme.success : theme.danger }]}
+                  accessibilityLabel={`${moved > 0 ? 'Up' : 'Down'} ${Math.abs(moved)}`}>
+                  {moved > 0 ? `▲${moved}` : `▼${-moved}`}
+                </ThemedText>
+              )}
+            </View>
           )}
         </>
       ),
@@ -339,7 +345,9 @@ function SeriesTable({ data, block }: { data: SeasonData; block: SeriesBlock }) 
 
 const styles = StyleSheet.create({
   tieButton: { marginLeft: Spacing.one, padding: 2 },
-  move: { marginLeft: 'auto', paddingLeft: Spacing.one, fontSize: 11, lineHeight: 14, fontWeight: 700, fontVariant: ['tabular-nums'] },
+  // Wide enough for "▼12".
+  moveSlot: { width: 28, alignItems: 'flex-end' },
+  move: { fontSize: 11, lineHeight: 14, fontWeight: 700, fontVariant: ['tabular-nums'] },
   chips: { flexDirection: 'row', gap: Spacing.one, flexWrap: 'wrap', minHeight: CHIPS_ROW, alignItems: 'center', alignContent: 'center' },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
   // Section heads are one line of fixed height, so tables side by side start level.
