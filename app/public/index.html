@@ -57,6 +57,21 @@
         }
       }
     </style>
+    <!--
+      iPhone Home Screen app: with the see-through status bar, iOS sizes the page a status bar's
+      height short of the screen, leaving a black strip below the tab bar. There the app always
+      fills the screen, so size the page to the screen (the app is portrait only).
+    -->
+    <script>
+      (function () {
+        if (navigator.standalone !== true || !/iPhone/.test(navigator.userAgent)) return;
+        var fit = function () {
+          document.documentElement.style.height = Math.max(screen.width, screen.height, window.innerHeight) + 'px';
+        };
+        fit();
+        window.addEventListener('resize', fit);
+      })();
+    </script>
   </head>
 
   <body>
