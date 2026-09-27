@@ -14,18 +14,21 @@ interface Hit {
   top_inning: boolean;
   clip_slug: string | null;
   clip_headline: string | null;
+  /** Savant has the video (it publishes a game's the next day). */
+  savant_ready: boolean;
 }
 
 const HIT_NAMES: Record<Hit['event'], string> = { '1B': 'Single', '2B': 'Double', '3B': 'Triple', HR: 'Home run' };
 
 /** MLB's official clip of a play. */
 export const clipUrl = (slug: string) => `https://www.mlb.com/video/${slug}`;
-/** Baseball Savant's video of a play: every pitch has one. */
+/** Baseball Savant's video of a play: every pitch gets one, the day after the game. */
 export const savantUrl = (playId: string) => `https://baseballsavant.mlb.com/sporty-videos?playId=${playId}`;
 
 /**
- * A hitter's hits in one game, each with its videos: MLB's official clip once one is posted
- * (most home runs, within a minute or two), and Savant's video of the play, which every hit has.
+ * A hitter's hits in one game, each with the videos that are up: MLB's official clip once one is
+ * posted (most home runs, within a minute or two) and Savant's video of the play, which every hit
+ * gets the day after the game (poll-games checks). A hit with neither yet is listed without links.
  * Loaded when opened, so it costs nothing until someone taps ▶. Both open in the browser.
  */
 export function HitVideosSheet({ gamePk, playerId, title, onClose }: { gamePk: number; playerId: number; title: string; onClose: () => void }) {
@@ -34,7 +37,7 @@ export function HitVideosSheet({ gamePk, playerId, title, onClose }: { gamePk: n
     let stale = false;
     supabase
       .from('mlb_hits')
-      .select('play_id, event, inning, top_inning, clip_slug, clip_headline')
+      .select('play_id, event, inning, top_inning, clip_slug, clip_headline, savant_ready')
       .eq('game_pk', gamePk)
       .eq('mlb_player_id', playerId)
       .order('ended_at')
@@ -50,7 +53,7 @@ export function HitVideosSheet({ gamePk, playerId, title, onClose }: { gamePk: n
     <Sheet visible title={title} onClose={onClose}>
       {hits === null && <Loader />}
       {hits?.length === 0 && (
-        <ThemedText themeColor="textSecondary">Videos show up here a minute or so after each hit.</ThemedText>
+        <ThemedText themeColor="textSecondary">His hits show up here a few seconds after they happen.</ThemedText>
       )}
       {hits?.map((h) => (
         <View key={h.play_id} style={styles.hit}>
@@ -60,7 +63,7 @@ export function HitVideosSheet({ gamePk, playerId, title, onClose }: { gamePk: n
           {h.clip_headline && <ThemedText type="small" themeColor="textSecondary">{h.clip_headline}</ThemedText>}
           <View style={styles.links}>
             {h.clip_slug && <VideoLink label="▶ MLB clip" url={clipUrl(h.clip_slug)} />}
-            <VideoLink label="▶ Savant" url={savantUrl(h.play_id)} />
+            {h.savant_ready && <VideoLink label="▶ Savant" url={savantUrl(h.play_id)} />}
           </View>
         </View>
       ))}

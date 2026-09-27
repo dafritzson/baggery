@@ -89,6 +89,9 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   after, until every hit has a clip. Those are downloads into the function, not egress. The app
   downloads a hitter's hits (well under 1 KB) only when someone taps ▶, and the videos stream
   from MLB and Savant, not us. The commissioner's Reload button costs about 10 calls per season.
+  Savant's videos come the day after a game, so from 12 hours after first pitch the poller loads
+  one Savant page (~85–100 KB) per game each hour until it has the video, at most 48 times: ~15–25
+  loads per game, a few hundred a day at most in the postseason, inside polls that already run.
 - **Bags hit by hit.** The scores load also brings rostered players' hits (play ID, game, player,
   type, time: ~120 bytes each), a few hundred rows by the World Series, so ~20–40 KB more per full
   load late in the postseason. Each new hit rides in the poll's one broadcast; a clip turning up

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boxscoreBatting, clipsForHits, highlightClips, linescoreLive, linescoreRuns, playHits, scheduleGames } from '../supabase/functions/poll-games/feed.ts';
+import { boxscoreBatting, clipsForHits, highlightClips, linescoreLive, linescoreRuns, playHits, savantHasVideo, scheduleGames } from '../supabase/functions/poll-games/feed.ts';
 
 const team = (id: number, score?: number) => ({ team: { id }, score });
 
@@ -248,5 +248,15 @@ describe('highlight clips', () => {
     expect(matched.get('1b148aed-a2b7-3b9c-a0c4-6bb88a732ec8')?.slug).toBe('freddie-freeman-s-walk-off-home-run');
     expect(matched.get('1006b1fa-38cf-3e3b-9a42-b49cb9dd5d3e')?.slug).toBe('will-smith-s-single');
     expect(matched.has('no-clip')).toBe(false);
+  });
+});
+
+describe('savantHasVideo', () => {
+  it("finds the play's mp4 on Savant's page, and none on a page without one", () => {
+    const withVideo = `<title>Alex Call singles on a line drive</title><video controls>
+      <source src="https://sporty-clips.mlb.com/eyJ0IjoiYWJj&#x3D;.mp4" type="video/mp4"></video>`;
+    expect(savantHasVideo(withVideo)).toBe(true);
+    expect(savantHasVideo('<div class="no-video">No Video Found</div>')).toBe(false);
+    expect(savantHasVideo('')).toBe(false);
   });
 });
