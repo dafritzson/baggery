@@ -64,6 +64,25 @@ The trigger fires in about 7% of seasons. With the trigger and no redraft, the g
 stays between 2.4% and 3.1% when the sim's assumptions change; with the redraft, between 3.3%
 and 4.6%.
 
+### Alex's version: hitters from the eliminated rosters
+
+Raised 2026-09-27. Each eliminated manager gives the ghost one of their own hitters whose team is
+still alive, instead of drafting one. A manager with none drafts an undrafted hitter with the last
+pick of that draft, and so does a DS-out manager replacing a hitter knocked out in the CS (the
+redraft version). There's no trigger. `npx tsx scripts/ghost-sim.ts --own-rosters`:
+
+| | Chance the ghost wins |
+|---|---|
+| No redraft | 25% |
+| DS-out managers redraft hitters knocked out in the CS | 33% |
+
+That's about a fair fourth team's share, far over the 2–3% target, and it holds with only
+2012–2025 seasons or each season's real bracket (24–26% and 32–34%). The ghost gets each
+eliminated roster's best hitter who's still alive, which are drafted regulars, while each
+finalist fills the slots its eliminated hitters leave from a thin undrafted pool. Its expected
+bags per WS game (4.2, or 4.8 with the redraft) land between the finalists' (5.0, 4.4 and 3.6). An
+eliminated manager has no hitter still alive about 5% of the time.
+
 Still open:
 
 - What the ghost wins, e.g. a share of the pot.
