@@ -60,7 +60,7 @@ export function HitVideosSheet({ gamePk, playerId, title, onClose }: { gamePk: n
           {h.clip_headline && <ThemedText type="small" themeColor="textSecondary">{h.clip_headline}</ThemedText>}
           <View style={styles.links}>
             {h.clip_slug && <VideoLink label="▶ MLB clip" url={clipUrl(h.clip_slug)} />}
-            <VideoLink label={h.clip_slug ? '▶ Savant' : '▶ Watch (Savant)'} url={savantUrl(h.play_id)} />
+            <VideoLink label="▶ Savant" url={savantUrl(h.play_id)} />
           </View>
         </View>
       ))}
