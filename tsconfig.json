@@ -7,7 +7,8 @@
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": { "@core/*": ["./supabase/functions/_shared/core/*"] }
   },
   "include": ["supabase/functions/_shared/core/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts", "vitest.config.ts"]
 }
