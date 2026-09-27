@@ -162,6 +162,40 @@ describe('draft 1', () => {
     expect(count).toBe(0);
   });
 
+  it('lets the commissioner undo a mistaken pick and the autopicks after it, one at a time', async () => {
+    const up = await onTheClock();
+    const upTeam = teamIdByManager.get(up)!;
+    const count = async () => (await admin.from('draft_actions').select('*', { count: 'exact', head: true }).eq('draft_id', draftId)).count!;
+    const spells = async () => (await admin.from('roster_spells').select('*', { count: 'exact', head: true }).eq('season_id', SEASON_ID)).count!;
+    // Everyone else is on autodraft, so the mistake sets off a run of autopicks.
+    await admin.from('fantasy_teams').update({ autodraft: true }).eq('season_id', SEASON_ID).neq('id', upTeam);
+    const mistake = await bestAvailable();
+    expect((await call(up, 'draft', { draftId, action: 'pick', addPlayerId: mistake })).ok).toBe(true);
+    const total = await count();
+    expect(total).toBeGreaterThan(1);
+    expect(await onTheClock()).toBe(up);
+
+    // Undoing never sets autodraft off again: each undo takes back exactly one pick.
+    for (let n = total - 1; n >= 0; n--) {
+      expect((await call('Daniel', 'draft', { draftId, action: 'undo' })).ok).toBe(true);
+      expect(await count()).toBe(n);
+      expect(await spells()).toBe(n);
+    }
+    expect(await onTheClock()).toBe(up);
+
+    // The manager picks again, and the autodraft teams pick after them as usual.
+    const { data: pool } = await admin.from('season_player_pool').select('mlb_player_id').eq('season_id', SEASON_ID).neq('mlb_player_id', mistake).limit(1).single();
+    expect((await call(up, 'draft', { draftId, action: 'pick', addPlayerId: pool!.mlb_player_id })).ok).toBe(true);
+    expect(await count()).toBe(total);
+    const { data: first } = await admin.from('draft_actions').select('add_player_id').eq('draft_id', draftId).eq('action_number', 0).single();
+    expect(first!.add_player_id).toBe(pool!.mlb_player_id);
+
+    // Back to an empty draft with nobody on autodraft, for the tests after this one.
+    await admin.from('fantasy_teams').update({ autodraft: false }).eq('season_id', SEASON_ID);
+    for (let n = total; n > 0; n--) expect((await call('Daniel', 'draft', { draftId, action: 'undo' })).ok).toBe(true);
+    expect(await count()).toBe(0);
+  });
+
   it("only lets a manager flip their own team's autodraft, and picks at once when they're on the clock", async () => {
     const up = await onTheClock();
     const upTeam = teamIdByManager.get(up)!;
