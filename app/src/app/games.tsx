@@ -421,6 +421,7 @@ function GameCard({ data, scores, game, fill }: { data: SeasonData; scores: Scor
 /** A finished game: the final score on one line, then how the baggers did. */
 function FinalCard({ data, scores, game, fill }: { data: SeasonData; scores: Scores; game: GameInfo; fill?: boolean }) {
   const theme = useTheme();
+  const compact = useLayout() === 'compact';
   const side = (which: 'away' | 'home') => {
     const teamId = which === 'away' ? game.awayTeamId : game.homeTeamId;
     const score = which === 'away' ? game.awayScore : game.homeScore;
@@ -435,7 +436,7 @@ function FinalCard({ data, scores, game, fill }: { data: SeasonData; scores: Sco
     );
   };
   return (
-    <Card style={fill && styles.fill}>
+    <Card style={[fill && styles.fill, compact && styles.cardCompact]}>
       <View style={styles.cardHead}>
         <ThemedText type="small" themeColor="textSecondary">{seriesLabel(game)}</ThemedText>
         <ThemedText type="smallBold" themeColor="textSecondary">{statusLine(game)}</ThemedText>
@@ -463,6 +464,7 @@ function LiveGlow({ live, fill, children }: { live: boolean; fill?: boolean; chi
 /** A game that's on or still to come: who's up, the score, and the baggers so far. */
 function OpenCard({ data, scores, game, fill }: { data: SeasonData; scores: Scores; game: GameInfo; fill?: boolean }) {
   const theme = useTheme();
+  const compact = useLayout() === 'compact';
   const live = game.status === 'Live';
   // Who's on a fantasy roster now, for highlighting them in the due-up lines.
   const currentOwner = new Map(data.spells.filter((s) => s.to_at === null).map((s) => [s.mlb_player_id, s.fantasy_team_id]));
@@ -488,7 +490,7 @@ function OpenCard({ data, scores, game, fill }: { data: SeasonData; scores: Scor
           const mine = owner !== undefined && owner === data.myTeam?.id;
           return (
             <View key={i} style={styles.upRow}>
-              <ThemedText type="small" themeColor="textSecondary" style={styles.upLabel}>{labels[i]}</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary" style={[styles.upLabel, !batting && styles.upLabelDigit]}>{labels[i]}</ThemedText>
               <ThemedText
                 type={owner ? 'smallBold' : 'small'}
                 numberOfLines={1}
@@ -502,26 +504,17 @@ function OpenCard({ data, scores, game, fill }: { data: SeasonData; scores: Scor
       </View>
     );
   };
-  const side = (which: 'away' | 'home') => {
+  const sides = (['away', 'home'] as const).map((which) => {
     const teamId = which === 'away' ? game.awayTeamId : game.homeTeamId;
     const score = which === 'away' ? game.awayScore : game.homeScore;
     const other = which === 'away' ? game.homeScore : game.awayScore;
     const leading = game.status !== 'Preview' && score !== null && other !== null && score > other;
-    return (
-      <View style={styles.scoreRow}>
-        <ThemedText type="default" style={[styles.teamAbbr, leading && styles.bold]}>
-          {data.mlbTeams.get(teamId)?.abbreviation ?? '—'}
-        </ThemedText>
-        <ThemedText type="default" style={[styles.score, leading && styles.bold]}>
-          {game.status === 'Preview' ? '' : (score ?? '')}
-        </ThemedText>
-      </View>
-    );
-  };
+    return { which, abbr: data.mlbTeams.get(teamId)?.abbreviation ?? '—', score: game.status === 'Preview' ? '' : (score ?? ''), leading };
+  });
 
   return (
     <LiveGlow live={live} fill={fill}>
-      <Card style={fill && styles.fill}>
+      <Card style={[fill && styles.fill, compact && styles.cardCompact]}>
         <View style={styles.cardHead}>
           <ThemedText type="small" themeColor="textSecondary">{seriesLabel(game)}</ThemedText>
           {live && game.live ? (
@@ -538,9 +531,18 @@ function OpenCard({ data, scores, game, fill }: { data: SeasonData; scores: Scor
             {upNext('away')}
             {upNext('home')}
           </View>
+          {/* Abbreviations and runs as two columns, each as wide as its widest entry. */}
           <View style={styles.scores}>
-            {side('away')}
-            {side('home')}
+            <View style={styles.scoreColumn}>
+              {sides.map((t) => (
+                <ThemedText key={t.which} type="default" style={[styles.teamAbbr, t.leading && styles.bold]}>{t.abbr}</ThemedText>
+              ))}
+            </View>
+            <View style={styles.scoreColumn}>
+              {sides.map((t) => (
+                <ThemedText key={t.which} type="default" style={[styles.score, t.leading && styles.bold]}>{t.score}</ThemedText>
+              ))}
+            </View>
           </View>
         </View>
         <Baggers data={data} scores={scores} game={game} />
@@ -599,6 +601,8 @@ const styles = StyleSheet.create({
   finalSide: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.two },
   finalAbbr: { fontSize: 17, lineHeight: 24, fontWeight: 600 },
   finalScore: { fontSize: 22, lineHeight: 28, fontWeight: 600, fontVariant: ['tabular-nums'] },
+  // Phones: a little less padding inside game cards leaves room for the up-next lines.
+  cardCompact: { paddingHorizontal: Spacing.two + 2 },
   cardHead: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.two },
   // Who's up (two small cards) on the left, the scores on the right.
   teams: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
@@ -606,15 +610,18 @@ const styles = StyleSheet.create({
   upCard: { flex: 1, minWidth: 0, borderRadius: Radius.md, paddingVertical: Spacing.one, paddingHorizontal: Spacing.one + 2 },
   upHead: { fontSize: 9, lineHeight: 12, textTransform: 'uppercase', letterSpacing: 0.4 },
   upRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  upLabel: { width: 14, fontSize: 9, lineHeight: 14 },
+  upLabel: { width: 18, flexShrink: 0, fontSize: 9, lineHeight: 14 },
+  // 1, 2, 3 in the fielding team's card need less room than AB, OD, IH.
+  upLabelDigit: { width: 7 },
   // The name keeps its width; the line score after it gets cut off first.
-  upName: { flexShrink: 0, maxWidth: '75%', fontSize: 11, lineHeight: 14 },
-  upLine: { marginLeft: 2, flexShrink: 1, minWidth: 0, fontSize: 10, lineHeight: 14, fontVariant: ['tabular-nums'] },
+  // Names left, lines right. The line is always shown in full; a long name gives way (…).
+  upName: { flexShrink: 1, minWidth: 0, fontSize: 11, lineHeight: 14 },
+  upLine: { marginLeft: 'auto', paddingLeft: 4, flexShrink: 0, textAlign: 'right', fontSize: 10, lineHeight: 14, fontVariant: ['tabular-nums'] },
   upMine: { paddingHorizontal: 3, borderRadius: 3, overflow: 'hidden' },
-  scores: { marginLeft: 'auto', gap: Spacing.half },
-  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 28 },
-  teamAbbr: { width: 40, fontWeight: 600, textAlign: 'right' },
-  score: { width: 28, textAlign: 'right', fontSize: 20, lineHeight: 26, fontVariant: ['tabular-nums'], fontWeight: 600 },
+  scores: { marginLeft: 'auto', flexDirection: 'row', gap: Spacing.two },
+  scoreColumn: { alignItems: 'flex-end', gap: Spacing.half },
+  teamAbbr: { fontWeight: 600, lineHeight: 28 },
+  score: { minWidth: 24, textAlign: 'right', fontSize: 20, lineHeight: 28, fontVariant: ['tabular-nums'], fontWeight: 600 },
   liveStatus: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   diamond: { width: 26, height: 19 },
   base: { position: 'absolute', width: 7, height: 7, borderWidth: 1.5, transform: [{ rotate: '45deg' }] },
