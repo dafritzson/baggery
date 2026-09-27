@@ -4,19 +4,18 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
-import { Loader } from '@/components/loader';
-import { PlayerName } from '@/components/player-name';
 import { Columns } from '@/components/columns';
+import { Loader } from '@/components/loader';
 import { Screen } from '@/components/screen';
 import { TeamNameSheet } from '@/components/team-name-sheet';
+import { TeamTile } from '@/components/team-roster';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
-import { useTheme } from '@/hooks/use-theme';
-import { formatLockTime, playerLine } from '@/lib/format';
+import { formatLockTime } from '@/lib/format';
 import { type Draft, type SeasonData, type Team, currentRosters, useSeason } from '@/lib/season';
 import { callFunction, supabase } from '@/lib/supabase';
-import { ownerLine, ownerName, suggestTeamName, teamName } from '@/lib/teams';
+import { ownerName, suggestTeamName, teamName } from '@/lib/teams';
 
 const DRAFT_NAMES: Record<number, string> = {
   1: 'Draft 1 · before the Wild Card',
@@ -155,43 +154,21 @@ function DraftsCard({ data }: { data: SeasonData }) {
 }
 
 function TeamsCard({ data }: { data: SeasonData }) {
-  const theme = useTheme();
   const rosters = currentRosters(data);
   const [renaming, setRenaming] = useState<Team | null>(null);
   return (
     <Card title="Teams">
-      {data.teams.map((team) => {
-        const roster = rosters.get(team.id) ?? [];
-        const owner = ownerLine(data, team);
-        const mine = team.id === data.myTeam?.id;
-        const canRename = data.isCommissioner && !mine && !!team.user_id;
-        return (
-          <View key={team.id} style={styles.team}>
-            <View style={styles.teamHeader}>
-              <ThemedText type="smallBold" style={{ flexShrink: 1 }}>
-                {teamName(team)}{' '}
-                <ThemedText type="small" themeColor="textSecondary">
-                  {owner?.toLowerCase() ?? ''}
-                  {mine ? ' · you' : ''}
-                  {team.user_id && data.commissionerIds.has(team.user_id) ? ' · commish' : ''}
-                </ThemedText>
-              </ThemedText>
-              {canRename && (
-                <Pressable onPress={() => setRenaming(team)} hitSlop={8} accessibilityLabel={`Rename ${teamName(team)}`}>
-                  <ThemedText type="small" style={{ color: theme.accent }}>Rename</ThemedText>
-                </Pressable>
-              )}
-            </View>
-            {roster.length === 0 ? (
-              <ThemedText type="small" themeColor="textSecondary">No players yet</ThemedText>
-            ) : (
-              roster.map((id) => (
-                <PlayerName key={id} playerId={id}>{playerLine(data, id)}</PlayerName>
-              ))
-            )}
-          </View>
-        );
-      })}
+      <View style={styles.teams}>
+        {data.teams.map((team) => (
+          <TeamTile
+            key={team.id}
+            data={data}
+            team={team}
+            roster={rosters.get(team.id) ?? []}
+            onRename={data.isCommissioner && team.id !== data.myTeam?.id && team.user_id ? () => setRenaming(team) : undefined}
+          />
+        ))}
+      </View>
       {renaming && <RenameTeam data={data} team={renaming} onClose={() => setRenaming(null)} />}
     </Card>
   );
@@ -244,7 +221,6 @@ function CommissionerCard({ data }: { data: SeasonData }) {
 const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   draftRow: { gap: Spacing.two },
-  team: { gap: Spacing.half, paddingVertical: Spacing.one },
-  teamHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, justifyContent: 'space-between' },
+  teams: { gap: Spacing.two + 2 },
   assignRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 36 },
 });

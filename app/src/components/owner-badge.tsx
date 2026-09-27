@@ -69,6 +69,16 @@ export function YouTag() {
   );
 }
 
+/** The YOU tag's gray twin, after the commissioner's name. */
+export function CommishTag() {
+  const theme = useTheme();
+  return (
+    <View style={[styles.you, { backgroundColor: theme.backgroundSelected }]}>
+      <ThemedText style={styles.youText} themeColor="textSecondary">COMMISH</ThemedText>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   you: { paddingHorizontal: 5, height: 15, borderRadius: Radius.sm, justifyContent: 'center' },
   youText: { fontSize: 9, lineHeight: 11, fontWeight: 800, letterSpacing: 0.6 },

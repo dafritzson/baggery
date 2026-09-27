@@ -22,7 +22,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { type Celebration, useBagCelebrations } from '@/lib/bag-celebrations';
-import { mlbTeamAbbr, playerName } from '@/lib/format';
+import { headshotUrl, mlbTeamAbbr, playerName } from '@/lib/format';
 import { useOpenPlayer } from '@/lib/player';
 import { coreSpells, useScores } from '@/lib/scores';
 import { useSeason } from '@/lib/season';
@@ -191,7 +191,7 @@ function Card({
         </Text>
       </View>
       <Image
-        source={`https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/${bag.playerId}/headshot/67/current`}
+        source={headshotUrl(bag.playerId)}
         style={[styles.headshot, { backgroundColor: theme.backgroundElement, borderColor: theme.background }]}
         contentFit="cover"
         accessibilityIgnoresInvertColors

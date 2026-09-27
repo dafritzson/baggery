@@ -11,6 +11,11 @@ export function formatLockTime(iso: string): string {
   });
 }
 
+/** A player's headshot from MLB's image CDN (a generic silhouette if they have none), `width` pixels wide. */
+export function headshotUrl(playerId: number, width = 213): string {
+  return `https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_${width},q_auto:best/v1/people/${playerId}/headshot/67/current`;
+}
+
 export function mlbTeamAbbr(data: SeasonData, playerId: number): string {
   const entry = data.poolByPlayer.get(playerId);
   return (entry && data.mlbTeams.get(entry.mlb_team_id)?.abbreviation) ?? '';
