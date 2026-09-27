@@ -5,16 +5,22 @@
 // through CS) plus the bags the ghost's CS picks earn in the CS beat the 3 finalists' bags, the
 // ghost picks first in the WS draft; otherwise it picks after the finalists.
 //
+// With --own-rosters (Alex's version), each eliminated manager instead gives the ghost a hitter
+// from their own roster whose team is still alive. A manager with none drafts an undrafted hitter
+// with the last pick of that draft, after everyone else, and so does a DS-out manager replacing a
+// hitter knocked out in the CS (the redraft version). There's no trigger in this version.
+//
 //   npx tsx scripts/ghost-sim.ts                          1995–2025, 20,000 runs per season
 //   npx tsx scripts/ghost-sim.ts --from 2012 --runs 5000 --seed 7 --by-year
 //   npx tsx scripts/ghost-sim.ts --real-brackets          each season's real postseason bracket
+//   npx tsx scripts/ghost-sim.ts --own-rosters            Alex's version
 //
 // Each run takes a real season and plays today's 12-team postseason with its teams: in each
 // league the 3 division winners (seeds 1–3, the top 2 with byes) and the 3 best other records.
 // Each team's hitters are the non-pitchers who batted for it in the last 30 days of the regular
-// season, batting as often per game as they did then, adjusted to how October lineups tighten. Series are played game by game
-// from the teams' records, and each plate appearance from the hitter's regular-season rates,
-// regressed toward league average. Three adjustments, measured on postseason box scores:
+// season, batting as often per game as they did then, adjusted to how October lineups tighten.
+// Series are played game by game from the teams' records, and each plate appearance from the
+// hitter's regular-season rates, regressed toward league average. Three adjustments, measured on postseason box scores:
 //
 //   --postseason-hitting 0.88  hitters produce 88% of the bags their regular-season rates predict
 //                              (1995–2025; by season anywhere from 79% to 103%)
@@ -59,6 +65,7 @@ const RUNS = arg('runs', 20000);
 const SEED = arg('seed', 1);
 const REAL_BRACKETS = process.argv.includes('--real-brackets');
 const BY_YEAR = process.argv.includes('--by-year');
+const OWN_ROSTERS = process.argv.includes('--own-rosters');
 const POSTSEASON_HITTING = arg('postseason-hitting', 0.88);
 const SERIES_SHRINK = arg('series-shrink', 0.5);
 const SWING = arg('swing', 0.14);
@@ -314,6 +321,8 @@ interface Run {
   regularsLeft: number[];
   /** Bags from the Wild Card through the CS: the 3 finalists', and the 4 eliminated managers'. */
   bagsToCS: number[];
+  /** With --own-rosters: DS-out and CS-out managers who had no hitter still alive to give. */
+  noneAlive: number[];
 }
 
 function simulate(ps: Postseason): Run {
@@ -421,8 +430,23 @@ function simulate(ps: Postseason): Run {
   const swaps3 = redraft(alive2, rosters, drafted, L);
   const regular = (i: number) => plays(W, i) && regulars.has(i);
   const regularsBefore = hs.filter((_, i) => regular(i) && !drafted[i]).length;
+  // With --own-rosters, the hitter a manager values most on their own roster whose team plays
+  // round r (they're all drafted already, so this takes nothing from the pool).
+  const ownPick = (m: number, r: number) => {
+    let pick = -1;
+    for (const i of rosters[m]) if (plays(r, i) && (pick < 0 || opinion(m, r, i) > opinion(m, r, pick))) pick = i;
+    return pick;
+  };
+  const noneAlive = [0, 0];
   const ghostCS: { i: number; by: number }[] = [];
+  const draftCS: number[] = [];
   for (const m of dsOut) {
+    const own = OWN_ROSTERS ? ownPick(m, L) : -1;
+    if (own >= 0) ghostCS.push({ i: own, by: m });
+    else draftCS.push(m);
+  }
+  if (OWN_ROSTERS) noneAlive[0] = draftCS.length;
+  for (const m of draftCS) {
     const i = best(m, L, drafted);
     if (i >= 0) {
       ghostCS.push({ i, by: m });
@@ -438,7 +462,8 @@ function simulate(ps: Postseason): Run {
   const csOut = ranked2.slice(3).reverse();
   const sum = (ms: number[]) => ms.reduce((s, m) => s + total[m], 0);
   const ghostCSBags = ghostCS.reduce((s, g) => s + bags(L, g.i), 0);
-  const trigger = sum(dsOut) + ghostCSBags + sum(csOut) > sum(finalists);
+  const trigger = !OWN_ROSTERS && sum(dsOut) + ghostCSBags + sum(csOut) > sum(finalists);
+  if (OWN_ROSTERS) noneAlive[1] = csOut.filter((m) => ownPick(m, W) < 0).length;
 
   // Draft 4 and the WS round, with the ghost picking last or first, with or without redrafting
   // CS picks whose team is out. Every version sees the same games and the same bags.
@@ -457,6 +482,11 @@ function simulate(ps: Postseason): Run {
         }
       }
       for (const m of csOut) {
+        const own = OWN_ROSTERS ? ownPick(m, W) : -1;
+        if (own >= 0) {
+          ghost.push({ i: own, by: m });
+          continue;
+        }
         const add = best(m, W, d);
         if (add >= 0) {
           ghost.push({ i: add, by: m });
@@ -475,10 +505,17 @@ function simulate(ps: Postseason): Run {
     return { win: g > top ? 1 : g === top ? 1 / (tied + 1) : 0, top, swaps, left };
   };
   const plain = wsRound(false, false);
-  const win = [
-    [plain.win, wsRound(false, true).win],
-    [wsRound(true, false).win, wsRound(true, true).win],
-  ];
+  // With --own-rosters the ghost's draft picks always come last, so "first" is the same as "last".
+  const redrafted = wsRound(true, false).win;
+  const win = OWN_ROSTERS
+    ? [
+        [plain.win, plain.win],
+        [redrafted, redrafted],
+      ]
+    : [
+        [plain.win, wsRound(false, true).win],
+        [redrafted, wsRound(true, true).win],
+      ];
 
   return {
     trigger,
@@ -488,6 +525,7 @@ function simulate(ps: Postseason): Run {
     swapsPerManager: [swaps2 / 7, swaps3 / 5, plain.swaps / 3],
     regularsLeft: [regularsBefore, plain.left],
     bagsToCS: [sum(finalists), sum(dsOut) + sum(csOut)],
+    noneAlive,
   };
 }
 
@@ -581,6 +619,7 @@ interface Tally {
   swaps: number[];
   regularsLeft: number[];
   bagsToCS: number[];
+  noneAlive: number[];
 }
 const tally = (): Tally => ({
   runs: 0,
@@ -596,6 +635,7 @@ const tally = (): Tally => ({
   swaps: [0, 0, 0],
   regularsLeft: [0, 0],
   bagsToCS: [0, 0],
+  noneAlive: [0, 0],
 });
 const all = tally();
 const withReal = tally();
@@ -617,6 +657,7 @@ for (const ps of postseasons) {
       r.swapsPerManager.forEach((s, i) => (x.swaps[i] += s));
       r.regularsLeft.forEach((c, i) => (x.regularsLeft[i] += c));
       r.bagsToCS.forEach((b, i) => (x.bagsToCS[i] += b));
+      r.noneAlive.forEach((c, i) => (x.noneAlive[i] += c));
     }
   }
 }
@@ -633,22 +674,36 @@ console.log(
   `postseason hitting ${POSTSEASON_HITTING}, series shrink ${SERIES_SHRINK}, swing ${SWING}, ` +
     `horizon ${HORIZON}, upgrade ${UPGRADE}, noise ${NOISE}\n`,
 );
-console.log('Chance the ghost wins the WS round');
-console.log(`  ${''.padEnd(26)}${LABELS.map((l) => l.padStart(20)).join('')}`);
-for (const [redraft, label] of [
-  [0, 'no redraft'],
-  [1, 'redraft dead CS picks'],
-] as const) {
-  const cells = all.wins[redraft].map((w) => `${pct(w / all.runs)} ${margin(w / all.runs, all.runs)}`.padStart(20));
-  console.log(`  ${label.padEnd(26)}${cells.join('')}`);
+const REDRAFT_LABELS = ['no redraft', 'redraft dead CS picks'];
+if (OWN_ROSTERS) {
+  console.log("Chance the ghost wins the WS round (each eliminated manager gives a hitter from their own roster)");
+  REDRAFT_LABELS.forEach((label, redraft) => {
+    const p = all.wins[redraft][0] / all.runs;
+    console.log(`  ${label.padEnd(26)}${`${pct(p)} ${margin(p, all.runs)}`.padStart(20)}`);
+  });
+  console.log(
+    `\nNo hitter still alive to give: ${pct(all.noneAlive[0] / (2 * all.runs), 1)} of DS-out managers and ` +
+      `${pct(all.noneAlive[1] / (2 * all.runs), 1)} of CS-out managers (they draft with the last pick instead).`,
+  );
+} else {
+  console.log('Chance the ghost wins the WS round');
+  console.log(`  ${''.padEnd(26)}${LABELS.map((l) => l.padStart(20)).join('')}`);
+  REDRAFT_LABELS.forEach((label, redraft) => {
+    const cells = all.wins[redraft].map((w) => `${pct(w / all.runs)} ${margin(w / all.runs, all.runs)}`.padStart(20));
+    console.log(`  ${label.padEnd(26)}${cells.join('')}`);
+  });
+  console.log(
+    `\nThe trigger fires in ${pct(all.triggers / all.runs, 1)} of runs. With the trigger rule and redrafts, the ghost wins ` +
+      `${pct(all.winsTriggered / Math.max(all.triggers, 1))} of the runs where it fired and ` +
+      `${pct(all.winsNot / Math.max(all.runs - all.triggers, 1))} of the rest.`,
+  );
 }
-console.log(
-  `\nThe trigger fires in ${pct(all.triggers / all.runs, 1)} of runs. With the trigger rule and redrafts, the ghost wins ` +
-    `${pct(all.winsTriggered / Math.max(all.triggers, 1))} of the runs where it fired and ` +
-    `${pct(all.winsNot / Math.max(all.runs - all.triggers, 1))} of the rest.`,
-);
 
-if (BY_YEAR) {
+if (BY_YEAR && OWN_ROSTERS) {
+  console.log('\nBy season');
+  console.log(`  year${REDRAFT_LABELS.map((l) => l.padStart(26)).join('')}`);
+  for (const [year, t] of byYear) console.log(`  ${year}${t.wins.map((w) => pct(w[0] / t.runs).padStart(26)).join('')}`);
+} else if (BY_YEAR) {
   console.log('\nBy season (redraft dead CS picks)');
   console.log(`  year  trigger${LABELS.map((l) => l.padStart(20)).join('')}`);
   for (const [year, t] of byYear) {
