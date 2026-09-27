@@ -404,7 +404,6 @@ function StatsBody({
   projection: Projection | null;
 }) {
   const [span, setSpan] = useState<(typeof WINDOWS)[number]>(15);
-  const [showYears, setShowYears] = useState(false);
   const games = stats.games.slice(0, span);
 
   const splits: { label: string; note?: string; line: Counts; season?: SeasonExtras; key?: boolean }[] = [];
@@ -422,7 +421,7 @@ function StatsBody({
 
   return (
     <>
-      <Section title={`${year} regular season`}>
+      <Section id="regular season" title={`${year} regular season`}>
         <StatTable
           labelWidth={72}
           columns={LINE_COLUMNS}
@@ -435,6 +434,20 @@ function StatsBody({
           }))}
         />
       </Section>
+
+      {stats.postseasons.length > 0 && (
+        <Section title="Postseason">
+          <StatTable
+            labelWidth={84}
+            columns={COUNT_COLUMNS}
+            rows={stats.postseasons.map((y) => ({
+              key: `${y.season}`,
+              label: `${y.season} ${y.team}`,
+              cells: COUNT_COLUMNS.map((c) => c.value(y, null)),
+            }))}
+          />
+        </Section>
+      )}
 
       {stats.games.length > 0 && (
         <Section title="Chart">
@@ -459,39 +472,17 @@ function StatsBody({
         </Section>
       )}
 
-      {stats.postseasons.length > 0 && (
-        <Section title="Postseason">
+      {stats.years.length > 0 && (
+        <Section title="Past seasons">
           <StatTable
             labelWidth={84}
             columns={COUNT_COLUMNS}
-            rows={stats.postseasons.map((y) => ({
+            rows={stats.years.map((y) => ({
               key: `${y.season}`,
               label: `${y.season} ${y.team}`,
               cells: COUNT_COLUMNS.map((c) => c.value(y, null)),
             }))}
           />
-        </Section>
-      )}
-
-      {stats.years.length > 0 && (
-        <Section
-          title="Past seasons"
-          action={
-            <Pressable onPress={() => setShowYears(!showYears)} hitSlop={8} accessibilityRole="button">
-              <ThemedText type="smallBold" themeColor="accent">{showYears ? 'Hide' : `Show ${stats.years.length}`}</ThemedText>
-            </Pressable>
-          }>
-          {showYears && (
-            <StatTable
-              labelWidth={84}
-              columns={COUNT_COLUMNS}
-              rows={stats.years.map((y) => ({
-                key: `${y.season}`,
-                label: `${y.season} ${y.team}`,
-                cells: COUNT_COLUMNS.map((c) => c.value(y, null)),
-              }))}
-            />
-          )}
         </Section>
       )}
     </>
@@ -569,6 +560,7 @@ function BaggerySection({
 
   return (
     <Section
+      id="baggery"
       title={`${data.season.year} Baggery`}
       beside={
         team && (
@@ -615,28 +607,51 @@ function stintTeam(data: SeasonData, teamId: string | null, out: boolean, droppe
   return team.id === data.myTeam?.id ? `${label} · You` : label;
 }
 
+// Sections collapsed this page load, by id, so they stay collapsed from one player to the next.
+const collapsedSections = new Set<string>();
+
+/** A titled part of the popup. Tapping the title collapses it; every section starts expanded. */
 function Section({
+  id,
   title,
   beside,
   action,
   children,
 }: {
+  /** Remembers it collapsed across players; defaults to the title (pass one when it has a year). */
+  id?: string;
   title: string;
   /** Shown right after the title, e.g. a link. */
   beside?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
 }) {
+  const key = id ?? title;
+  const [open, setOpen] = useState(() => !collapsedSections.has(key));
+  const toggle = () => {
+    if (open) collapsedSections.add(key);
+    else collapsedSections.delete(key);
+    setOpen(!open);
+  };
   return (
     <View style={styles.section}>
       <View style={styles.sectionHead}>
         <View style={styles.sectionTitleRow}>
-          <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionTitle}>{title}</ThemedText>
+          <Pressable
+            onPress={toggle}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: open }}
+            accessibilityLabel={`${title}, ${open ? 'collapse' : 'expand'}`}
+            style={styles.sectionToggle}>
+            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionChevron}>{open ? '▾' : '▸'}</ThemedText>
+            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionTitle}>{title}</ThemedText>
+          </Pressable>
           {beside}
         </View>
-        {action}
+        {open && action}
       </View>
-      {children}
+      {open && children}
     </View>
   );
 }
@@ -758,6 +773,8 @@ const styles = StyleSheet.create({
   section: { gap: Spacing.two },
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two, minHeight: 28 },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexShrink: 1 },
+  sectionToggle: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
+  sectionChevron: { fontSize: 15, width: 14 },
   sectionTitle: { textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 13 },
   sectionLink: { fontSize: 13, flexShrink: 1 },
   toggle: { flexDirection: 'row', borderRadius: Radius.md, padding: 2 },
