@@ -49,14 +49,33 @@ Locally the sign-in screen has a dev sign-in: `<manager>@example.com`, password 
 
 ## Workflow
 
-Changes reach users like this. Follow it for every change:
+A request for a change is the go-ahead to ship it: don't ask before committing, pushing or
+opening the PR. (A question or a brainstorm isn't a change request.) Every change goes:
 
-1. Work on a new branch. Never push to `main` directly.
+1. Branch from an up-to-date `origin/main`, and never push to `main` directly. If the checkout
+   has uncommitted work that isn't part of your change, leave it alone and work in a git
+   worktree under `.claude/worktrees/` (install its dependencies: `npm ci`, then again in `app/`).
 2. Run `npm test`, `npm run typecheck`, and `cd app && npx expo lint` before pushing.
-3. Open a PR and enable auto-merge (`gh pr merge --auto --squash`). When CI passes it
-   merges and deploys to **staging** automatically.
-4. Production deploys only after the repo owner approves the `production` environment
+3. Push, open a PR and enable auto-merge (`gh pr merge --auto --squash`).
+4. Stay with it until it's on staging. Watch CI (`gh pr checks <n> --watch`). If a check fails,
+   read its log, fix the cause and push again. Once the PR merges, the Deploy workflow deploys
+   `main` to **staging** in about 2 minutes: check that the run's `staging` job succeeds, and
+   fix it if not. Don't wait for the whole run, since it then waits for production approval.
+5. Production deploys only after the repo owner approves the `production` environment
    in GitHub Actions. Never try to bypass or weaken that gate.
+
+Leave auto-merge off, so the repo owner reviews the PR, when they ask for that or the change is
+significant:
+
+- migrations that drop or rewrite existing data
+- auth, row-level security, permissions or secrets
+- CI, deploys, or repo and environment settings (`.github/` changes need the code owner's
+  review anyway)
+- scoring, ranking or elimination changes while a season is in progress
+- changes to these instructions (`CLAUDE.md` files)
+
+Say in the PR why it's waiting. When you finish, reply with what changed, the PR link, and where
+it stands: on staging, or waiting for review.
 
 Resource limits: the app runs on free Supabase and Vercel plans, with Supabase quotas shared by
 staging and production. Before changing polling or cron timing, realtime listeners or broadcasts,
