@@ -150,39 +150,56 @@
 
 /*
  * Live games on the Games tab: a rainbow ring that spins around the card, with a soft glow of
- * the same colors. The card sets data-live-glow on a wrapper View (react-native-web dataSet).
- * Browsers without @property show a still ring.
+ * the same colors. The card sets data-live-glow on a wrapper View and puts a data-live-ring View
+ * behind itself (react-native-web dataSet).
+ *
+ * Cheap to keep running: the ring is a rainbow square drawn once and spun with a transform, which
+ * the GPU does without repainting anything; the wrapper's 2px padding is the part that shows. The
+ * glow doesn't move, so its blur is drawn once too. (Animating the gradient's angle instead
+ * repainted the ring and re-blurred the glow every frame, for every live card, and made phones hot.)
  */
-@property --live-angle {
-  syntax: '<angle>';
-  initial-value: 0deg;
-  inherits: false;
-}
 [data-live-glow] {
   position: relative;
   isolation: isolate;
   border-radius: 8px;
   padding: 2px;
-  background: conic-gradient(from var(--live-angle), #ff4d6d, #ffb703, #4ade80, #22d3ee, #6366f1, #d946ef, #ff4d6d);
-  animation: live-spin 4s linear infinite;
 }
 [data-live-glow]::before {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: inherit;
+  background: conic-gradient(#ff4d6d, #ffb703, #4ade80, #22d3ee, #6366f1, #d946ef, #ff4d6d);
   filter: blur(12px);
   opacity: 0.45;
   z-index: -1;
 }
+[data-live-ring] {
+  overflow: hidden;
+  border-radius: inherit;
+  container-type: size;
+}
+[data-live-ring]::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  /* Covers the card at any angle: width + height is more than its diagonal. */
+  width: 1200px;
+  width: calc(100cqw + 100cqh);
+  aspect-ratio: 1;
+  background: conic-gradient(#ff4d6d, #ffb703, #4ade80, #22d3ee, #6366f1, #d946ef, #ff4d6d);
+  transform: translate(-50%, -50%);
+  will-change: transform;
+  animation: live-spin 4s linear infinite;
+}
 @keyframes live-spin {
   to {
-    --live-angle: 360deg;
+    transform: translate(-50%, -50%) rotate(360deg);
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  [data-live-glow] {
+  [data-live-ring]::before {
     animation: none;
   }
 }
