@@ -58,6 +58,11 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   sign-in is renewed), `lib/season.ts` retries up to 6 times over about a minute, then stops. A good
   start costs nothing extra; a bad one at most 6 more loads (~1 MB), and a lasting server error
   can't turn into endless reloads.
+  The season also reloads once when the app's realtime connection comes back after dropping, as it
+  does whenever a phone locks or leaves the app for a while; otherwise picks and roster changes
+  made meanwhile would never show. A season load is estimated at ~100 KB (not yet measured; the
+  player pool is most of it). At ~15 people coming back to the app ~20 times a day, that's up to
+  ~0.9 GB a month, less with compression. Scores already reload on reconnect the same way.
 - **Realtime messages per second.** The old per-row Postgres Changes could burst 150–250 messages
   right after a poll on a busy day. One broadcast per poll keeps it to about one message per open
   app every 10 seconds. The draft room still uses Postgres Changes on low-traffic tables

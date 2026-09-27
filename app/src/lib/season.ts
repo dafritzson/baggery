@@ -311,7 +311,15 @@ function useLiveSeason(): SeasonState {
     for (const table of LIVE_TABLES) {
       channel = channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => scheduleRefetch());
     }
-    channel.subscribe();
+    // A phone that locks or leaves the app loses the connection, and changes made meanwhile (a
+    // pick, a claimed team) never arrive. When the channel subscribes again after that, reload.
+    // Only after a real reconnect: the first subscribe comes with the initial load.
+    let subscribed = false;
+    channel.subscribe((status) => {
+      if (status !== 'SUBSCRIBED') return;
+      if (subscribed) scheduleRefetch(0);
+      subscribed = true;
+    });
     return () => {
       if (timer.current) clearTimeout(timer.current);
       // Stops a retry loop that's still waiting.
