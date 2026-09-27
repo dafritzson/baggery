@@ -60,6 +60,14 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
 - `roster_spells`: (team, player, from, to) intervals. `unique(season_id, mlb_player_id)`
   enforces "one roster ever". Stats count when `game.start_time` falls inside a spell.
 
+## Export
+
+Settings → Export saves the season picked in the top bar as `baggery-<year>-exported-<date>.json`, in the same
+format the Past seasons import takes (`exportSeason` in `core/season-import.ts`): managers (and
+team names), every draft's order and picks, and who went out when, with the players and MLB
+teams they name. That's everything the league enters; games and stats are MLB's and load again.
+A finished season's file imports again.
+
 ## Hit videos
 
 `mlb_hits` keeps every postseason hit's play: batter, type, inning and the play ID of the pitch
