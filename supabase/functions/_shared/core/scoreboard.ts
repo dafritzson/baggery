@@ -214,6 +214,8 @@ export interface PlayerSeriesGame {
   live: boolean;
   /** The fantasy team he was on at first pitch; null when he was on none, so the bags counted for no one. */
   teamId: TeamId | null;
+  /** On no team because one dropped him before this game (rather than never drafted yet). */
+  dropped: boolean;
 }
 
 export interface PlayerSeries {
@@ -251,7 +253,13 @@ export function playerSeries(
       tb: tbByGame.get(g.gamePk) ?? null,
       live: g.status === 'Live',
       teamId: ownerAt(spells, playerId, g.start) ?? null,
+      dropped: false,
     }));
+    for (const [i, g] of played.entries()) {
+      list[i].dropped =
+        list[i].teamId === null &&
+        spells.some((s) => s.playerId === playerId && s.to !== null && Date.parse(s.to) <= Date.parse(g.start));
+    }
     return [
       {
         gameType: series.gameType,

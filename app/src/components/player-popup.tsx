@@ -514,13 +514,16 @@ function BaggerySection({ data, playerId }: { data: SeasonData; playerId: number
     mine: !!myTeamId && s.games.some((g) => g.teamId === myTeamId && counted(g.teamId, s.gameType)),
   }));
   // Whose bags they were: a line per stretch of games on one roster (or none), with its series.
-  const stints: { teamId: string | null; out: boolean; labels: string[] }[] = [];
+  const stints: { teamId: string | null; out: boolean; dropped: boolean; labels: string[] }[] = [];
   for (const s of series) {
     for (const g of s.games) {
       const last = stints.at(-1);
       const out = g.teamId !== null && !counted(g.teamId, s.gameType);
-      if (!last || last.teamId !== g.teamId || last.out !== out) stints.push({ teamId: g.teamId, out, labels: [s.label] });
-      else if (!last.labels.includes(s.label)) last.labels.push(s.label);
+      if (!last || last.teamId !== g.teamId || last.out !== out || last.dropped !== g.dropped) {
+        stints.push({ teamId: g.teamId, out, dropped: g.dropped, labels: [s.label] });
+      } else if (!last.labels.includes(s.label)) {
+        last.labels.push(s.label);
+      }
     }
   }
 
@@ -534,7 +537,7 @@ function BaggerySection({ data, playerId }: { data: SeasonData; playerId: number
           <ThemedText key={i} type="small" themeColor="textSecondary" numberOfLines={1}>
             <ThemedText type="smallBold" themeColor="textSecondary">{st.labels.join(', ')}</ThemedText>
             {'  '}
-            {stintTeam(data, st.teamId, st.out)}
+            {stintTeam(data, st.teamId, st.out, st.dropped)}
           </ThemedText>
         ))}
       </View>
@@ -544,11 +547,12 @@ function BaggerySection({ data, playerId }: { data: SeasonData; playerId: number
 
 /**
  * "Big Bags (Kyle)", with "You" for my team (just the name when it's the manager's own), or why
- * the bags didn't count: "Undrafted" (on no team) or "Big Bags (Kyle) · Eliminated".
+ * the bags didn't count: "Undrafted" (not drafted yet), "Dropped" (a team let him go), or
+ * "Big Bags (Kyle) · Eliminated".
  */
-function stintTeam(data: SeasonData, teamId: string | null, out: boolean): string {
+function stintTeam(data: SeasonData, teamId: string | null, out: boolean, dropped: boolean): string {
   const team = teamId ? data.teams.find((t) => t.id === teamId) : undefined;
-  if (!team) return 'Undrafted';
+  if (!team) return dropped ? 'Dropped' : 'Undrafted';
   const name = teamName(team);
   const owner = ownerName(data, team);
   const label = owner && owner !== name ? `${name} (${owner})` : name;
