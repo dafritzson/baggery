@@ -23,11 +23,12 @@ export interface Alert {
   body: string;
 }
 
+// Each hit's scorebook mark (alerts) and word (the celebration popup).
 const HITS = [
-  ['singles', '1B'],
-  ['doubles', '2B'],
-  ['triples', '3B'],
-  ['hr', 'HR'],
+  ['singles', '1B', 'single'],
+  ['doubles', '2B', 'double'],
+  ['triples', '3B', 'triple'],
+  ['hr', 'HR', 'home run'],
 ] as const;
 
 /**
@@ -42,11 +43,16 @@ export function bagAlert(bag: Bag): Alert {
   return { title, body: `${capitalize(hitsText(bag))} for ${team}` };
 }
 
-/** "HR", "1B and 2B", "HR ×2"; "scoring change" when it wasn't a new hit. */
-export function hitsText(bag: Pick<Bag, 'singles' | 'doubles' | 'triples' | 'hr'>): string {
-  const counts = HITS.map(([key, name]) => [bag[key], name] as const);
+/**
+ * "HR", "1B and 2B", "HR ×2"; in words, "home run", "single and double", "2 home runs". "scoring
+ * change" when it wasn't a new hit.
+ */
+export function hitsText(bag: Pick<Bag, 'singles' | 'doubles' | 'triples' | 'hr'>, words = false): string {
+  const counts = HITS.map(([key, mark, word]) => [bag[key], words ? word : mark] as const);
   if (counts.some(([n]) => n < 0) || counts.every(([n]) => n === 0)) return 'scoring change';
-  const parts = counts.filter(([n]) => n > 0).map(([n, name]) => (n === 1 ? name : `${name} ×${n}`));
+  const parts = counts
+    .filter(([n]) => n > 0)
+    .map(([n, name]) => (n === 1 ? name : words ? `${n} ${name}s` : `${name} ×${n}`));
   return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 
