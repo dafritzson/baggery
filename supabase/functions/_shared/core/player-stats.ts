@@ -56,6 +56,8 @@ export interface PlayerStats {
   dates: SeasonDates | null;
   /** Earlier MLB seasons, newest first. */
   years: PlayerSeasonRow[];
+  /** Postseason totals by year through the requested season, newest first; empty if he's never played in one. */
+  postseasons: PlayerSeasonRow[];
 }
 
 const KEYS: (keyof Counts)[] = ['g', 'pa', 'ab', 'r', 'h', 'doubles', 'triples', 'hr', 'rbi', 'bb', 'so', 'hbp', 'sf', 'tb'];

@@ -1,6 +1,6 @@
 // One player's batting stats for the player popup: this season's regular-season line, every
 // game that season (the app totals the last 7/15/30), when that season runs (the chart's date
-// axis) and earlier MLB seasons. Read from the MLB
+// axis), earlier MLB seasons and his postseasons. Read from the MLB
 // Stats API and cached briefly, so opening a popup doesn't hit MLB every time. Any signed-in user.
 //
 // POST { playerId: number, season: number }  →  PlayerStats (see _shared/core/player-stats.ts)
@@ -73,9 +73,11 @@ async function datesOf(season: number): Promise<SeasonDates | null> {
 const cache = new Map<string, { at: number; stats: PlayerStats }>();
 
 async function playerStats(playerId: number, season: number): Promise<PlayerStats> {
-  const [peopleData, statsData, abbrs, dates] = await Promise.all([
+  const [peopleData, statsData, postseasonData, abbrs, dates] = await Promise.all([
     mlb(`/people/${playerId}?hydrate=currentTeam`),
     mlb(`/people/${playerId}/stats?stats=season,gameLog,yearByYear&group=hitting&gameType=R&sportId=1&season=${season}`),
+    // A request of its own: gameType=R above would filter it too. P is all postseason rounds together.
+    mlb(`/people/${playerId}/stats?stats=yearByYear&group=hitting&gameType=P&sportId=1`),
     abbreviations(),
     // Without the dates the chart falls back to one step per game, so a failure here isn't fatal.
     datesOf(season).catch(() => null),
@@ -85,9 +87,9 @@ async function playerStats(playerId: number, season: number): Promise<PlayerStat
   const abbr = (id: number | undefined) => (id && abbrs.get(id)) || '';
 
   // deno-lint-ignore no-explicit-any
-  const splitsOf = (type: string): any[] =>
+  const splitsOf = (data: any, type: string): any[] =>
     // deno-lint-ignore no-explicit-any
-    statsData.stats?.find((s: any) => s.type?.displayName === type)?.splits ?? [];
+    data.stats?.find((s: any) => s.type?.displayName === type)?.splits ?? [];
 
   // A traded player has a line per team, plus a combined line without a team.
   // deno-lint-ignore no-explicit-any
@@ -95,25 +97,29 @@ async function playerStats(playerId: number, season: number): Promise<PlayerStat
     const total = rows.length === 1 ? rows[0] : rows.find((r) => !r.team);
     return total ? counts(total.stat) : sumCounts(rows.map((r) => counts(r.stat)));
   };
-  const seasonSplits = splitsOf('season');
-  const games: PlayerGame[] = splitsOf('gameLog')
+  const seasonSplits = splitsOf(statsData, 'season');
+  const games: PlayerGame[] = splitsOf(statsData, 'gameLog')
     .map((s) => ({ ...counts(s.stat), g: 1, date: s.date, opponent: abbr(s.opponent?.id), home: !!s.isHome }))
     .sort((a, b) => b.date.localeCompare(a.date));
 
+  // A row per year up to `through`, newest first.
   // deno-lint-ignore no-explicit-any
-  const bySeason = new Map<number, any[]>();
-  for (const s of splitsOf('yearByYear')) {
-    const year = Number(s.season);
-    if (year >= season) continue;
-    bySeason.set(year, [...(bySeason.get(year) ?? []), s]);
-  }
-  const years: PlayerSeasonRow[] = [...bySeason.entries()]
-    .sort(([a], [b]) => b - a)
-    .map(([year, rows]) => ({
-      ...combined(rows),
-      season: year,
-      team: rows.length === 1 ? abbr(rows[0].team?.id) : 'TOT',
-    }));
+  const yearRows = (splits: any[], through: number): PlayerSeasonRow[] => {
+    // deno-lint-ignore no-explicit-any
+    const bySeason = new Map<number, any[]>();
+    for (const s of splits) {
+      const year = Number(s.season);
+      if (year > through) continue;
+      bySeason.set(year, [...(bySeason.get(year) ?? []), s]);
+    }
+    return [...bySeason.entries()]
+      .sort(([a], [b]) => b - a)
+      .map(([year, rows]) => ({
+        ...combined(rows),
+        season: year,
+        team: rows.length === 1 ? abbr(rows[0].team?.id) : 'TOT',
+      }));
+  };
 
   return {
     person: {
@@ -127,7 +133,8 @@ async function playerStats(playerId: number, season: number): Promise<PlayerStat
     season: seasonSplits.length ? combined(seasonSplits) : null,
     games,
     dates,
-    years,
+    years: yearRows(splitsOf(statsData, 'yearByYear'), season - 1),
+    postseasons: yearRows(splitsOf(postseasonData, 'yearByYear'), season),
   };
 }
 

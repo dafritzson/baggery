@@ -157,7 +157,7 @@ function useDragToClose(playerId: number | null, onClose: () => void) {
 }
 
 /**
- * A player's stats: his bags this postseason, this season, a chart of his games, recent games and past seasons, plus
+ * A player's stats: his bags this postseason, this season, a chart of his games, recent games, his postseasons and past seasons, plus
  * where he stands in the league.
  * Fills its container: the popup, or the side panel on the Research tab.
  */
@@ -454,6 +454,20 @@ function StatsBody({
               key: `${g.date}${g.opponent}${i}`,
               label: `${shortDate(g.date)} ${g.home ? 'vs' : '@'} ${g.opponent}`,
               cells: GAME_COLUMNS.map((c) => c.value(g, null)),
+            }))}
+          />
+        </Section>
+      )}
+
+      {stats.postseasons.length > 0 && (
+        <Section title="Postseason">
+          <StatTable
+            labelWidth={84}
+            columns={COUNT_COLUMNS}
+            rows={stats.postseasons.map((y) => ({
+              key: `${y.season}`,
+              label: `${y.season} ${y.team}`,
+              cells: COUNT_COLUMNS.map((c) => c.value(y, null)),
             }))}
           />
         </Section>
