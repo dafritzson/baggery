@@ -23,7 +23,10 @@ import {
   lastGames,
   rates,
 } from '@core/player-stats.ts';
+import { playerSeries } from '@core/scoreboard.ts';
+import { type GameType, ROUND_FOR_GAME_TYPE } from '@core/types.ts';
 
+import { type GridRow, ScoreGrid } from '@/components/score-grid';
 import { StatChart } from '@/components/stat-chart';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -33,6 +36,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { shortDate } from '@/lib/format';
 import type { DraftAction } from '@/lib/player';
 import { type Projection, projection } from '@/lib/projections';
+import { coreSpells, usePlayerScores } from '@/lib/scores';
 import { type SeasonData, useSeason } from '@/lib/season';
 import { supabase } from '@/lib/supabase';
 import { ownerName, teamName } from '@/lib/teams';
@@ -152,7 +156,8 @@ function useDragToClose(playerId: number | null, onClose: () => void) {
 }
 
 /**
- * A player's stats: this season, a chart of his games, recent games and past seasons, plus where he stands in the league.
+ * A player's stats: his bags this postseason, this season, a chart of his games, recent games and past seasons, plus
+ * where he stands in the league.
  * Fills its container: the popup, or the side panel on the Research tab.
  */
 export function PlayerDetails({
@@ -198,6 +203,7 @@ export function PlayerDetails({
         }
       />
       <ScrollView contentContainerStyle={styles.body}>
+        {data && <BaggerySection data={data} playerId={playerId} />}
         {error && <ThemedText themeColor="danger">{error}</ThemedText>}
         {!stats && !error && <ActivityIndicator style={{ padding: Spacing.five }} />}
         {stats && year && (
@@ -475,6 +481,81 @@ function StatsBody({
   );
 }
 
+/**
+ * His TB in each postseason game, a row per series, and which fantasy team they counted for.
+ * Shows once his MLB team has played a postseason game. Bags that counted for no one (on no
+ * roster, or on a team already eliminated) are grayed out.
+ */
+function BaggerySection({ data, playerId }: { data: SeasonData; playerId: number }) {
+  const mlbTeamId = data.poolByPlayer.get(playerId)?.mlb_team_id;
+  const scores = usePlayerScores(playerId, mlbTeamId, data.season.year);
+  if (!scores || !mlbTeamId) return null;
+  const series = playerSeries(playerId, mlbTeamId, scores.games, scores.stats, coreSpells(data));
+  if (!series.length) return null;
+
+  const columns = Array.from({ length: Math.max(...series.map((s) => s.length)) }, (_, i) => ({
+    label: `G${i + 1}`,
+    live: series.some((s) => s.games.some((g) => g.number === i + 1 && g.live)),
+  }));
+  const myTeamId = data.myTeam?.id;
+  const counted = (teamId: string | null, gameType: GameType) => {
+    const out = data.teams.find((t) => t.id === teamId)?.eliminated_after_round;
+    return teamId !== null && (out == null || ROUND_FOR_GAME_TYPE[gameType] <= out);
+  };
+  const rows: GridRow[] = series.map((s) => ({
+    key: s.gameType,
+    label: <ThemedText type="smallBold">{s.label}</ThemedText>,
+    cells: columns.map((_, i) => {
+      const game = s.games.find((g) => g.number === i + 1);
+      return !game ? '' : game.tb === null ? '·' : String(game.tb);
+    }),
+    total: String(s.total),
+    muted: s.games.every((g) => !counted(g.teamId, s.gameType)),
+    mine: !!myTeamId && s.games.some((g) => g.teamId === myTeamId && counted(g.teamId, s.gameType)),
+  }));
+  // Whose bags they were: a line per stretch of games on one roster (or none), with its series.
+  const stints: { teamId: string | null; out: boolean; labels: string[] }[] = [];
+  for (const s of series) {
+    for (const g of s.games) {
+      const last = stints.at(-1);
+      const out = g.teamId !== null && !counted(g.teamId, s.gameType);
+      if (!last || last.teamId !== g.teamId || last.out !== out) stints.push({ teamId: g.teamId, out, labels: [s.label] });
+      else if (!last.labels.includes(s.label)) last.labels.push(s.label);
+    }
+  }
+
+  return (
+    <Section
+      title={`${data.season.year} Baggery`}
+      action={<ThemedText type="small" themeColor="textSecondary">{series.reduce((a, s) => a + s.total, 0)} TB</ThemedText>}>
+      <ScoreGrid columns={columns} rows={rows} labelHeader="" totalHeader="TB" labelWidth={48} rowHeight={32} />
+      <View style={styles.stints}>
+        {stints.map((st, i) => (
+          <ThemedText key={i} type="small" themeColor="textSecondary" numberOfLines={1}>
+            <ThemedText type="smallBold" themeColor="textSecondary">{st.labels.join(', ')}</ThemedText>
+            {'  '}
+            {stintTeam(data, st.teamId, st.out)}
+          </ThemedText>
+        ))}
+      </View>
+    </Section>
+  );
+}
+
+/**
+ * "Big Bags (Kyle)", with "You" for my team (just the name when it's the manager's own), or why
+ * the bags didn't count.
+ */
+function stintTeam(data: SeasonData, teamId: string | null, out: boolean): string {
+  const team = teamId ? data.teams.find((t) => t.id === teamId) : undefined;
+  if (!team) return 'On no team, so these bags didn’t count';
+  const name = teamName(team);
+  const owner = ownerName(data, team);
+  const label = owner && owner !== name ? `${name} (${owner})` : name;
+  if (out) return `${label}, already out, so these didn’t count`;
+  return team.id === data.myTeam?.id ? `${label} · You` : label;
+}
+
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <View style={styles.section}>
@@ -617,4 +698,5 @@ const styles = StyleSheet.create({
   cellText: { fontSize: 13, lineHeight: 18 },
   number: { fontVariant: ['tabular-nums'] },
   links: { flexDirection: 'row', gap: Spacing.four },
+  stints: { gap: Spacing.half },
 });

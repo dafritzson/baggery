@@ -25,6 +25,8 @@ export interface GridRow {
   selected?: boolean;
   /** My team's row: tinted like my players on the Games tab, selected or not. */
   mine?: boolean;
+  /** Grays out the numbers, e.g. bags that counted for no fantasy team. */
+  muted?: boolean;
   /** Colors the total, like the old scoring sheet: safe, tied at the cut, or out. */
   standing?: 'safe' | 'tied' | 'out';
   /** Draw the cut line under this row. */
@@ -74,10 +76,10 @@ export function ScoreGrid({
       {live && <View style={[styles.liveDot, { backgroundColor: theme.danger }]} accessibilityLabel="Live" />}
     </>
   );
-  const cellText = (text: string, strong?: boolean) => (
+  const cellText = (text: string, strong?: boolean, muted?: boolean) => (
     <ThemedText
       type={strong ? 'smallBold' : 'small'}
-      themeColor={text === '·' ? 'textSecondary' : 'text'}
+      themeColor={muted || text === '·' ? 'textSecondary' : 'text'}
       style={styles.number}>
       {text}
     </ThemedText>
@@ -111,7 +113,7 @@ export function ScoreGrid({
               styles.cells,
               r.cells.map((text, j) => (
                 <View key={columns[j].label} style={[styles.cell, columns[j].divider && [styles.divider, { borderLeftColor: theme.border }]]}>
-                  {cellText(text, r.strong)}
+                  {cellText(text, r.strong, r.muted)}
                 </View>
               )),
             ),
@@ -121,7 +123,7 @@ export function ScoreGrid({
       <View style={[styles.totals, { borderLeftColor: theme.border }]}>
         <View style={[styles.header, styles.totalCell, { borderBottomColor: theme.border }]}>{header(totalHeader)}</View>
         {rows.map((r, i) =>
-          pressable(r, i, [styles.totalCell, { backgroundColor: standingColor(r) }], cellText(r.total, true)),
+          pressable(r, i, [styles.totalCell, { backgroundColor: standingColor(r) }], cellText(r.total, true, r.muted)),
         )}
       </View>
     </ThemedView>
