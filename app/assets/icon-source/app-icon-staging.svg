@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="1024" height="1024">
+  <!--
+    Staging app icon: app-icon.svg with the plate outlined in the staging badge's red, so a staging
+    Home Screen icon is easy to tell from production. env-icons/staging/apple-touch-icon.png,
+    icon-192.png and icon-512.png are rendered from this file and replace the defaults on staging.
+  -->
+  <defs>
+  <pattern id="icon-mow" width="22" height="22" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+  <rect width="22" height="22" fill="#2A8A48"/><rect width="11" height="22" fill="#237B3F"/>
+  </pattern>
+  <linearGradient id="icon-sky" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0" stop-color="#07090C" stop-opacity="0.65"/><stop offset="0.45" stop-color="#07090C" stop-opacity="0.05"/><stop offset="1" stop-color="#07090C" stop-opacity="0.25"/>
+  </linearGradient>
+  <radialGradient id="icon-light" cx="0.5" cy="0.5" r="0.5">
+  <stop offset="0" stop-color="#FFF1CF" stop-opacity="0.7"/><stop offset="1" stop-color="#FFF1CF" stop-opacity="0"/>
+  </radialGradient>
+  <radialGradient id="icon-pool" cx="0.5" cy="0.5" r="0.5">
+  <stop offset="0" stop-color="#FFF4DC" stop-opacity="0.4"/>
+  <stop offset="0.3" stop-color="#FFF4DC" stop-opacity="0.340"/>
+  <stop offset="0.6" stop-color="#FFF4DC" stop-opacity="0.180"/>
+  <stop offset="0.85" stop-color="#FFF4DC" stop-opacity="0.048"/>
+  <stop offset="1" stop-color="#FFF4DC" stop-opacity="0"/>
+  </radialGradient>
+  <filter id="icon-dglow" x="-50%" y="-100%" width="200%" height="300%"><feGaussianBlur stdDeviation="5"/></filter>
+  </defs>
+  <rect width="100" height="100" fill="url(#icon-mow)"/>
+  <rect width="100" height="100" fill="url(#icon-sky)"/>
+  <ellipse cx="50" cy="52" rx="60" ry="48" fill="url(#icon-pool)"/>
+  <circle cx="4" cy="2" r="30" fill="url(#icon-light)"/>
+  <circle cx="96" cy="2" r="30" fill="url(#icon-light)"/>
+  <ellipse cx="50" cy="69" rx="44" ry="14" fill="#FFE2A8" opacity="0.28" filter="url(#icon-dglow)"/>
+  <defs>
+  <linearGradient id="icon-top" x1="0.25" y1="0" x2="0.55" y2="1">
+  <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ece6dc"/>
+  </linearGradient>
+  <linearGradient id="icon-l" x1="0" y1="0" x2="1" y2="1">
+  <stop offset="0" stop-color="#c2b8ab"/><stop offset="1" stop-color="#a99d8f"/>
+  </linearGradient>
+  <linearGradient id="icon-r" x1="1" y1="0" x2="0" y2="1">
+  <stop offset="0" stop-color="#a4988a"/><stop offset="1" stop-color="#8b7f72"/>
+  </linearGradient>
+  <filter id="icon-soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.6"/></filter>
+  <filter id="icon-scuff" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.4"/></filter>
+  </defs>
+  <g transform="translate(0 -1.5)">
+  <ellipse cx="50" cy="75" rx="34" ry="5" fill="#4a2a16" opacity="0" filter="url(#icon-soft)"/>
+  <path d="M22 28 H78 V55 L50 73 L22 55 Z" fill="#C8102E" stroke="#C8102E" stroke-width="8.8" stroke-linejoin="round"/>
+  <path d="M22 48 L50 66 L50 73 L22 55 Z" fill="url(#icon-l)" stroke="url(#icon-l)" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M78 48 L50 66 L50 73 L78 55 Z" fill="url(#icon-r)" stroke="url(#icon-r)" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M22 28 H78 V48 L50 66 L22 48 Z" fill="#d6cec3" stroke="#d6cec3" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M24.4 30.4 H75.6 V46.7 L50 63.2 L24.4 46.7 Z" fill="url(#icon-top)"/>
+  <path d="M25.5 29.3 H74.5" stroke="#ffffff" stroke-width="0.9" stroke-linecap="round" opacity="0.9"/>
+  <path d="M22.6 49.2 L50 66.8 L77.4 49.2" fill="none" stroke="#ffffff" stroke-width="0.6" stroke-linejoin="round" opacity="0.35"/>
+  </g>
+</svg>
