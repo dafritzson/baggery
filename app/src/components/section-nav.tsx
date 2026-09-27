@@ -90,7 +90,7 @@ export function HeaderTabs() {
 }
 
 /** Room the phone tab bar takes at the bottom of the screen, above the safe area. */
-export const BOTTOM_TAB_BAR_SPACE = 96;
+export const BOTTOM_TAB_BAR_SPACE = 88;
 
 /**
  * Phone: a floating "liquid glass" pill of section buttons (icon and label) over the bottom of the
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
   headerTabs: { flexDirection: 'row', alignSelf: 'stretch', gap: Spacing.three, marginLeft: Spacing.three },
   headerTab: { justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
   // Kept inside the screen's side margins: with five sections, the tabs shrink to fit a phone.
-  bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', paddingBottom: Spacing.three, paddingHorizontal: Spacing.two },
+  bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', paddingBottom: Spacing.two, paddingHorizontal: Spacing.two },
   bottomPill: {
     flexDirection: 'row',
     maxWidth: '100%',

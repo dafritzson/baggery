@@ -25,7 +25,7 @@ export default function ResearchScreen() {
   const wide = useLayout() === 'wide';
   if (wide && data) return <ResearchWide data={data} />;
   return (
-    <Screen width="wide">
+    <Screen width="wide" tight>
       {loading && <Loader />}
       {!loading && !data && <ThemedText>No season set up yet.</ThemedText>}
       {data && <PlayersList data={data} />}
