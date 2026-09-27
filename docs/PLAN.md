@@ -45,7 +45,8 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
   games, H, 2B, 3B, HR, R, RBI, BB, SO, HBP, SF, SLG and OPS+ for the draft room table (AVG, OBP,
   OPS, TB/G, RDSLG, RDTB and TB·E[G]/162 are computed from them in the app, formulas in
   `core/stats.ts`). Once the postseason has games, the table also shows Post PA and Post TB, summed
-  from `player_game_stats` by `postseason_totals()` (up to a finished draft's lock). Which table columns show is each person's choice, saved in their browser. `season_mlb_teams` holds each team's wins and Wild Card bye.
+  from `player_game_stats` by `postseason_totals()` (up to a finished draft's lock), and drops
+  Bye, which only matters for Draft 1. Which table columns show is each person's choice, saved in their browser. `season_mlb_teams` holds each team's wins and Wild Card bye.
 - `drafts`, `draft_actions`: every pick or yield, numbered. `unique(draft_id, action_number)`
   prevents double picks.
 - `roster_spells`: (team, player, from, to) intervals. `unique(season_id, mlb_player_id)`

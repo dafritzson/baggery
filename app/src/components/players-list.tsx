@@ -103,7 +103,8 @@ export function useDraftBoard(data: SeasonData, draft: Draft): Board {
 
 /**
  * The players on a board, with what the table shows for each. Once the postseason has games, a
- * player missing from `totals` hasn't batted yet: 0 PA and 0 TB.
+ * player missing from `totals` hasn't batted yet: 0 PA and 0 TB if his team has played, empty (a
+ * dash) if it hasn't, like a Wild Card bye.
  */
 export function availablePlayers(
   data: SeasonData,
@@ -111,6 +112,8 @@ export function availablePlayers(
   totals: PostseasonTotals | null = null,
 ): (PlayerRow & { mlbTeamId: number })[] {
   const postseason = !!totals?.size;
+  // Teams that have played: any of their hitters has a postseason line.
+  const played = new Set(data.pool.filter((p) => totals?.has(p.mlb_player_id)).map((p) => p.mlb_team_id));
   return data.pool
     .filter(
       (p) =>
@@ -131,8 +134,8 @@ export function availablePlayers(
         team: team?.abbreviation ?? '',
         wins: team?.wins ?? null,
         bye,
-        postPa: postseason ? (totals!.get(p.mlb_player_id)?.pa ?? 0) : null,
-        postTb: postseason ? (totals!.get(p.mlb_player_id)?.tb ?? 0) : null,
+        postPa: postseason && played.has(p.mlb_team_id) ? (totals!.get(p.mlb_player_id)?.pa ?? 0) : null,
+        postTb: postseason && played.has(p.mlb_team_id) ? (totals!.get(p.mlb_player_id)?.tb ?? 0) : null,
         g: p.games_played,
         pa: p.plate_appearances,
         ab,
@@ -194,8 +197,8 @@ export function PlayersList({
   const shownBoard = useMemo(() => board ?? currentBoard(data), [board, data]);
   const totals = usePostseasonTotals(data.season.year, shownBoard.statsBefore);
   const available = useMemo(() => availablePlayers(data, shownBoard, totals), [data, shownBoard, totals]);
-  // Postseason columns only once it has games: before that they'd be empty.
-  const offered = useMemo(() => (totals?.size ? COLUMNS : COLUMNS.filter((c) => !c.postseason)), [totals]);
+  // Postseason columns only once it has games (before that they'd be empty), Draft 1's (Bye) only before.
+  const offered = useMemo(() => COLUMNS.filter((c) => (totals?.size ? !c.draft1 : !c.postseason)), [totals]);
   const columns = useMemo(() => chosen.filter((k) => offered.some((c) => c.key === k)), [chosen, offered]);
   const q = query.trim().toLowerCase();
   const shown = available.filter(
@@ -290,7 +293,7 @@ function describeFilter(c: Column, range: Range): string {
 
 /** A small icon in the table's header with a checklist of its columns; stays open while you tick. */
 function ColumnsMenu({ offered, value, onChange }: {
-  /** The columns it lists (not the postseason ones before it has games). */
+  /** The columns it lists: the postseason ones once it has games, Draft 1's before. */
   offered: Column[];
   value: ColumnKey[];
   onChange: (columns: ColumnKey[]) => void;
