@@ -55,6 +55,11 @@ describe('hitsText', () => {
     expect(hits(1, 1, 0, 2)).toBe('1B, 2B and HR ×2');
   });
 
+  it('spells the hits out in words', () => {
+    expect(hitsText({ singles: 0, doubles: 0, triples: 0, hr: 1 }, true)).toBe('home run');
+    expect(hitsText({ singles: 1, doubles: 1, triples: 0, hr: 2 }, true)).toBe('single, double and 2 home runs');
+  });
+
   it('calls a changed hit a scoring change', () => {
     // A single scored a double instead: one more double, one fewer single.
     expect(hits(-1, 1, 0, 0)).toBe('scoring change');

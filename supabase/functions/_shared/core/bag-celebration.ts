@@ -112,7 +112,7 @@ export function parseBagParam(param: string | undefined | null): BagHit | null {
 
 /** The popup's big line for the hit: "Home run!", "Double!", "2 singles!", "Scoring change". */
 export function hitHeadline(bag: Hits): string {
-  const text = hitsText(bag);
+  const text = hitsText(bag, true);
   if (text === 'scoring change') return 'Scoring change';
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}!`;
 }
