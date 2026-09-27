@@ -4,7 +4,7 @@ import { type ReactNode, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
-import { type DraftConfig, type Turn, nextTurn } from '@core/draft.ts';
+import { type DraftConfig, ROSTER_SIZE, type Turn, nextTurn } from '@core/draft.ts';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
@@ -14,6 +14,7 @@ import { PlayerName } from '@/components/player-name';
 import { PlayersList, availablePlayers, useDraftBoard } from '@/components/players-list';
 import { Screen } from '@/components/screen';
 import { Sheet } from '@/components/sheet';
+import { RosterRows, TeamTile, emptySlots } from '@/components/team-roster';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
@@ -370,16 +371,17 @@ function Board({ data, draft, config }: { data: SeasonData; draft: Draft; config
 function MyRoster({ data, teamId }: { data: SeasonData; teamId: string }) {
   const roster = currentRosters(data).get(teamId) ?? [];
   return (
-    <Card title={`My roster · ${roster.length}/4`}>
-      {roster.length === 0 && <ThemedText type="small" themeColor="textSecondary">No players yet</ThemedText>}
-      {roster.map((id) => (
-        <View key={id} style={styles.sideRow}>
-          <View style={{ flex: 1, alignItems: 'flex-start' }}>
-            <PlayerName playerId={id} numberOfLines={1}>{playerLine(data, id)}</PlayerName>
-          </View>
-          <ThemedText type="small" themeColor="textSecondary">{data.poolByPlayer.get(id)?.regular_season_tb ?? ''}</ThemedText>
-        </View>
-      ))}
+    <Card title={`My roster · ${roster.length}/${ROSTER_SIZE}`}>
+      {roster.length > 0 && (
+        <ThemedText themeColor="textSecondary" style={styles.statHead}>Season TB</ThemedText>
+      )}
+      <RosterRows
+        data={data}
+        roster={roster}
+        empty={emptySlots(data, roster, true)}
+        stat={(id) => String(data.poolByPlayer.get(id)?.regular_season_tb ?? '')}
+        stacked
+      />
     </Card>
   );
 }
@@ -492,25 +494,17 @@ function PickCard({
 }
 
 function Rosters({ data, draft }: { data: SeasonData; draft: Draft }) {
+  const wide = useLayout() === 'wide';
   const rosters = currentRosters(data);
   const order = draft.pick_order.length ? draft.pick_order : data.teams.map((t) => t.id);
   return (
-    <View style={{ gap: Spacing.two }}>
+    // Two tiles to a row on desktop, where the main column is wide; an odd one out stays half width.
+    <Card style={[styles.rosters, wide && styles.rostersWide]}>
       {order.map((teamId) => {
         const team = data.teams.find((t) => t.id === teamId);
-        const roster = rosters.get(teamId) ?? [];
-        return (
-          <Card key={teamId} title={`${teamLabel(data, team)}${team?.id === data.myTeam?.id ? ' · you' : ''} · ${roster.length}/4`}>
-            {roster.length === 0 && <ThemedText type="small" themeColor="textSecondary">No players yet</ThemedText>}
-            {roster.map((id) => (
-              <View key={id} style={{ alignItems: 'flex-start' }}>
-                <PlayerName playerId={id}>{playerLine(data, id)}</PlayerName>
-              </View>
-            ))}
-          </Card>
-        );
+        return team && <TeamTile key={teamId} data={data} team={team} roster={rosters.get(teamId) ?? []} style={wide && styles.rosterWide} />;
       })}
-    </View>
+    </Card>
   );
 }
 
@@ -794,7 +788,11 @@ const styles = StyleSheet.create({
   boardPick: { minHeight: 64, borderRadius: Radius.md, padding: Spacing.two, borderWidth: 2, borderColor: 'transparent' },
   dropRow: { borderWidth: 2, borderRadius: Radius.md, padding: Spacing.two },
   buttonRow: { flexDirection: 'row', gap: Spacing.two },
-  sideRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  // Over My roster's last column.
+  statHead: { alignSelf: 'flex-end', fontSize: 11, lineHeight: 14, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: -Spacing.one },
+  rosters: { gap: Spacing.two + 2 },
+  rostersWide: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
+  rosterWide: { flexBasis: '45%', flexGrow: 1, maxWidth: '50%' },
   picksPanel: { borderRadius: Radius.lg, overflow: 'hidden' },
   picksTitle: { textTransform: 'uppercase', letterSpacing: 0.5, padding: Spacing.three, paddingBottom: Spacing.two },
   picksEmpty: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.three },

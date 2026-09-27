@@ -1,26 +1,21 @@
-import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-
-import { ROSTER_SIZE } from '@core/draft.ts';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { Columns } from '@/components/columns';
 import { Loader } from '@/components/loader';
-import { CommishTag, OwnerBadge, YouTag } from '@/components/owner-badge';
 import { Screen } from '@/components/screen';
 import { TeamNameSheet } from '@/components/team-name-sheet';
+import { TeamTile } from '@/components/team-roster';
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
-import { useTheme } from '@/hooks/use-theme';
-import { formatLockTime, headshotUrl, mlbTeamAbbr } from '@/lib/format';
-import { useOpenPlayer } from '@/lib/player';
+import { formatLockTime } from '@/lib/format';
 import { type Draft, type SeasonData, type Team, currentRosters, useSeason } from '@/lib/season';
 import { callFunction, supabase } from '@/lib/supabase';
-import { ownerLine, ownerName, suggestTeamName, teamName } from '@/lib/teams';
+import { ownerName, suggestTeamName, teamName } from '@/lib/teams';
 
 const DRAFT_NAMES: Record<number, string> = {
   1: 'Draft 1 · before the Wild Card',
@@ -179,89 +174,6 @@ function TeamsCard({ data }: { data: SeasonData }) {
   );
 }
 
-/**
- * A team: its manager's badge, name and tags over its hitters. Mid-draft, a team that has picked
- * some but not all of its hitters shows the rest as empty slots.
- */
-function TeamTile({ data, team, roster, onRename }: { data: SeasonData; team: Team; roster: number[]; onRename?: () => void }) {
-  const theme = useTheme();
-  const mine = team.id === data.myTeam?.id;
-  const commish = !!team.user_id && data.commissionerIds.has(team.user_id);
-  // Past seasons' teams are named after their manager: no need to say it twice.
-  const line = ownerLine(data, team);
-  const owner = line === teamName(team) ? null : line;
-  const openSpot = !team.user_id && data.season.status !== 'complete';
-  // Past seasons' unclaimed teams are named after their manager, so their badge takes the name's initial.
-  const badgeOwner = openSpot ? null : (ownerName(data, team) ?? teamName(team));
-  const empty = data.season.status === 'complete' || roster.length === 0 ? 0 : Math.max(0, ROSTER_SIZE - roster.length);
-  return (
-    <View style={[styles.tile, { backgroundColor: mine ? theme.mine : theme.background }]}>
-      <View style={styles.tileHead}>
-        <OwnerBadge teamId={team.id} owner={badgeOwner} photo={team.user_id ? data.photos.get(team.user_id) : null} size={36} />
-        <View style={styles.tileTitle}>
-          <ThemedText numberOfLines={1} style={styles.teamName}>{teamName(team)}</ThemedText>
-          {(owner || mine || commish) && (
-            <View style={styles.ownerLine}>
-              {owner && <ThemedText numberOfLines={1} themeColor="textSecondary" style={styles.owner}>{owner}</ThemedText>}
-              {mine && <YouTag />}
-              {commish && <CommishTag />}
-            </View>
-          )}
-        </View>
-        {onRename && (
-          <Pressable onPress={onRename} hitSlop={8} accessibilityLabel={`Rename ${teamName(team)}`}>
-            <ThemedText type="small" style={{ color: theme.accent }}>Rename</ThemedText>
-          </Pressable>
-        )}
-      </View>
-      {roster.length === 0 ? (
-        <ThemedText type="small" themeColor="textSecondary">No players yet</ThemedText>
-      ) : (
-        <View>
-          {roster.map((id, i) => (
-            <RosterRow key={id} data={data} playerId={id} first={i === 0} />
-          ))}
-          {Array.from({ length: empty }, (_, i) => (
-            <View key={i} style={[styles.row, styles.divider, { borderTopColor: theme.border }]}>
-              <View style={[styles.headshot, styles.emptyHeadshot, { borderColor: theme.textSecondary }]} />
-              <ThemedText themeColor="textSecondary" style={styles.playerName}>Empty</ThemedText>
-            </View>
-          ))}
-        </View>
-      )}
-    </View>
-  );
-}
-
-/** A hitter on a team: headshot, name, position and MLB team. Opens their stats. */
-function RosterRow({ data, playerId, first }: { data: SeasonData; playerId: number; first: boolean }) {
-  const theme = useTheme();
-  const openPlayer = useOpenPlayer();
-  const [hovered, setHovered] = useState(false);
-  const player = data.players.get(playerId);
-  return (
-    <Pressable
-      onPress={() => openPlayer(playerId)}
-      onHoverIn={() => setHovered(true)}
-      onHoverOut={() => setHovered(false)}
-      accessibilityRole="button"
-      accessibilityHint="Shows the player's stats"
-      style={[styles.row, !first && [styles.divider, { borderTopColor: theme.border }]]}>
-      <Image
-        source={headshotUrl(playerId, 96)}
-        style={[styles.headshot, { backgroundColor: theme.backgroundElement }]}
-        contentFit="cover"
-        accessibilityIgnoresInvertColors
-      />
-      <ThemedText numberOfLines={1} style={[styles.playerName, hovered && { textDecorationLine: 'underline' }]}>
-        {player?.full_name ?? `Player ${playerId}`}
-      </ThemedText>
-      <ThemedText themeColor="textSecondary" style={styles.position}>{player?.primary_position ?? ''}</ThemedText>
-      <ThemedText themeColor="textSecondary" style={styles.mlbTeam}>{mlbTeamAbbr(data, playerId)}</ThemedText>
-    </Pressable>
-  );
-}
-
 function CommissionerCard({ data }: { data: SeasonData }) {
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -310,19 +222,5 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   draftRow: { gap: Spacing.two },
   teams: { gap: Spacing.two + 2 },
-  tile: { borderRadius: Radius.md, paddingHorizontal: Spacing.two + 4, paddingVertical: Spacing.two + 2, gap: Spacing.two },
-  tileHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two + 2 },
-  tileTitle: { flex: 1, minWidth: 0, gap: 1 },
-  teamName: { fontSize: 15, lineHeight: 19, fontWeight: 700 },
-  ownerLine: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one + 2 },
-  owner: { fontSize: 12, lineHeight: 15, flexShrink: 1 },
-  // Headshots line up under the owner badge's center.
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two + 2, paddingVertical: Spacing.one + 1, paddingLeft: 4 },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth },
-  headshot: { width: 28, height: 28, borderRadius: 14 },
-  emptyHeadshot: { borderWidth: 1.5, borderStyle: 'dashed', opacity: 0.6 },
-  playerName: { flex: 1, minWidth: 0, fontSize: 14, lineHeight: 18, fontWeight: 600 },
-  position: { width: 30, textAlign: 'right', fontSize: 12, lineHeight: 15 },
-  mlbTeam: { width: 36, textAlign: 'right', fontSize: 12, lineHeight: 15, fontWeight: 700 },
   assignRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 36 },
 });
