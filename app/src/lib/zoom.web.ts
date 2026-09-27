@@ -44,7 +44,11 @@ export function zoom(direction: ZoomDirection, update: () => void, focus?: strin
     return;
   }
   const root = document.documentElement;
-  const find = () => (focus ? document.querySelector<HTMLElement>(`[data-zoom-key="${CSS.escape(focus)}"]`) : null);
+  // Every view stays mounted, so a game can be marked in several: the one on show has a box.
+  const find = () =>
+    focus
+      ? ([...document.querySelectorAll<HTMLElement>(`[data-zoom-key="${CSS.escape(focus)}"]`)].find((el) => el.getClientRects().length > 0) ?? null)
+      : null;
   const before = find();
   root.style.setProperty('--zoom-from', originIn(before, page));
   if (before) before.style.viewTransitionName = 'zoom-focus';

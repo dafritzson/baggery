@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { type LayoutChangeEvent, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import type { LiveState } from '@core/live.ts';
@@ -121,32 +121,38 @@ export default function GamesScreen() {
               />
             )}
           </View>
-          <View style={styles.column} {...zoomView()}>
-            {view === 'round' ? (
-              <RoundView series={series.filter((s) => s.gameType === round)} {...scheduleProps} />
-            ) : view === 'postseason' ? (
-              <PostseasonView series={series} {...scheduleProps} />
-            ) : wide ? (
-              // Rows of two that fill the width; both cards in a row are as tall as the taller one.
-              games
-                .filter((_, i) => i % 2 === 0)
-                .map((g, row) => (
-                  <View key={g.gamePk} style={styles.row}>
-                    {games.slice(row * 2, row * 2 + 2).map((game) => (
-                      <View key={game.gamePk} style={styles.cell} {...zoomKey(`game-${game.gamePk}`)}>
-                        <GameCard data={data} scores={scores} game={game} fill />
+          {/*
+            All three views stay mounted and only the one on show is displayed, so a zoom doesn't
+            rebuild the day's cards (and re-measure their bags) while it animates.
+          */}
+          <View {...zoomView()}>
+            <View style={[styles.column, view !== 'day' && styles.hidden]}>
+              {wide
+                ? // Rows of two that fill the width; both cards in a row are as tall as the taller one.
+                  games
+                    .filter((_, i) => i % 2 === 0)
+                    .map((g, row) => (
+                      <View key={g.gamePk} style={styles.row}>
+                        {games.slice(row * 2, row * 2 + 2).map((game) => (
+                          <View key={game.gamePk} style={styles.cell} {...zoomKey(`game-${game.gamePk}`)}>
+                            <GameCard data={data} scores={scores} game={game} fill />
+                          </View>
+                        ))}
+                        {row * 2 + 1 >= games.length && <View style={styles.cell} />}
                       </View>
-                    ))}
-                    {row * 2 + 1 >= games.length && <View style={styles.cell} />}
-                  </View>
-                ))
-            ) : (
-              games.map((g) => (
-                <View key={g.gamePk} {...zoomKey(`game-${g.gamePk}`)}>
-                  <GameCard data={data} scores={scores} game={g} />
-                </View>
-              ))
-            )}
+                    ))
+                : games.map((g) => (
+                    <View key={g.gamePk} {...zoomKey(`game-${g.gamePk}`)}>
+                      <GameCard data={data} scores={scores} game={g} />
+                    </View>
+                  ))}
+            </View>
+            <View style={view !== 'round' && styles.hidden}>
+              <RoundView series={series.filter((s) => s.gameType === round)} {...scheduleProps} />
+            </View>
+            <View style={view !== 'postseason' && styles.hidden}>
+              <PostseasonView series={series} {...scheduleProps} />
+            </View>
           </View>
         </>
       )}
@@ -214,6 +220,26 @@ function bagsThatFit(width: number, bagWidth: number | null): number {
   return bagWidth ? Math.floor((width + 0.5) / bagWidth) : 0;
 }
 
+/** A bag's width, once any card has measured it: a day's cards mount with it already known. */
+let measuredBagWidth: number | null = null;
+
+function rememberBagWidth(width: number): number {
+  measuredBagWidth = width;
+  return width;
+}
+
+/**
+ * An onLayout that passes on the width, except while the view it's in is hidden (the Day view
+ * behind the Round view, say), when everything in it measures 0 × 0: keeping the last width
+ * means nothing re-renders then, or again once it's back on show.
+ */
+function onShownWidth(onWidth: (width: number) => void) {
+  return (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    if (width > 0 || height > 0) onWidth(width);
+  };
+}
+
 /**
  * The free space at the end of a line of a player's mini card, filled with bags from the right.
  * Reports its width, so the card can decide how many bags go on each line. `scroll` lets a
@@ -244,7 +270,7 @@ function BagRoom({
     </ThemedText>
   );
   return (
-    <View style={[styles.bagRoom, { minWidth }]} onLayout={(e) => onWidth(e.nativeEvent.layout.width)}>
+    <View style={[styles.bagRoom, { minWidth }]} onLayout={onShownWidth(onWidth)}>
       {scroll ? (
         <ScrollView horizontal showsHorizontalScrollIndicator style={styles.fill} contentContainerStyle={styles.bagScroll}>
           {text}
@@ -563,7 +589,7 @@ function OpenCard({ data, scores, game, fill }: { data: SeasonData; scores: Scor
 /** The fantasy-rostered players on either team, as mini cards with their bags, most TB first. */
 function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; game: GameInfo }) {
   const theme = useTheme();
-  const [bagWidth, setBagWidth] = useState<number | null>(null);
+  const [bagWidth, setBagWidth] = useState<number | null>(measuredBagWidth);
   // Fantasy-rostered players on either team, with their TB in this game.
   const tb = new Map(scores.stats.filter((s) => s.gamePk === game.gamePk).map((s) => [s.playerId, s.tb]));
   const playerIds = [...new Set(data.spells.map((s) => s.mlb_player_id))];
@@ -589,7 +615,7 @@ function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; gam
         style={[styles.bagText, styles.measure]}
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
-        onLayout={(e) => setBagWidth(e.nativeEvent.layout.width / BAGS.length)}>
+        onLayout={onShownWidth((width) => setBagWidth(rememberBagWidth(width / BAGS.length)))}>
         {BAGS.join('')}
       </ThemedText>
       {players.map((p) => (
@@ -603,6 +629,7 @@ const styles = StyleSheet.create({
   controls: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.two },
   chip: { paddingHorizontal: Spacing.two + 4, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
   column: { gap: Spacing.three },
+  hidden: { display: 'none' },
   row: { flexDirection: 'row', gap: Spacing.three },
   cell: { flex: 1, minWidth: 0 },
   fill: { flexGrow: 1 },

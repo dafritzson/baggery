@@ -155,8 +155,12 @@
  *
  * Cheap to keep running: the ring is a rainbow square drawn once and spun with a transform, which
  * the GPU does without repainting anything; the wrapper's 2px padding is the part that shows. The
- * glow doesn't move, so its blur is drawn once too. (Animating the gradient's angle instead
- * repainted the ring and re-blurred the glow every frame, for every live card, and made phones hot.)
+ * glow doesn't move, so it's drawn once too. (Animating the gradient's angle instead repainted
+ * the ring and re-blurred the glow every frame, for every live card, and made phones hot.)
+ *
+ * The glow is a box-shadow per color, where that color sits on the ring, not a blurred copy of
+ * the rainbow: Safari is slow to snapshot a `filter: blur` for the Games tab's zoom, which made
+ * zooming out of a day with live games stall for a moment before it moved.
  */
 [data-live-glow] {
   position: relative;
@@ -169,9 +173,14 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: conic-gradient(#ff4d6d, #ffb703, #4ade80, #22d3ee, #6366f1, #d946ef, #ff4d6d);
-  filter: blur(12px);
-  opacity: 0.45;
+  /* Clockwise from the top, like the ring's conic gradient. */
+  box-shadow:
+    0 -6px 16px -2px rgb(255 77 109 / 0.35),
+    5px -3px 16px -2px rgb(255 183 3 / 0.35),
+    5px 3px 16px -2px rgb(74 222 128 / 0.35),
+    0 6px 16px -2px rgb(34 211 238 / 0.35),
+    -5px 3px 16px -2px rgb(99 102 241 / 0.35),
+    -5px -3px 16px -2px rgb(217 70 239 / 0.35);
   z-index: -1;
 }
 [data-live-ring] {
@@ -208,8 +217,13 @@
  * Zooming between the Games tab's Day, Round and Postseason views (lib/zoom.web.ts), while
  * <html> has data-zoom. The page scales around the focused game, cut off at its own edges, and
  * that game morphs into its place in the new view. The controls above it and the phone tab bar
- * are their own layers, so they stay put instead of zooming with the page.
+ * are their own layers, so they stay put instead of zooming with the page. Nothing else changes,
+ * so the rest of the screen isn't captured at all: it stays live underneath, which saves the
+ * browser drawing and cross-fading two full-screen snapshots every frame.
  */
+:root[data-zoom] {
+  view-transition-name: none;
+}
 :root[data-zoom] [data-zoom-fixed] {
   view-transition-name: zoom-fixed;
 }
