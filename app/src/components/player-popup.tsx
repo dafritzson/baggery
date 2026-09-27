@@ -544,15 +544,15 @@ function BaggerySection({ data, playerId }: { data: SeasonData; playerId: number
 
 /**
  * "Big Bags (Kyle)", with "You" for my team (just the name when it's the manager's own), or why
- * the bags didn't count.
+ * the bags didn't count: "Undrafted" (on no team) or "Big Bags (Kyle) · Eliminated".
  */
 function stintTeam(data: SeasonData, teamId: string | null, out: boolean): string {
   const team = teamId ? data.teams.find((t) => t.id === teamId) : undefined;
-  if (!team) return 'On no team, so these bags didn’t count';
+  if (!team) return 'Undrafted';
   const name = teamName(team);
   const owner = ownerName(data, team);
   const label = owner && owner !== name ? `${name} (${owner})` : name;
-  if (out) return `${label}, already out, so these didn’t count`;
+  if (out) return `${label} · Eliminated`;
   return team.id === data.myTeam?.id ? `${label} · You` : label;
 }
 
