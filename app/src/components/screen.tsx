@@ -1,4 +1,5 @@
-import { type ReactNode, use } from 'react';
+import { useScrollToTop } from 'expo-router';
+import { type ReactNode, use, useRef } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -34,11 +35,15 @@ export function Screen({
   // Phones: the tab bar floats over the bottom, so the end of the page can scroll clear of it.
   const paddingBottom = underHeader && layout === 'compact' ? BOTTOM_TAB_BAR_SPACE + bottom : Spacing.six;
   const gutter = tight && layout === 'compact' ? { paddingHorizontal: Spacing.two, paddingTop: Spacing.two } : null;
+  // Tapping the tab that's already on show scrolls back up, like a phone app's tab bar.
+  const scroll = useRef<ScrollView>(null);
+  useScrollToTop(scroll);
   return (
     <ThemedView style={styles.fill}>
       <SafeAreaView style={styles.fill} edges={underHeader ? ['left', 'right'] : ['top', 'left', 'right']}>
         {header && <View style={[styles.header, { maxWidth }, gutter && { paddingHorizontal: Spacing.two }]}>{header}</View>}
         <ScrollView
+          ref={scroll}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined}>

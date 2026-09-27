@@ -146,11 +146,13 @@ function ticks(lo: number, hi: number): number[] {
   return out;
 }
 
+const wholeNumber = (n: number) => n.toFixed(0);
+
 /**
  * A value per year for each manager, as lines with dots, over a dashed league line when given.
  * Years a manager sat out leave a gap in their line.
  */
-export function YearLineChart({ years, series, baseline, format = (n) => n.toFixed(0) }: {
+export function YearLineChart({ years, series, baseline, format = wholeNumber }: {
   years: number[];
   series: { key: string; color: string; values: Map<number, number> }[];
   /** The league's value each year, drawn dashed behind the managers. */

@@ -1,17 +1,10 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { View } from 'react-native';
 
-import { AppHeader, UnderAppHeader } from '@/components/app-header';
-import { BagCelebrations } from '@/components/bag-celebration';
-import { BottomTabBar } from '@/components/section-nav';
 import { StatusBarBackdrop } from '@/components/status-bar-backdrop';
 import { ThemedView } from '@/components/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useLayout } from '@/hooks/use-layout';
 import { AuthProvider, useAuth } from '@/lib/auth';
-import { PlayerProvider } from '@/lib/player';
-import { ScoresProvider } from '@/lib/scores';
-import { SeasonProvider } from '@/lib/season';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -27,44 +20,19 @@ export default function RootLayout() {
   );
 }
 
+/** Signed in, the app is its tabs ((tabs)/_layout.tsx); signed out, the sign-in page. */
 function RootStack() {
   const { session, loading } = useAuth();
-  const layout = useLayout();
   if (loading) return <ThemedView style={{ flex: 1 }} />;
-  const stack = (
+  return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={!!session}>
-        <Stack.Screen name="index" options={{ title: 'Baggery' }} />
-        <Stack.Screen name="draft/index" options={{ title: 'Drafts · Baggery' }} />
-        <Stack.Screen name="draft/[id]" options={{ title: 'Draft room · Baggery' }} />
-        <Stack.Screen name="standings" options={{ title: 'Standings · Baggery' }} />
-        <Stack.Screen name="games" options={{ title: 'Games · Baggery' }} />
-        <Stack.Screen name="research" options={{ title: 'Research · Baggery' }} />
-        <Stack.Screen name="almanac/index" options={{ title: 'Almanac · Baggery' }} />
-        <Stack.Screen name="almanac/[manager]" options={{ title: 'Almanac · Baggery' }} />
-        <Stack.Screen name="almanac/h2h" options={{ title: 'Almanac · Baggery' }} />
-        <Stack.Screen name="settings" options={{ title: 'Settings · Baggery' }} />
+        <Stack.Screen name="(tabs)" />
       </Stack.Protected>
       <Stack.Protected guard={!session}>
         <Stack.Screen name="sign-in" options={{ title: 'Sign in · Baggery' }} />
       </Stack.Protected>
       <Stack.Screen name="privacy" options={{ title: 'Privacy · Baggery' }} />
     </Stack>
-  );
-  if (!session) return stack;
-  // Remount on sign-in/out so season data is loaded for the right user.
-  return (
-    <SeasonProvider key={session.user.id}>
-      <ScoresProvider>
-        <PlayerProvider>
-          <ThemedView style={{ flex: 1 }}>
-            <AppHeader />
-            <UnderAppHeader value>{stack}</UnderAppHeader>
-            {layout === 'compact' && <BottomTabBar />}
-            <BagCelebrations />
-          </ThemedView>
-        </PlayerProvider>
-      </ScoresProvider>
-    </SeasonProvider>
   );
 }

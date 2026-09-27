@@ -288,3 +288,38 @@
     opacity: 0;
   }
 }
+
+/*
+ * Tabs (section-nav.tsx). A tab that isn't on show stays mounted but isn't drawn. Its layout is
+ * kept, so going back to it only has to draw it (display: none would lay the whole page out again).
+ * Browsers without content-visibility just don't show it.
+ */
+[data-tab-hidden] {
+  content-visibility: hidden;
+}
+@supports not (content-visibility: hidden) {
+  [data-tab-hidden] {
+    visibility: hidden;
+  }
+}
+
+/*
+ * The bubble behind the phone tab bar's selected tab slides to the next one with a slight bounce:
+ * the spring it used to be (React Native's speed 14, bounciness 7) sampled into linear(), with a
+ * bezier where that isn't supported. The browser animates a transform off the main thread, so the
+ * bubble keeps moving while the new tab is drawn.
+ */
+[data-tab-bubble] {
+  transition:
+    transform 440ms cubic-bezier(0.3, 1.25, 0.55, 1),
+    width 440ms cubic-bezier(0.3, 1.25, 0.55, 1);
+  transition-timing-function: linear(
+    0, 0.062, 0.191, 0.348, 0.515, 0.659, 0.779, 0.877, 0.945, 0.992, 1.022, 1.036, 1.042, 1.041,
+    1.036, 1.03, 1.023, 1.016, 1.011, 1.006, 1.003, 1.001, 0.999, 0.999, 1
+  );
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-tab-bubble] {
+    transition: none;
+  }
+}
