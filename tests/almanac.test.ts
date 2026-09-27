@@ -92,6 +92,20 @@ describe('almanac', () => {
     expect(a.playersByManager.get('a')!.map((p) => [p.playerId, p.tb])).toEqual([[4, 15], [1, 5]]);
   });
 
+  it("adds up a player's seasons for a manager, and keeps each one", () => {
+    const inp = input();
+    inp.seasons.push({ id: 's2', year: 2022, complete: true });
+    inp.teams.push({ id: 'A2', seasonId: 's2', managerKey: 'a', eliminatedAfterRound: null });
+    inp.spells.push({ seasonId: 's2', teamId: 'A2', playerId: 4, from: '2022-10-01T00:00:00Z', to: null });
+    inp.stats.push({ ...stat(4, 'F', 3), seasonId: 's2', gameStart: '2022-10-05T00:00:00Z' });
+    expect(almanac(inp).playersByManager.get('a')![0]).toEqual({
+      playerId: 4,
+      tb: 18,
+      years: [2021, 2022],
+      seasons: [{ year: 2021, tb: 15 }, { year: 2022, tb: 3 }],
+    });
+  });
+
   it('finds the closest cuts', () => {
     expect(a.closestCuts.map((c) => [c.round, c.through.managerKeys, c.out.managerKeys, c.margin, c.decidedBy])).toEqual([
       [2, ['a'], ['b'], 3, 'TB'],

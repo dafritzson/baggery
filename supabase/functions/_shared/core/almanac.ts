@@ -154,6 +154,8 @@ export interface ManagerPlayer {
   playerId: PlayerId;
   tb: number;
   years: number[];
+  /** His bags in each of those years, in year order. */
+  seasons: { year: number; tb: number }[];
 }
 
 function inSpell(s: RosterSpell, start: string): boolean {
@@ -301,14 +303,18 @@ export function almanac(input: AlmanacInput, top = 10): Almanac {
     if (found) {
       found.tb += rec.tb;
       found.years.push(rec.year);
+      found.seasons.push({ year: rec.year, tb: rec.tb });
     } else {
-      list.push({ playerId: rec.playerId, tb: rec.tb, years: [rec.year] });
+      list.push({ playerId: rec.playerId, tb: rec.tb, years: [rec.year], seasons: [{ year: rec.year, tb: rec.tb }] });
     }
     playersByManager.set(rec.managerKey, list);
   }
   for (const list of playersByManager.values()) {
     list.sort(byDesc((p) => p.tb));
-    for (const p of list) p.years.sort();
+    for (const p of list) {
+      p.years.sort();
+      p.seasons.sort((x, y) => x.year - y.year);
+    }
   }
 
   const complete = new Set(seasons.map((s) => s.id));

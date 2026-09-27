@@ -134,7 +134,7 @@ function League({ data }: { data: AlmanacData }) {
                   detail={`${player(game.playerId)}, ${game.year} ${seriesGame(game.gameType, game.seriesGameNumber)} for ${data.managers.get(game.managerKey)}`} />
               )}
               {season && (
-                <MomentCard emoji="⭐" title="Best player season" color={managerColor(data, season.managerKey)} headline={`${season.tb} bags`}
+                <MomentCard emoji="⭐" title="Best bagger season" color={managerColor(data, season.managerKey)} headline={`${season.tb} bags`}
                   detail={`${player(season.playerId)}, ${season.year} for ${data.managers.get(season.managerKey)}`} />
               )}
               {cut && (
@@ -179,8 +179,8 @@ function League({ data }: { data: AlmanacData }) {
         />
       </Card>
 
-      <Card title="Best player seasons">
-        <ThemedText type="small" themeColor="textSecondary">Most bags one player scored for one team in a postseason.</ThemedText>
+      <Card title="Best bagger seasons">
+        <ThemedText type="small" themeColor="textSecondary">Most bags one bagger scored for one team in a postseason.</ThemedText>
         <Leaderboard
           rows={a.bestPlayerSeasons.slice(0, 8).map((p, i) => ({
             key: `${i}`,
