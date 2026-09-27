@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { currentRound } from '@core/scoreboard.ts';
@@ -19,7 +20,7 @@ import { teamName } from '@/lib/teams';
 
 /**
  * Fantasy standings: each round's TB by game, and any team's TB by player. Desktops show both
- * side by side; phones switch between them.
+ * side by side; phones switch between them. `?team=<id>` (a player popup's link) picks that team.
  */
 export default function StandingsScreen() {
   const { data, loading, refetch } = useSeason();
@@ -29,6 +30,21 @@ export default function StandingsScreen() {
   const [round, setRound] = useState<FantasyRound | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [view, setView] = useState<'standings' | 'team'>('standings');
+  const { team: linkedTeam } = useLocalSearchParams<{ team?: string }>();
+
+  // A link to a team picks it, and on phones shows it. The param is then cleared, so the same link
+  // works again after picking another team.
+  const [seenLink, setSeenLink] = useState<string | undefined>(undefined);
+  if (linkedTeam !== seenLink) {
+    setSeenLink(linkedTeam);
+    if (linkedTeam) {
+      setPicked(linkedTeam);
+      if (!wide) setView('team');
+    }
+  }
+  useEffect(() => {
+    if (linkedTeam) router.setParams({ team: undefined });
+  }, [linkedTeam]);
 
   if (loading || (data && !scores)) {
     return <Screen width="wide"><Loader /></Screen>;

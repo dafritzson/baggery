@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -173,7 +174,7 @@ export function PlayerDetails({
   /** Makes the header a handle for dragging the bottom sheet closed. */
   dragHandlers?: GestureResponderHandlers;
 }) {
-  const { data } = useSeason();
+  const { data, requestedYear } = useSeason();
   const year = data?.season.year;
   const { stats, error } = usePlayerStats(playerId, year);
 
@@ -203,7 +204,7 @@ export function PlayerDetails({
         }
       />
       <ScrollView contentContainerStyle={styles.body}>
-        {data && <BaggerySection data={data} playerId={playerId} />}
+        {data && <BaggerySection data={data} playerId={playerId} requestedYear={requestedYear} onClose={onClose} />}
         {error && <ThemedText themeColor="danger">{error}</ThemedText>}
         {!stats && !error && <ActivityIndicator style={{ padding: Spacing.five }} />}
         {stats && year && (
@@ -482,11 +483,24 @@ function StatsBody({
 }
 
 /**
- * His TB in each postseason game, a row per series, and which fantasy team they counted for.
- * Shows once his MLB team has played a postseason game. Bags that counted for no one (on no
- * roster, or on a team already eliminated) are grayed out.
+ * His TB in each postseason game, a row per series, with his fantasy team (a player is on one
+ * roster at most per season) as a link to it in Standings. Shows once his MLB team has played a
+ * postseason game. Bags that counted for no one (before he was drafted, after he was dropped, or
+ * once his fantasy team was out) are grayed out, with a line saying which.
  */
-function BaggerySection({ data, playerId }: { data: SeasonData; playerId: number }) {
+function BaggerySection({
+  data,
+  playerId,
+  requestedYear,
+  onClose,
+}: {
+  data: SeasonData;
+  playerId: number;
+  /** The season picked in the header, if any, so Standings shows the same one. */
+  requestedYear: number | undefined;
+  /** Closes the popup before going to Standings. */
+  onClose?: () => void;
+}) {
   const mlbTeamId = data.poolByPlayer.get(playerId)?.mlb_team_id;
   const scores = usePlayerScores(playerId, mlbTeamId, data.season.year);
   if (!scores || !mlbTeamId) return null;
@@ -513,58 +527,78 @@ function BaggerySection({ data, playerId }: { data: SeasonData; playerId: number
     muted: s.games.every((g) => !counted(g.teamId, s.gameType)),
     mine: !!myTeamId && s.games.some((g) => g.teamId === myTeamId && counted(g.teamId, s.gameType)),
   }));
-  // Whose bags they were: a line per stretch of games on one roster (or none), with its series.
-  const stints: { teamId: string | null; out: boolean; dropped: boolean; labels: string[] }[] = [];
+  // Why the grayed-out bags didn't count: a line per stretch of them, with its series.
+  const stretches: { why: string | null; labels: string[] }[] = [];
   for (const s of series) {
     for (const g of s.games) {
-      const last = stints.at(-1);
-      const out = g.teamId !== null && !counted(g.teamId, s.gameType);
-      if (!last || last.teamId !== g.teamId || last.out !== out || last.dropped !== g.dropped) {
-        stints.push({ teamId: g.teamId, out, dropped: g.dropped, labels: [s.label] });
-      } else if (!last.labels.includes(s.label)) {
-        last.labels.push(s.label);
-      }
+      const why = g.teamId === null ? (g.dropped ? 'Dropped' : 'Undrafted') : counted(g.teamId, s.gameType) ? null : 'Eliminated';
+      const last = stretches.at(-1);
+      if (!last || last.why !== why) stretches.push({ why, labels: [s.label] });
+      else if (!last.labels.includes(s.label)) last.labels.push(s.label);
     }
   }
+  const notes = stretches.filter((st) => st.why !== null);
+
+  const spell = data.spells.find((s) => s.mlb_player_id === playerId);
+  const team = spell && data.teams.find((t) => t.id === spell.fantasy_team_id);
+  const owner = team && ownerName(data, team);
+  const openTeam = (teamId: string) => {
+    onClose?.();
+    router.navigate({ pathname: '/standings', params: requestedYear ? { team: teamId, year: requestedYear } : { team: teamId } });
+  };
 
   return (
     <Section
       title={`${data.season.year} Baggery`}
+      beside={
+        team && (
+          <ThemedText
+            type="smallBold"
+            themeColor="accent"
+            numberOfLines={1}
+            style={styles.sectionLink}
+            accessibilityRole="link"
+            onPress={() => openTeam(team.id)}>
+            {owner && owner !== teamName(team) ? `${teamName(team)} (${owner})` : teamName(team)} ›
+          </ThemedText>
+        )
+      }
       action={<ThemedText type="small" themeColor="textSecondary">{series.reduce((a, s) => a + s.total, 0)} TB</ThemedText>}>
       <ScoreGrid columns={columns} rows={rows} labelHeader="" totalHeader="TB" labelWidth={48} rowHeight={32} />
-      <View style={styles.stints}>
-        {stints.map((st, i) => (
-          <ThemedText key={i} type="small" themeColor="textSecondary" numberOfLines={1}>
-            <ThemedText type="smallBold" themeColor="textSecondary">{st.labels.join(', ')}</ThemedText>
-            {'  '}
-            {stintTeam(data, st.teamId, st.out, st.dropped)}
-          </ThemedText>
-        ))}
-      </View>
+      {notes.length > 0 && (
+        <View style={styles.stints}>
+          {notes.map((st, i) => (
+            <ThemedText key={i} type="small" themeColor="textSecondary" numberOfLines={1}>
+              <ThemedText type="smallBold" themeColor="textSecondary">{st.labels.join(', ')}</ThemedText>
+              {'  '}
+              {st.why}
+            </ThemedText>
+          ))}
+        </View>
+      )}
     </Section>
   );
 }
 
-/**
- * "Big Bags (Kyle)", with "You" for my team (just the name when it's the manager's own), or why
- * the bags didn't count: "Undrafted" (not drafted yet), "Dropped" (a team let him go), or
- * "Big Bags (Kyle) · Eliminated".
- */
-function stintTeam(data: SeasonData, teamId: string | null, out: boolean, dropped: boolean): string {
-  const team = teamId ? data.teams.find((t) => t.id === teamId) : undefined;
-  if (!team) return dropped ? 'Dropped' : 'Undrafted';
-  const name = teamName(team);
-  const owner = ownerName(data, team);
-  const label = owner && owner !== name ? `${name} (${owner})` : name;
-  if (out) return `${label} · Eliminated`;
-  return team.id === data.myTeam?.id ? `${label} · You` : label;
-}
-
-function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+function Section({
+  title,
+  beside,
+  action,
+  children,
+}: {
+  title: string;
+  /** Shown right after the title, e.g. a link. */
+  beside?: ReactNode;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <View style={styles.section}>
       <View style={styles.sectionHead}>
-        <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionTitle}>{title}</ThemedText>
+        <View style={styles.sectionTitleRow}>
+          <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionTitle}>{title}</ThemedText>
+          {beside}
+        </View>
         {action}
       </View>
       {children}
@@ -688,7 +722,9 @@ const styles = StyleSheet.create({
   body: { padding: Spacing.three, gap: Spacing.four, paddingBottom: Spacing.five },
   section: { gap: Spacing.two },
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two, minHeight: 28 },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexShrink: 1 },
   sectionTitle: { textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 13 },
+  sectionLink: { fontSize: 13, flexShrink: 1 },
   toggle: { flexDirection: 'row', borderRadius: Radius.md, padding: 2 },
   toggleItem: { paddingHorizontal: Spacing.two, paddingVertical: 2, borderRadius: Radius.sm },
   toggleText: { fontSize: 13 },
