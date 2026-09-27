@@ -23,6 +23,30 @@ export interface Board {
   teamIds: Set<number>;
   /** Only players on their team's postseason roster. */
   rosterOnly: boolean;
+  /** Postseason stats count games that started before this (a finished draft's lock); all when not set. */
+  statsBefore?: string | null;
+}
+
+/** Each player's postseason PA and TB so far, by player id. */
+export type PostseasonTotals = Map<number, { pa: number | null; tb: number }>;
+
+/**
+ * This postseason's PA and TB per player (games before `before`, if given), loaded once: one small
+ * row per hitter. Empty until the postseason has games; null while loading.
+ */
+export function usePostseasonTotals(year: number, before?: string | null): PostseasonTotals | null {
+  const [totals, setTotals] = useState<PostseasonTotals | null>(null);
+  useEffect(() => {
+    let stale = false;
+    supabase.rpc('postseason_totals', { p_year: year, p_before: before ?? null }).then(({ data: rows }) => {
+      if (stale) return;
+      setTotals(new Map((rows ?? []).map((r: { mlb_player_id: number; pa: number | null; tb: number }) => [r.mlb_player_id, { pa: r.pa, tb: r.tb }])));
+    });
+    return () => {
+      stale = true;
+    };
+  }, [year, before]);
+  return totals;
 }
 
 /**
@@ -72,12 +96,21 @@ export function useDraftBoard(data: SeasonData, draft: Draft): Board {
       taken: new Set(data.spells.filter((s) => Date.parse(s.from_at) <= locks).map((s) => s.mlb_player_id)),
       teamIds: (done && seriesTeams) || new Set(data.mlbTeams.keys()),
       rosterOnly: true,
+      statsBefore: draft.locks_at,
     };
   }, [data, draft, done, seriesTeams]);
 }
 
-/** The players on a board, with what the table shows for each. */
-export function availablePlayers(data: SeasonData, board: Board = currentBoard(data)): (PlayerRow & { mlbTeamId: number })[] {
+/**
+ * The players on a board, with what the table shows for each. Once the postseason has games, a
+ * player missing from `totals` hasn't batted yet: 0 PA and 0 TB.
+ */
+export function availablePlayers(
+  data: SeasonData,
+  board: Board = currentBoard(data),
+  totals: PostseasonTotals | null = null,
+): (PlayerRow & { mlbTeamId: number })[] {
+  const postseason = !!totals?.size;
   return data.pool
     .filter(
       (p) =>
@@ -98,6 +131,8 @@ export function availablePlayers(data: SeasonData, board: Board = currentBoard(d
         team: team?.abbreviation ?? '',
         wins: team?.wins ?? null,
         bye,
+        postPa: postseason ? (totals!.get(p.mlb_player_id)?.pa ?? 0) : null,
+        postTb: postseason ? (totals!.get(p.mlb_player_id)?.tb ?? 0) : null,
         g: p.games_played,
         pa: p.plate_appearances,
         ab,
@@ -146,7 +181,7 @@ export function PlayersList({
 }) {
   const theme = useTheme();
   const openPlayer = useOpenPlayer();
-  const [columns, setColumns] = usePlayerColumns();
+  const [chosen, setColumns] = usePlayerColumns();
   const { height } = useWindowDimensions();
   // Desktop web: the table scrolls in its own box, sized to the window, so its scrollbars are in
   // view. In `fill` the parent sets the size; otherwise it's capped a bit under the window height.
@@ -157,7 +192,11 @@ export function PlayersList({
   const [filters, setFilters] = useState<ColumnFilters>({});
 
   const shownBoard = useMemo(() => board ?? currentBoard(data), [board, data]);
-  const available = useMemo(() => availablePlayers(data, shownBoard), [data, shownBoard]);
+  const totals = usePostseasonTotals(data.season.year, shownBoard.statsBefore);
+  const available = useMemo(() => availablePlayers(data, shownBoard, totals), [data, shownBoard, totals]);
+  // Postseason columns only once it has games: before that they'd be empty.
+  const offered = useMemo(() => (totals?.size ? COLUMNS : COLUMNS.filter((c) => !c.postseason)), [totals]);
+  const columns = useMemo(() => chosen.filter((k) => offered.some((c) => c.key === k)), [chosen, offered]);
   const q = query.trim().toLowerCase();
   const shown = available.filter(
     (p) => (teamFilter === null || p.mlbTeamId === teamFilter) && (!q || p.name.toLowerCase().includes(q)),
@@ -170,7 +209,7 @@ export function PlayersList({
     onSelect: onSelect ?? openPlayer,
     selectedId,
     columns,
-    headerAction: <ColumnsMenu value={columns} onChange={setColumns} />,
+    headerAction: <ColumnsMenu offered={offered} value={chosen} onChange={setColumns} />,
     filters,
     onFiltersChange: setFilters,
     filterSource: available,
@@ -250,11 +289,16 @@ function describeFilter(c: Column, range: Range): string {
 }
 
 /** A small icon in the table's header with a checklist of its columns; stays open while you tick. */
-function ColumnsMenu({ value, onChange }: { value: ColumnKey[]; onChange: (columns: ColumnKey[]) => void }) {
+function ColumnsMenu({ offered, value, onChange }: {
+  /** The columns it lists (not the postseason ones before it has games). */
+  offered: Column[];
+  value: ColumnKey[];
+  onChange: (columns: ColumnKey[]) => void;
+}) {
   const theme = useTheme();
   const toggle = (key: ColumnKey) =>
     onChange(COLUMNS.map((c) => c.key).filter((k) => (k === key ? !value.includes(k) : value.includes(k))));
-  const all = COLUMNS.every((c) => value.includes(c.key));
+  const all = offered.every((c) => value.includes(c.key));
   const isDefault = value.length === DEFAULT_COLUMNS.length && DEFAULT_COLUMNS.every((k) => value.includes(k));
   return (
     <DropdownMenu.Root>
@@ -286,7 +330,7 @@ function ColumnsMenu({ value, onChange }: { value: ColumnKey[]; onChange: (colum
           <DropdownMenu.ItemIndicator className="menu-check">✓</DropdownMenu.ItemIndicator>
         </DropdownMenu.CheckboxItem>
         <DropdownMenu.Separator className="menu-separator" />
-        {COLUMNS.map((c) => (
+        {offered.map((c) => (
           <DropdownMenu.CheckboxItem
             key={c.key}
             className="menu-item"

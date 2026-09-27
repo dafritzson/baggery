@@ -96,14 +96,14 @@ describe('box score feed', () => {
           players: {
             ID1: {
               person: { id: 1, fullName: 'Vladimir Guerrero Jr.' },
-              stats: { batting: { atBats: 4, hits: 2, doubles: 1, homeRuns: 1, totalBases: 7, runs: 2, rbi: 3, baseOnBalls: 1 } },
+              stats: { batting: { plateAppearances: 5, atBats: 4, hits: 2, doubles: 1, homeRuns: 1, totalBases: 7, runs: 2, rbi: 3, baseOnBalls: 1 } },
             },
             ID2: { person: { id: 2, fullName: 'A Pitcher' }, stats: { batting: {}, pitching: { outs: 18 } } },
           },
         },
         home: {
           team: { id: 119 },
-          players: { ID3: { person: { id: 3, fullName: 'Shohei Ohtani' }, stats: { batting: { atBats: 5, hitByPitch: 1, sacFlies: 1 } } } },
+          players: { ID3: { person: { id: 3, fullName: 'Shohei Ohtani' }, stats: { batting: { plateAppearances: 7, atBats: 5, hitByPitch: 1, sacFlies: 1 } } } },
         },
       },
     };
@@ -114,9 +114,9 @@ describe('box score feed', () => {
     ]);
     expect(rows[0]).toEqual({
       game_pk: 99, mlb_player_id: 1, mlb_team_id: 141,
-      ab: 4, h: 2, doubles: 1, triples: 0, hr: 1, bb: 1, hbp: 0, sf: 0, tb: 7, r: 2, rbi: 3,
+      pa: 5, ab: 4, h: 2, doubles: 1, triples: 0, hr: 1, bb: 1, hbp: 0, sf: 0, tb: 7, r: 2, rbi: 3,
     });
-    expect(rows[1]).toMatchObject({ mlb_player_id: 3, mlb_team_id: 119, ab: 5, hbp: 1, sf: 1, tb: 0 });
+    expect(rows[1]).toMatchObject({ mlb_player_id: 3, mlb_team_id: 119, pa: 7, ab: 5, hbp: 1, sf: 1, tb: 0 });
   });
 });
 
