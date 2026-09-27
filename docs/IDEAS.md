@@ -37,3 +37,36 @@ E[G] could take the draft number, and the column could be labelled for the round
 RDTB regresses TB per game as a whole, which pulls playing time toward average along with
 hitting skill. An alternative: RDSLG × (the player's AB per game) × E[G]. That regresses only
 slugging and keeps each player's real at-bats per game (lineup spot, platoon, bench role).
+
+## Ghost team for eliminated managers
+
+Raised 2026-09-26, to keep eliminated managers following along. The 2 managers knocked out after
+the Division Series each add a hitter at the end of the Championship Series redraft, after the
+survivors; the 2 knocked out after the CS each add one in the World Series draft. Those 4 hitters
+are the ghost team. It plays the 3 finalists in the WS round and wins the season if it beats all
+3. The target is a 2–3% chance that the ghost wins.
+
+The trigger: if the 4 eliminated managers' bags (Wild Card through CS) plus the bags the ghost's
+CS picks earn in the CS beat the 3 finalists' bags, the ghost picks first in the WS draft.
+Otherwise it picks after the finalists. A variant also lets the ghost replace CS picks whose MLB
+team is out.
+
+`scripts/ghost-sim.ts` estimates the odds: 620,000 simulated postseasons built from the 1995–2025
+seasons, each played in today's 12-team bracket. The script describes the model and checks it
+against the league's real seasons. Chance the ghost wins:
+
+| | Ghost always picks last | With the trigger | Ghost always picks first |
+|---|---|---|---|
+| No redraft | 2.1% | 2.6% | 10% |
+| Ghost redrafts dead CS picks | 2.8% | 4.0% | 19% |
+
+The trigger fires in about 7% of seasons. With the trigger and no redraft, the ghost's chance
+stays between 2.4% and 3.1% when the sim's assumptions change; with the redraft, between 3.3%
+and 4.6%.
+
+Still open:
+
+- What the ghost wins, e.g. a share of the pot.
+- Pick order between the 2 managers in each draft, and what happens to a pick they don't make
+  (autodraft?).
+- How the Standings, tiebreakers and round closing handle a 4th team in round 3.

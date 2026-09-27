@@ -88,3 +88,80 @@ export async function loadPostseason(year: number): Promise<Postseason> {
 
   return { year, teams: teamIds.map((id) => teamsById.get(id)!), games, batting, hitters };
 }
+
+/** A hitter's regular-season line, all teams combined. */
+export interface SeasonHitting {
+  pa: number;
+  singles: number;
+  doubles: number;
+  triples: number;
+  hr: number;
+}
+
+export async function seasonHitting(year: number): Promise<Map<number, SeasonHitting>> {
+  const data = await mlb(`/stats?stats=season&group=hitting&season=${year}&sportId=1&playerPool=ALL&limit=5000`);
+  const lines = new Map<number, SeasonHitting>();
+  for (const s of data.stats?.[0]?.splits ?? []) {
+    const st = s.stat;
+    lines.set(s.player.id, {
+      pa: st.plateAppearances ?? 0,
+      singles: (st.hits ?? 0) - (st.doubles ?? 0) - (st.triples ?? 0) - (st.homeRuns ?? 0),
+      doubles: st.doubles ?? 0,
+      triples: st.triples ?? 0,
+      hr: st.homeRuns ?? 0,
+    });
+  }
+  return lines;
+}
+
+export interface Standing {
+  teamId: number;
+  league: 'AL' | 'NL';
+  divisionId: number;
+  /** 1 for the division winner (tiebreaker games included). */
+  divisionRank: number;
+  wins: number;
+  losses: number;
+}
+
+/** Each team's final regular-season record. */
+export async function standings(year: number): Promise<Standing[]> {
+  const data = await mlb(`/standings?leagueId=103,104&season=${year}`);
+  const LEAGUES: Record<number, 'AL' | 'NL'> = { 103: 'AL', 104: 'NL' };
+  return (data.records ?? []).flatMap((r: any) =>
+    (r.teamRecords ?? []).map((t: any) => ({
+      teamId: t.team.id,
+      league: LEAGUES[r.league?.id],
+      divisionId: r.division?.id,
+      divisionRank: Number(t.divisionRank),
+      wins: t.wins,
+      losses: t.losses,
+    })),
+  );
+}
+
+/** Every regular-season game that was played: its date and the two teams. */
+export async function regularSeasonGames(year: number): Promise<{ date: string; teams: [number, number] }[]> {
+  const fields = 'dates,games,gamePk,officialDate,status,abstractGameState,detailedState,teams,away,home,team,id';
+  const data = await mlb(`/schedule?sportId=1&season=${year}&gameType=R&fields=${fields}`);
+  const games = new Map<number, { date: string; teams: [number, number] }>();
+  for (const g of (data.dates ?? []).flatMap((d: any) => d.games ?? [])) {
+    if (g.status?.abstractGameState !== 'Final' || /Postponed|Cancelled/.test(g.status?.detailedState ?? '')) continue;
+    games.set(g.gamePk, { date: g.officialDate, teams: [g.teams.away.team.id, g.teams.home.team.id] });
+  }
+  return [...games.values()];
+}
+
+/** Everyone who batted for a team between two dates: plate appearances and position. */
+export async function teamPlateAppearances(
+  teamId: number,
+  start: string,
+  end: string,
+): Promise<{ id: number; position: string; pa: number }[]> {
+  const data = await mlb(
+    `/stats?stats=byDateRange&group=hitting&startDate=${start}&endDate=${end}&sportId=1&teamId=${teamId}&playerPool=ALL`,
+  );
+  return (data.stats?.[0]?.splits ?? [])
+    .map((s: any) => ({ id: s.player.id, position: s.position?.abbreviation ?? '', pa: s.stat.plateAppearances ?? 0 }))
+    .filter((p: { pa: number }) => p.pa > 0);
+}
