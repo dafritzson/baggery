@@ -1,0 +1,367 @@
+import { useState } from 'react';
+import { type GestureResponderEvent, Platform, Pressable, StyleSheet, View } from 'react-native';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
+
+import { SERIES, type ScoreStat } from '@core/scoreboard.ts';
+import {
+  isDayEnd,
+  nearestStop,
+  roundLines,
+  type Stop,
+  stopPosition,
+  stopsFor,
+  type Timeline,
+  type Vertices,
+  valueAt,
+  type Zoom,
+} from '@core/timeline.ts';
+import type { FantasyRound } from '@core/types.ts';
+
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
+import { Radius, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+import { playerName, shortDate } from '@/lib/format';
+import { type GameInfo, coreSpells } from '@/lib/scores';
+import type { SeasonData } from '@/lib/season';
+import { teamName } from '@/lib/teams';
+
+const CHART_H = 120;
+const BAR_H = 22;
+const ZOOMS: Zoom[] = ['season', 'round', 'day'];
+const EVENTS = { '1B': 'Single', '2B': 'Double', '3B': 'Triple', HR: 'Home run' } as const;
+
+/** "Tue, Oct 7" */
+const dayName = (date: string) =>
+  new Date(`${date}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+const colLabel = (g: GameInfo) => `${SERIES.find((s) => s.gameType === g.gameType)!.label}${g.seriesGameNumber}`;
+
+/** The teams in a round (not knocked out before it). */
+export function roundTeamIds(data: SeasonData, round: FantasyRound): string[] {
+  return data.teams.filter((t) => t.eliminated_after_round === null || t.eliminated_after_round >= round).map((t) => t.id);
+}
+
+/**
+ * Below the standings: the season as a race (each team's running round total, stepping up bag by
+ * bag) with a slider under it that moves the standings to any moment. Zoomed out it stops at the
+ * end of each game day; zoomed in on a round or a day, at every bag. Drag or tap anywhere on the
+ * chart or the bar, or play it.
+ */
+export function SeasonScrubber({
+  data,
+  timeline,
+  games,
+  stats,
+  stop,
+  latest,
+  zoom,
+  onStop,
+  onZoom,
+  playing,
+  onPlay,
+}: {
+  data: SeasonData;
+  timeline: Timeline;
+  games: GameInfo[];
+  stats: ScoreStat[];
+  /** Where the standings are. */
+  stop: Stop;
+  /** It's the latest moment (the standings keep up with live games). */
+  latest: boolean;
+  zoom: Zoom;
+  onStop: (stop: Stop) => void;
+  onZoom: (zoom: Zoom) => void;
+  playing: boolean;
+  onPlay: () => void;
+}) {
+  const theme = useTheme();
+  const [width, setWidth] = useState(0);
+  const [origin, setOrigin] = useState(0);
+  const spells = coreSpells(data);
+  const days = timeline.days;
+  const day = days[stop.day];
+  const round = day.round;
+  const mine = data.myTeam?.id;
+  const survivors = (r: FantasyRound) => data.season.survivors_after_round[r - 1] ?? roundTeamIds(data, r).length;
+  const rounds = ([1, 2, 3] as FantasyRound[]).flatMap((r) => {
+    const lines = roundLines(timeline, games, stats, spells, r, roundTeamIds(data, r), survivors(r));
+    return lines ? [{ round: r, lines }] : [];
+  });
+  const current = rounds.find((r) => r.round === round);
+  const shown = zoom === 'season' ? rounds : rounds.filter((r) => r.round === round);
+  // The x axis runs over days: the whole season, the round, or one day.
+  const [c0, c1]: [number, number] =
+    zoom === 'season' ? [0, days.length] : zoom === 'round' && current ? [current.lines.from, current.lines.to] : [stop.day, stop.day + 1];
+  const at = stopPosition(timeline, stop);
+  const X = (p: number) => ((p - c0) / (c1 - c0)) * width;
+
+  // The y scale: from 0 for the season or a round; for one day, from where the round stood before it.
+  const everyLine = shown.flatMap((r) => [...r.lines.teams.values(), r.lines.cut].map((line) => ({ line, to: r.lines.to })));
+  const top = Math.max(4, ...everyLine.map(({ line, to }) => valueAt(line, Math.min(c1, to))));
+  const bottom = zoom === 'day' ? Math.min(...everyLine.map(({ line }) => valueAt(line, c0))) : 0;
+  const vmax = Math.max(top, bottom + 4);
+  const Y = (v: number) => CHART_H - 6 - ((v - bottom) / (vmax - bottom)) * (CHART_H - 14);
+
+  // A step line between two x positions, as an SVG path.
+  const path = (line: Vertices, from: number, to: number) => {
+    if (to <= from) return '';
+    const points: Vertices = [[from, valueAt(line, from)], ...line.filter(([x]) => x > from && x <= to), [to, valueAt(line, to)]];
+    return points.map(([x, v], i) => `${i ? 'L' : 'M'}${X(x).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+  };
+  const other = { color: theme.textSecondary, width: 1.5, dash: undefined, opacity: 0.55 };
+  const drawn = shown.flatMap((r) => {
+    const from = Math.max(c0, r.lines.from);
+    const to = Math.min(c1, r.lines.to);
+    if (to <= from) return [];
+    const ids = [...r.lines.teams.keys()];
+    const styled = [
+      ...ids.filter((id) => id !== mine).map((id) => ({ key: `${r.round}${id}`, line: r.lines.teams.get(id)!, ...other })),
+      ...(r.round < 3 ? [{ key: `${r.round}cut`, line: r.lines.cut, color: theme.danger, width: 1.5, dash: '4 3', opacity: 1 }] : []),
+      ...ids.filter((id) => id === mine).map((id) => ({ key: `${r.round}${id}`, line: r.lines.teams.get(id)!, color: theme.accent, width: 2.5, dash: undefined, opacity: 1 })),
+    ];
+    return styled.map((s) => ({ ...s, past: path(s.line, from, Math.min(to, at)), future: path(s.line, Math.max(from, at), to) }));
+  });
+
+  // A point at the end of each day, and one per bag when zoomed in on a day.
+  const dots = shown.flatMap((r) =>
+    [...r.lines.teams.entries()].flatMap(([id, line]) => {
+      const own = id === mine;
+      const color = own ? theme.accent : theme.textSecondary;
+      const ends = days
+        .map((_, d) => d + 1)
+        .filter((x) => x > Math.max(c0, r.lines.from) && x <= Math.min(c1, r.lines.to))
+        .map((x) => ({ key: `${r.round}${id}e${x}`, x, v: valueAt(line, x), r: own ? 3 : 2, color, past: x <= at }));
+      const bags =
+        zoom === 'day'
+          ? day.bags.flatMap((b, k) =>
+              b.teamId === id && b.round === r.round
+                ? [{ key: `${r.round}${id}b${k}`, x: stop.day + (k + 1) / day.bags.length, v: valueAt(line, stop.day + (k + 1) / day.bags.length), r: own ? 3.5 : 2.5, color, past: k < stop.bag }]
+                : [],
+            )
+          : [];
+      return [...ends, ...bags];
+    }),
+  );
+  const cursorDots = current
+    ? [...current.lines.teams.entries()].map(([id, line]) => ({ key: id, v: valueAt(line, at), own: id === mine }))
+    : [];
+
+  const dividers =
+    zoom === 'season'
+      ? rounds.slice(1).map((r) => ({ key: `r${r.round}`, x: r.lines.from, dashed: true }))
+      : zoom === 'round'
+        ? days.map((_, d) => d).filter((d) => d > c0 && d < c1).map((d) => ({ key: `d${d}`, x: d, dashed: false }))
+        : [];
+  const dayWidth = width / (c1 - c0);
+  const ticks =
+    zoom === 'season'
+      ? rounds.map((r) => ({ key: `r${r.round}`, x: X(r.lines.from), text: `RD ${r.round}`, center: false, on: r.round === round }))
+      : zoom === 'round'
+        ? days
+            .map((d, i) => ({ d, i }))
+            .filter(({ i }) => i >= c0 && i < c1 && (dayWidth >= 36 || (i - c0) % 2 === 0))
+            .map(({ d, i }) => ({ key: d.date, x: X(i + 0.5), text: shortDate(d.date), center: true, on: i === stop.day }))
+        : [];
+  const pieces = (zoom === 'season' ? rounds.map((r) => [r.lines.from, r.lines.to]) : [[c0, c1]]).map(([a, b]) => {
+    const left = X(a) + (a > c0 ? 2 : 0);
+    const right = X(b) - (b < c1 ? 2 : 0);
+    return { key: `${a}`, left, width: right - left, fill: Math.max(0, Math.min(right - left, X(at) - left)) };
+  });
+
+  // What the cursor is on.
+  const gameByPk = new Map(games.map((g) => [g.gamePk, g]));
+  const played = [...new Set(day.gamePks.map((pk) => gameByPk.get(pk)).filter((g) => g !== undefined).map(colLabel))].join(', ');
+  const bag = zoom !== 'season' && stop.bag > 0 ? day.bags[stop.bag - 1] : null;
+  const anyLive = games.some((g) => g.status === 'Live');
+  const champion = data.teams.some((t) => t.eliminated_after_round === 3);
+  let main: string;
+  let sub: string;
+  if (bag) {
+    const team = data.teams.find((t) => t.id === bag.teamId);
+    const game = gameByPk.get(bag.gamePk);
+    main = `${playerName(data, bag.playerId)} · ${EVENTS[bag.event]}`;
+    sub = `${team ? teamName(team) : ''} +${bag.bags} · ${game ? colLabel(game) : ''} · ${new Date(bag.endedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+  } else if (!isDayEnd(timeline, stop)) {
+    main = `${dayName(day.date)} · first pitch`;
+    sub = played;
+  } else if (latest) {
+    main = `${anyLive ? 'Live' : champion ? 'Final' : 'Latest'} · ${dayName(day.date)}`;
+    sub = played;
+  } else {
+    main = `Through ${dayName(day.date)}`;
+    sub = played;
+  }
+
+  const list = stopsFor(timeline, zoom, stop);
+  const index = list.findIndex((s) => s.day === stop.day && s.bag === stop.bag);
+  const step = (by: number) => {
+    const next = list[index + by];
+    if (next) onStop(next);
+  };
+  const scrubTo = (x: number) => onStop(nearestStop(timeline, list, c0 + (Math.max(0, Math.min(width, x)) / width) * (c1 - c0)));
+  const grant = (e: GestureResponderEvent) => {
+    setOrigin(e.nativeEvent.pageX - e.nativeEvent.locationX);
+    scrubTo(e.nativeEvent.locationX);
+  };
+  const zoomAt = ZOOMS.indexOf(zoom);
+  const hasBags = days.some((d) => d.bags.length > 0);
+  const zoomLabel = zoom === 'season' ? 'Season' : zoom === 'round' ? `Round ${round}` : shortDate(day.date);
+
+  return (
+    <ThemedView type="backgroundElement" style={[styles.card, { boxShadow: theme.raised }]}>
+      <View style={styles.head}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={playing ? 'Pause' : 'Play the season'}
+          hitSlop={6}
+          onPress={onPlay}
+          style={[styles.play, { backgroundColor: theme.accent }]}>
+          {playing ? (
+            <Svg width={12} height={12} viewBox="0 0 24 24">
+              <Path d="M5 4h5v16H5zM14 4h5v16h-5z" fill={theme.accentText} />
+            </Svg>
+          ) : (
+            <Svg width={12} height={12} viewBox="0 0 24 24">
+              <Path d="M7 4.8v14.4a1 1 0 0 0 1.52.85l11.5-7.2a1 1 0 0 0 0-1.7L8.52 3.95A1 1 0 0 0 7 4.8z" fill={theme.accentText} />
+            </Svg>
+          )}
+        </Pressable>
+        <View style={styles.readout}>
+          <ThemedText type="smallBold" numberOfLines={1}>{main}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.sub}>{sub}</ThemedText>
+        </View>
+        <View style={[styles.zoom, { backgroundColor: theme.background, boxShadow: theme.raised }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Zoom out"
+            hitSlop={4}
+            onPress={() => onZoom(ZOOMS[zoomAt - 1])}
+            style={[styles.zoomButton, zoomAt === 0 && styles.hidden]}
+            disabled={zoomAt === 0}>
+            <ThemedText type="smallBold">−</ThemedText>
+          </Pressable>
+          <ThemedText type="smallBold" numberOfLines={1} style={styles.zoomLabel}>{zoomLabel}</ThemedText>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Zoom in"
+            hitSlop={4}
+            onPress={() => onZoom(ZOOMS[zoomAt + 1])}
+            style={[styles.zoomButton, (zoomAt === 2 || !hasBags) && styles.hidden]}
+            disabled={zoomAt === 2 || !hasBags}>
+            <ThemedText type="smallBold">+</ThemedText>
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.plot} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+        {width > 0 && (
+          <Svg width={width} height={CHART_H}>
+            {dividers.map((d) => (
+              <Line key={d.key} x1={X(d.x)} x2={X(d.x)} y1={0} y2={CHART_H} stroke={theme.border} strokeWidth={1} strokeDasharray={d.dashed ? '3 3' : undefined} />
+            ))}
+            <Line x1={X(at)} x2={X(at)} y1={0} y2={CHART_H} stroke={theme.textSecondary} strokeWidth={1.5} />
+            {drawn.map((l) => (
+              <Path key={`${l.key}f`} d={l.future} fill="none" stroke={l.color} strokeWidth={l.width} strokeDasharray={l.dash} strokeOpacity={l.opacity * 0.35} strokeLinejoin="round" />
+            ))}
+            {drawn.map((l) => (
+              <Path key={`${l.key}p`} d={l.past} fill="none" stroke={l.color} strokeWidth={l.width} strokeDasharray={l.dash} strokeOpacity={l.opacity} strokeLinejoin="round" />
+            ))}
+            {dots.map((d) => (
+              <Circle key={d.key} cx={X(d.x)} cy={Y(d.v)} r={d.r} fill={d.color} opacity={d.past ? 1 : 0.3} />
+            ))}
+            {cursorDots.map((d) => (
+              <Circle
+                key={`c${d.key}`}
+                cx={X(at)}
+                cy={Y(d.v)}
+                r={d.own ? 5 : 3.5}
+                fill={d.own ? theme.accent : theme.textSecondary}
+                stroke={theme.backgroundElement}
+                strokeWidth={1.5}
+              />
+            ))}
+          </Svg>
+        )}
+        <View style={styles.bar}>
+          {pieces.map((p) => (
+            <View key={p.key} style={[styles.track, { left: p.left, width: p.width, backgroundColor: theme.border }]}>
+              <View style={[styles.fill, { width: p.fill, backgroundColor: theme.accent }]} />
+            </View>
+          ))}
+          {width > 0 && <View style={[styles.knob, { left: X(at) - 9, backgroundColor: theme.accent, borderColor: theme.background, boxShadow: theme.raised }]} />}
+        </View>
+        <View
+          style={[StyleSheet.absoluteFill, Platform.OS === 'web' && ({ touchAction: 'pan-y', cursor: 'pointer' } as object)]}
+          onStartShouldSetResponder={() => true}
+          onResponderGrant={grant}
+          onResponderMove={(e) => scrubTo(e.nativeEvent.pageX - origin)}
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel="Standings over time"
+          accessibilityValue={{ text: `${main}, ${sub}` }}
+          accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+          onAccessibilityAction={(e) => step(e.nativeEvent.actionName === 'increment' ? 1 : -1)}
+        />
+      </View>
+
+      <View style={styles.ticks}>
+        {ticks.map((t) => (
+          <ThemedText
+            key={t.key}
+            style={[styles.tick, t.center ? [styles.centered, { left: t.x - 20 }] : { left: t.x }, { color: t.on ? theme.accent : theme.textSecondary }]}>
+            {t.text}
+          </ThemedText>
+        ))}
+        {zoom === 'day' && <ThemedText style={[styles.tick, { left: 0, color: theme.textSecondary }]}>FIRST PITCH</ThemedText>}
+        {zoom === 'day' && (
+          <ThemedText style={[styles.tick, styles.right, { color: theme.textSecondary }]}>{latest && anyLive ? 'NOW' : 'FINAL'}</ThemedText>
+        )}
+      </View>
+
+      <View style={styles.legend}>
+        <Key color={theme.accent} width={3} label="You" />
+        <Key color={theme.textSecondary} width={1.5} label="Others" />
+        {round < 3 && <Key color={theme.danger} width={1.5} dash label="Cut line" />}
+        <ThemedText type="small" themeColor="textSecondary" style={[styles.legendText, styles.legendEnd]}>
+          {zoom === 'season' ? 'Per day' : 'Per bag'}
+        </ThemedText>
+      </View>
+    </ThemedView>
+  );
+}
+
+function Key({ color, width, dash, label }: { color: string; width: number; dash?: boolean; label: string }) {
+  return (
+    <View style={styles.key}>
+      <Svg width={18} height={4}>
+        <Line x1={1} x2={17} y1={2} y2={2} stroke={color} strokeWidth={width} strokeDasharray={dash ? '4 3' : undefined} strokeLinecap="round" />
+      </Svg>
+      <ThemedText type="small" themeColor="textSecondary" style={styles.legendText}>{label}</ThemedText>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: { borderRadius: Radius.lg, padding: Spacing.two + 4, gap: Spacing.two },
+  head: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two + 2, minHeight: 32 },
+  play: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  readout: { flex: 1, minWidth: 0 },
+  sub: { fontSize: 12, lineHeight: 15 },
+  zoom: { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.md },
+  zoomButton: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
+  zoomLabel: { minWidth: 52, textAlign: 'center', fontSize: 12 },
+  hidden: { opacity: 0 },
+  plot: { height: CHART_H + BAR_H },
+  bar: { height: BAR_H },
+  track: { position: 'absolute', top: 8, height: 6, borderRadius: 3, overflow: 'hidden' },
+  fill: { height: 6 },
+  knob: { position: 'absolute', top: 2, width: 18, height: 18, borderRadius: 9, borderWidth: 3 },
+  ticks: { height: 14 },
+  tick: { position: 'absolute', top: 0, fontSize: 10, lineHeight: 14, fontWeight: 700, letterSpacing: 0.5 },
+  centered: { width: 40, textAlign: 'center' },
+  right: { right: 0 },
+  legend: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three - 2 },
+  key: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendText: { fontSize: 12, lineHeight: 16 },
+  legendEnd: { marginLeft: 'auto' },
+});

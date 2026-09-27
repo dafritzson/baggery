@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -31,6 +31,8 @@ export interface GridRow {
   standing?: 'safe' | 'tied' | 'out';
   /** Draw the cut line under this row. */
   cutAfter?: boolean;
+  /** A cell to pick out (by index), e.g. the one the bag just shown landed in. */
+  highlight?: number;
   onPress?: () => void;
 }
 
@@ -48,6 +50,7 @@ export function ScoreGrid({
   totalHeader,
   labelWidth,
   rowHeight = ROW,
+  follow,
 }: {
   columns: GridColumn[];
   rows: GridRow[];
@@ -56,8 +59,16 @@ export function ScoreGrid({
   labelWidth: number;
   /** Body rows' height; the header stays at the default. */
   rowHeight?: number;
+  /** A column to keep scrolled into view (the latest one filled in, when the standings are scrubbed). */
+  follow?: number;
 }) {
   const theme = useTheme();
+  const scroller = useRef<ScrollView>(null);
+  const [viewWidth, setViewWidth] = useState(0);
+  useEffect(() => {
+    if (follow === undefined || follow < 0 || !viewWidth) return;
+    scroller.current?.scrollTo({ x: Math.max(0, (follow + 1) * CELL + Spacing.one - viewWidth), animated: true });
+  }, [follow, viewWidth]);
   const standingColor = (r: GridRow) =>
     r.standing && { safe: theme.standingSafe, tied: theme.standingTied, out: theme.standingOut }[r.standing];
   const rowStyle = (r: GridRow, i: number) => [
@@ -97,7 +108,13 @@ export function ScoreGrid({
         <View style={[styles.header, styles.labelCell, { borderBottomColor: theme.border }]}>{header(labelHeader)}</View>
         {rows.map((r, i) => pressable(r, i, styles.labelCell, r.label))}
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        ref={scroller}
+        horizontal
+        showsHorizontalScrollIndicator
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        onLayout={(e) => setViewWidth(e.nativeEvent.layout.width)}>
         <View style={styles.fill}>
           <View style={[styles.header, styles.cells, { borderBottomColor: theme.border }]}>
             {columns.map((c) => (
@@ -113,7 +130,13 @@ export function ScoreGrid({
               styles.cells,
               r.cells.map((text, j) => (
                 <View key={columns[j].label} style={[styles.cell, columns[j].divider && [styles.divider, { borderLeftColor: theme.border }]]}>
-                  {cellText(text, r.strong, r.muted)}
+                  {r.highlight === j ? (
+                    <View style={[styles.highlight, { backgroundColor: theme.accent }]}>
+                      <ThemedText type="smallBold" style={[styles.number, { color: theme.accentText }]}>{text}</ThemedText>
+                    </View>
+                  ) : (
+                    cellText(text, r.strong, r.muted)
+                  )}
                 </View>
               )),
             ),
@@ -149,4 +172,5 @@ const styles = StyleSheet.create({
   divider: { borderLeftWidth: StyleSheet.hairlineWidth },
   totalCell: { justifyContent: 'center', alignItems: 'center' },
   number: { fontVariant: ['tabular-nums'] },
+  highlight: { minWidth: 24, paddingHorizontal: 3, borderRadius: Radius.sm, alignItems: 'center' },
 });
