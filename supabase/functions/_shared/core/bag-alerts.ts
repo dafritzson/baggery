@@ -24,13 +24,13 @@ export interface Alert {
 }
 
 const HITS = [
-  ['singles', 'single'],
-  ['doubles', 'double'],
-  ['triples', 'triple'],
-  ['hr', 'home run'],
+  ['singles', '1B'],
+  ['doubles', '2B'],
+  ['triples', '3B'],
+  ['hr', 'HR'],
 ] as const;
 
-/** "👜 Shohei Ohtani got a bag" / "Home run for your team", with a bag emoji per bag (up to 4). */
+/** "👜 Shohei Ohtani got a bag" / "HR for your team", with a bag emoji per bag (up to 4). */
 export function bagAlert(bag: Bag): Alert {
   const title = `${'👜'.repeat(Math.min(Math.max(bag.bags, 1), 4))} ${bag.player} got ${
     bag.bags === 1 ? 'a bag' : `${bag.bags} bags`
@@ -39,11 +39,11 @@ export function bagAlert(bag: Bag): Alert {
   return { title, body: `${capitalize(hitsText(bag))} for ${team}` };
 }
 
-/** "home run", "single and double", "2 singles"; "scoring change" when it wasn't a new hit. */
+/** "HR", "1B and 2B", "HR ×2"; "scoring change" when it wasn't a new hit. */
 export function hitsText(bag: Pick<Bag, 'singles' | 'doubles' | 'triples' | 'hr'>): string {
   const counts = HITS.map(([key, name]) => [bag[key], name] as const);
   if (counts.some(([n]) => n < 0) || counts.every(([n]) => n === 0)) return 'scoring change';
-  const parts = counts.filter(([n]) => n > 0).map(([n, name]) => (n === 1 ? name : `${n} ${name}s`));
+  const parts = counts.filter(([n]) => n > 0).map(([n, name]) => (n === 1 ? name : `${name} ×${n}`));
   return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 
