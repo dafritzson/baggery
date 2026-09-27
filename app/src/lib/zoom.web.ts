@@ -34,6 +34,20 @@ function originIn(el: HTMLElement | null, box: HTMLElement): string {
 }
 
 /**
+ * iPhone Safari leaves the phone tab bar's frosted glass clear once the bar has been its own
+ * layer in a zoom (global.css), until something sets the bar's layer up again, which otherwise
+ * only happens when a tab opens for the first time. A frame or two at 99% opacity does it.
+ */
+function refreshTabBarGlass(): void {
+  const bar = document.querySelector<HTMLElement>('[data-tab-bar]');
+  if (!bar) return;
+  const opacity = bar.style.opacity;
+  bar.style.opacity = '0.99';
+  // Two frames, so one is drawn at 99% before it goes back.
+  requestAnimationFrame(() => requestAnimationFrame(() => (bar.style.opacity = opacity)));
+}
+
+/**
  * View Transitions: the page scales up and fades (in) or down (out) around the focused game,
  * which morphs from its place in the old view to its place in the new one (global.css has the
  * animations). Browsers without them, or with reduced motion on, just switch.
@@ -84,5 +98,6 @@ export function zoom(direction: ZoomDirection, update: () => void, focus?: strin
     delete root.dataset.zoom;
     page.style.viewTransitionName = '';
     if (after) after.style.viewTransitionName = '';
+    refreshTabBarGlass();
   });
 }
