@@ -6,7 +6,9 @@ import { Card } from '@/components/card';
 import { ThemedText } from '@/components/themed-text';
 import { Toggle } from '@/components/toggle';
 import { Spacing } from '@/constants/theme';
+import { useAuth } from '@/lib/auth';
 import { type Prefs, type PushState, type Scope, loadPushState, savePush, sendTestPush, turnOffPush } from '@/lib/push';
+import { supabase } from '@/lib/supabase';
 
 const SCOPES: { value: Scope | 'off'; label: string }[] = [
   { value: 'off', label: 'Off' },
@@ -21,6 +23,46 @@ const DELAYS = [
   { value: 120, label: '2 min' },
 ];
 
+/** Where the signed-in account stands in the season being played, which is what alerts follow. */
+type Standing = 'none' | 'not-member' | 'no-team' | 'out' | 'playing';
+
+/**
+ * The latest season played in the app (not an imported one): whether this account is in its league
+ * and has a team still alive there. `none` when there's no such season, or it couldn't be read.
+ */
+async function loadStanding(userId: string): Promise<Standing> {
+  const { data: season } = await supabase
+    .from('seasons')
+    .select('id, league_id')
+    .is('imported_at', null)
+    .order('year', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!season) return 'none';
+  const [member, team] = await Promise.all([
+    supabase.from('league_members').select('user_id').eq('league_id', season.league_id).eq('user_id', userId).maybeSingle(),
+    supabase.from('fantasy_teams').select('eliminated_after_round').eq('season_id', season.id).eq('user_id', userId).maybeSingle(),
+  ]);
+  if (member.error || team.error) return 'none';
+  if (!member.data) return 'not-member';
+  if (!team.data) return 'no-team';
+  return team.data.eliminated_after_round === null ? 'playing' : 'out';
+}
+
+/** Why the chosen alerts won't come, if they won't. */
+function reachWarning(standing: Standing, scope: Scope | 'off', email: string | undefined): string | null {
+  if (standing === 'not-member') {
+    return `${email ?? 'This account'} isn’t in the league, so no alerts will come here. Sign in with the account you play with.`;
+  }
+  if (scope === 'mine' && standing === 'no-team') {
+    return 'You don’t have a team this season, so My hitters won’t alert. Choose Everyone’s, or claim a spot.';
+  }
+  if (scope === 'mine' && standing === 'out') {
+    return 'Your team is out, so My hitters won’t alert anymore. Choose Everyone’s to follow the rest.';
+  }
+  return null;
+}
+
 /**
  * Bag alerts on this device: a notification ("👜 Shohei Ohtani got a bag") when your hitters, or
  * anyone's, get a bag. Web push, so web only for now; on iPhone it takes the Home Screen app.
@@ -29,11 +71,19 @@ export function BagAlertsCard() {
   const [state, setState] = useState<PushState | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
+  const [standing, setStanding] = useState<Standing>('none');
+  const { session } = useAuth();
+  const userId = session?.user.id;
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     loadPushState().then(setState, () => setState({ kind: 'unsupported' }));
   }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !userId) return;
+    loadStanding(userId).then(setStanding, () => setStanding('none'));
+  }, [userId]);
 
   if (Platform.OS !== 'web' || !state) return null;
 
@@ -58,6 +108,7 @@ export function BagAlertsCard() {
   }
 
   const on = state.kind === 'on' ? state : null;
+  const warning = reachWarning(standing, on?.scope ?? 'off', session?.user.email);
 
   return (
     <Card title="Bag alerts">
@@ -91,6 +142,7 @@ export function BagAlertsCard() {
               }}
             />
           </View>
+          {warning && <ThemedText type="small" themeColor="danger">{warning}</ThemedText>}
           {on && (
             <>
               <ThemedText type="smallBold" themeColor="textSecondary">Spoiler delay</ThemedText>
@@ -109,7 +161,13 @@ export function BagAlertsCard() {
                   label={busy ? 'Sending…' : 'Send a test'}
                   variant="secondary"
                   disabled={busy}
-                  onPress={() => run(sendTestPush, on, 'Sent. It should show up in a few seconds.')}
+                  onPress={() =>
+                    run(
+                      sendTestPush,
+                      on,
+                      'Sent. It should show up in a few seconds. Nothing? Check that notifications are allowed for this browser and that Focus or Do Not Disturb is off (on a Mac: System Settings → Notifications).',
+                    )
+                  }
                 />
               </View>
             </>
