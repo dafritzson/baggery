@@ -34,7 +34,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
-import { shortDate } from '@/lib/format';
+import { headshotUrl, shortDate } from '@/lib/format';
 import type { DraftAction } from '@/lib/player';
 import { type Projection, projection } from '@/lib/projections';
 import { coreSpells, usePlayerScores } from '@/lib/scores';
@@ -264,7 +264,7 @@ function Header({
       {...dragHandlers}>
       {dragHandlers && <View style={[styles.grabber, { backgroundColor: theme.border }]} />}
       <Image
-        source={`https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/${playerId}/headshot/67/current`}
+        source={headshotUrl(playerId)}
         style={[styles.headshot, { backgroundColor: theme.backgroundElement }]}
         contentFit="cover"
         accessibilityIgnoresInvertColors
