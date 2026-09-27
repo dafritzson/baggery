@@ -18,7 +18,7 @@ import { autoCloseRounds } from '../_shared/close-round.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
 import { sendBagAlerts } from './alerts.ts';
-import { boxscoreBatting, clipsForHits, highlightClips, linescoreLive, linescoreRuns, playHits, savantHasVideo, scheduleGames } from './feed.ts';
+import { boxscoreBatting, clipsForHits, highlightClips, linescoreLive, linescoreRuns, playHits, playLines, savantHasVideo, scheduleGames } from './feed.ts';
 
 const MLB = 'https://statsapi.mlb.com/api/v1';
 const LEAGUES: Record<number, 'AL' | 'NL'> = { 103: 'AL', 104: 'NL' };
@@ -96,18 +96,22 @@ async function saveGame(gamePk: number): Promise<number> {
 }
 
 /**
- * A game's hits and their videos (mlb_hits). Its play-by-play when the box score has hits not yet
- * matched to a play (at most every 20 seconds), then its highlights while hits are still without
- * an official clip (every 2 minutes while live, every 10 after; finished games stop being polled
- * after 6 hours). `force` reads both regardless (reloading a season). Returns the hits it saved.
+ * A game's hits and their videos (mlb_hits), and every play's batting lines (mlb_play_lines). Its
+ * play-by-play when the box score has hits not yet matched to a play (at most every 20 seconds),
+ * and once more 10 minutes after it ends so the lines have the whole game; then its highlights
+ * while hits are still without an official clip (every 2 minutes while live, every 10 after;
+ * finished games stop being polled after 6 hours). `force` reads both regardless (reloading a
+ * season). Returns the hits it saved.
  */
 async function saveVideos(gamePk: number, force: boolean): Promise<number> {
   const due = async () => {
     const [row] = await sql`
       select
-        (select coalesce(sum(h), 0) from player_game_stats where game_pk = g.game_pk)
-          > (select count(*) from mlb_hits where game_pk = g.game_pk)
-          and (r.plays_read_at is null or r.plays_read_at < now() - interval '20 seconds') as plays,
+        ((select coalesce(sum(h), 0) from player_game_stats where game_pk = g.game_pk)
+           > (select count(*) from mlb_hits where game_pk = g.game_pk)
+           and (r.plays_read_at is null or r.plays_read_at < now() - interval '20 seconds'))
+        or (g.status = 'Final' and g.final_seen_at < now() - interval '10 minutes'
+            and (r.plays_read_at is null or r.plays_read_at < g.final_seen_at + interval '10 minutes')) as plays,
         exists (select 1 from mlb_hits where game_pk = g.game_pk and clip_slug is null)
           and (r.clips_read_at is null or r.clips_read_at < now()
                - case when g.status = 'Live' then interval '2 minutes' else interval '10 minutes' end) as clips
@@ -119,8 +123,26 @@ async function saveVideos(gamePk: number, force: boolean): Promise<number> {
 
   let saved = 0;
   if (force || (await due()).plays) {
-    const hits = playHits(gamePk, await mlb(`/game/${gamePk}/playByPlay`));
+    const plays = await mlb(`/game/${gamePk}/playByPlay`);
+    const hits = playHits(gamePk, plays);
+    const lines = playLines(gamePk, plays);
     await sql.begin(async (tx) => {
+      if (lines.length) {
+        await tx`
+          insert into mlb_play_lines ${tx(lines, 'game_pk', 'at_bat', 'mlb_player_id', 'ended_at', 'pa', 'ab', 'h', 'tb', 'hr', 'bb', 'hbp', 'sf', 'r', 'rbi')}
+          on conflict (game_pk, at_bat, mlb_player_id) do update set
+            ended_at = excluded.ended_at, pa = excluded.pa, ab = excluded.ab, h = excluded.h, tb = excluded.tb, hr = excluded.hr,
+            bb = excluded.bb, hbp = excluded.hbp, sf = excluded.sf, r = excluded.r, rbi = excluded.rbi
+          where (mlb_play_lines.ended_at, mlb_play_lines.pa, mlb_play_lines.ab, mlb_play_lines.h, mlb_play_lines.tb, mlb_play_lines.hr,
+                 mlb_play_lines.bb, mlb_play_lines.hbp, mlb_play_lines.sf, mlb_play_lines.r, mlb_play_lines.rbi)
+            is distinct from (excluded.ended_at, excluded.pa, excluded.ab, excluded.h, excluded.tb, excluded.hr,
+                              excluded.bb, excluded.hbp, excluded.sf, excluded.r, excluded.rbi)`;
+        // A scoring change can move or take away a line.
+        await tx`
+          delete from mlb_play_lines where game_pk = ${gamePk}
+            and (at_bat, mlb_player_id) not in (
+              select * from unnest(${lines.map((x) => x.at_bat)}::int[], ${lines.map((x) => x.mlb_player_id)}::int[]))`;
+      }
       if (hits.length) {
         await tx`
           insert into mlb_hits ${tx(hits, 'play_id', 'game_pk', 'mlb_player_id', 'event', 'inning', 'top_inning', 'ended_at')}

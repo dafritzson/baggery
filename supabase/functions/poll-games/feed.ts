@@ -190,6 +190,91 @@ export function playHits(gamePk: number, data: any): HitRow[] {
   return rows;
 }
 
+/**
+ * What one play added to one player's batting line (mlb_play_lines): the batter's plate
+ * appearance, and a run for each runner who scored on it (the batter too, on a home run).
+ */
+export interface PlayLineRow {
+  game_pk: number;
+  /** The play's index in the game (MLB's atBatIndex). */
+  at_bat: number;
+  mlb_player_id: number;
+  ended_at: string | null;
+  pa: number;
+  ab: number;
+  h: number;
+  tb: number;
+  hr: number;
+  bb: number;
+  hbp: number;
+  sf: number;
+  r: number;
+  rbi: number;
+}
+
+// How each play-ending event counts for the batter, as the box score counts it. Events not listed
+// (a runner caught stealing or picked off to end an inning, say) aren't a plate appearance.
+const AT_BAT_EVENTS = new Set([
+  'single', 'double', 'triple', 'home_run', 'field_out', 'strikeout', 'strikeout_double_play', 'strikeout_triple_play',
+  'grounded_into_double_play', 'grounded_into_triple_play', 'double_play', 'triple_play', 'force_out', 'fielders_choice',
+  'fielders_choice_out', 'field_error',
+]);
+const OTHER_PA_EVENTS: Record<string, Partial<Pick<PlayLineRow, 'bb' | 'hbp' | 'sf'>>> = {
+  walk: { bb: 1 },
+  intent_walk: { bb: 1 },
+  hit_by_pitch: { hbp: 1 },
+  sac_fly: { sf: 1 },
+  sac_fly_double_play: { sf: 1 },
+  sac_bunt: {},
+  sac_bunt_double_play: {},
+  catcher_interf: {},
+};
+const TB: Record<string, number> = { single: 1, double: 2, triple: 3, home_run: 4 };
+
+/**
+ * Every player's line, play by play, from `/game/{gamePk}/playByPlay`: what the Standings need to
+ * rebuild the box score as it stood at any moment of a game (tiebreakers included). A run counts
+ * at the end of the play it scored on.
+ */
+// deno-lint-ignore no-explicit-any
+export function playLines(gamePk: number, data: any): PlayLineRow[] {
+  const rows = new Map<string, PlayLineRow>();
+  const line = (atBat: number, playerId: number, endedAt: string | null) => {
+    const key = `${atBat}:${playerId}`;
+    let row = rows.get(key);
+    if (!row) {
+      row = { game_pk: gamePk, at_bat: atBat, mlb_player_id: playerId, ended_at: endedAt, pa: 0, ab: 0, h: 0, tb: 0, hr: 0, bb: 0, hbp: 0, sf: 0, r: 0, rbi: 0 };
+      rows.set(key, row);
+    }
+    return row;
+  };
+  // deno-lint-ignore no-explicit-any
+  for (const play of (data?.allPlays ?? []) as any[]) {
+    const atBat = play?.about?.atBatIndex;
+    const batter = play?.matchup?.batter?.id;
+    const event: string | undefined = play?.result?.eventType;
+    if (typeof atBat !== 'number' || !batter || !event || play?.about?.isComplete === false) continue;
+    const endedAt = play.about.endTime ?? null;
+    const other = OTHER_PA_EVENTS[event];
+    if (AT_BAT_EVENTS.has(event) || other) {
+      const row = line(atBat, batter, endedAt);
+      row.pa = 1;
+      row.ab = AT_BAT_EVENTS.has(event) ? 1 : 0;
+      row.tb = TB[event] ?? 0;
+      row.h = row.tb ? 1 : 0;
+      row.hr = event === 'home_run' ? 1 : 0;
+      Object.assign(row, other ?? {});
+      row.rbi = play.result.rbi ?? 0;
+    }
+    // deno-lint-ignore no-explicit-any
+    for (const runner of (play.runners ?? []) as any[]) {
+      const id = runner?.details?.runner?.id;
+      if (id && runner?.movement?.end === 'score' && !runner?.movement?.isOut) line(atBat, id, endedAt).r += 1;
+    }
+  }
+  return [...rows.values()];
+}
+
 /** An official highlight clip that's of one play. */
 export interface Clip {
   playId: string;

@@ -1,8 +1,9 @@
 import { createContext, createElement, type ReactNode, use, useCallback, useEffect, useRef, useState } from 'react';
 
-import { type ScoreChanges, type Scores, applyChanges, toGame, toHit, toLine, toStat } from '@core/score-feed.ts';
+import { type Row, type ScoreChanges, type Scores, applyChanges, toGame, toHit, toLine, toStat } from '@core/score-feed.ts';
 import type { ScoreGame, ScoreStat } from '@core/scoreboard.ts';
 import type { RosterSpell } from '@core/scoring.ts';
+import type { PlayLine } from '@core/timeline.ts';
 
 import { type SeasonData, useSeason } from '@/lib/season';
 import { supabase } from '@/lib/supabase';
@@ -222,4 +223,81 @@ export function usePlayerScores(
   }, [key, playerId, mlbTeamId, year]);
 
   return result && result.key === key ? result : null;
+}
+
+const PLAY_COLUMNS = 'game_pk, at_bat, mlb_player_id, ended_at, ab, h, tb, hr, bb, hbp, sf, r, rbi';
+const PAGE = 1000;
+
+const toPlayLine = (row: Row): PlayLine => ({
+  gamePk: row.game_pk,
+  playerId: row.mlb_player_id,
+  endedAt: row.ended_at,
+  ab: row.ab,
+  h: row.h,
+  tb: row.tb,
+  hr: row.hr,
+  bb: row.bb,
+  hbp: row.hbp,
+  sf: row.sf,
+  r: row.r,
+  rbi: row.rbi,
+});
+
+/** Some games' lines for some players, a page at a time (the API returns at most 1,000 rows). */
+async function loadPlayLines(gamePks: number[], playerIds: number[]): Promise<PlayLine[] | null> {
+  const lines: PlayLine[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('mlb_play_lines')
+      .select(PLAY_COLUMNS)
+      .in('game_pk', gamePks)
+      .in('mlb_player_id', playerIds)
+      .order('game_pk')
+      .order('at_bat')
+      .order('mlb_player_id')
+      .range(from, from + PAGE - 1);
+    if (error || !data) return null;
+    lines.push(...data.map(toPlayLine));
+    if (data.length < PAGE) return lines;
+  }
+}
+
+// The season's lines once loaded, by season and rostered players.
+const seasonPlays = new Map<string, PlayLine[]>();
+
+/**
+ * The season's play-by-play batting lines (mlb_play_lines) for its rostered players, for the
+ * Standings scrubber: with them the middle of a day is rebuilt exactly, tiebreakers included.
+ * Loaded only once `wanted` (the scrubber is in the middle of a day, or playing), in one go (an
+ * estimated 200–300 KB), and kept for the session. While a game is live, its lines are reloaded
+ * once a minute for as long as they're wanted. Empty until loaded; those moments use the hits.
+ */
+export function useSeasonPlayLines(wanted: boolean): PlayLine[] {
+  const { data } = useSeason();
+  const { scores } = useScores();
+  const [, setVersion] = useState(0);
+  const playerKey = data ? [...new Set(data.spells.map((s) => s.mlb_player_id))].sort().join(',') : '';
+  const key = data ? `${data.season.year}:${playerKey}` : '';
+  const started = (scores?.games ?? []).filter((g) => g.status !== 'Preview');
+  const gameKey = started.map((g) => g.gamePk).join(',');
+  const liveKey = started.filter((g) => g.status === 'Live').map((g) => g.gamePk).join(',');
+  useEffect(() => {
+    if (!wanted || !key || !playerKey || !gameKey) return;
+    let cancelled = false;
+    const players = playerKey.split(',').map(Number);
+    const load = async (pks: number[]) => {
+      const lines = await loadPlayLines(pks, players);
+      if (!lines || cancelled) return;
+      seasonPlays.set(key, [...(seasonPlays.get(key) ?? []).filter((l) => !pks.includes(l.gamePk)), ...lines]);
+      setVersion((v) => v + 1);
+    };
+    if (!seasonPlays.has(key)) load(gameKey.split(',').map(Number));
+    const live = liveKey ? liveKey.split(',').map(Number) : [];
+    const timer = live.length ? setInterval(() => load(live), 60_000) : null;
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+    };
+  }, [wanted, key, playerKey, gameKey, liveKey]);
+  return seasonPlays.get(key) ?? [];
 }

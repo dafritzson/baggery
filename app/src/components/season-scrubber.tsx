@@ -171,7 +171,8 @@ export function SeasonScrubber({
   // What the cursor is on.
   const gameByPk = new Map(games.map((g) => [g.gamePk, g]));
   const played = [...new Set(day.gamePks.map((pk) => gameByPk.get(pk)).filter((g) => g !== undefined).map(colLabel))].join(', ');
-  const bag = zoom !== 'season' && stop.bag > 0 ? day.bags[stop.bag - 1] : null;
+  // On a bag: any stop but a day's end on the season (playback goes bag by bag there too).
+  const bag = stop.bag > 0 && (zoom !== 'season' || !isDayEnd(timeline, stop)) ? day.bags[stop.bag - 1] : null;
   const anyLive = games.some((g) => g.status === 'Live');
   const champion = data.teams.some((t) => t.eliminated_after_round === 3);
   let main: string;
@@ -193,9 +194,9 @@ export function SeasonScrubber({
   }
 
   const list = stopsFor(timeline, zoom, stop);
-  const index = list.findIndex((s) => s.day === stop.day && s.bag === stop.bag);
+  // The stop before or after this one (it can be between stops, when playback left it on a bag).
   const step = (by: number) => {
-    const next = list[index + by];
+    const next = by > 0 ? list.find((s) => stopPosition(timeline, s) > at) : list.findLast((s) => stopPosition(timeline, s) < at);
     if (next) onStop(next);
   };
   const scrubTo = (x: number) => onStop(nearestStop(timeline, list, c0 + (Math.max(0, Math.min(width, x)) / width) * (c1 - c0)));

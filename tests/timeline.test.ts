@@ -7,6 +7,9 @@ import {
   dayEnd,
   gameDay,
   nearestStop,
+  nextPlayStop,
+  type PlayLine,
+  previousStop,
   roundLines,
   scoresAt,
   stopPosition,
@@ -123,6 +126,27 @@ describe('stopsFor', () => {
   });
 });
 
+describe('playback', () => {
+  it('plays bag by bag at every zoom, over the whole season when zoomed out', () => {
+    expect(nextPlayStop(tl, 'season', { day: 0, bag: 1 })).toEqual({ day: 0, bag: 2 });
+    expect(nextPlayStop(tl, 'season', { day: 0, bag: 3 })).toEqual({ day: 1, bag: 1 });
+    expect(nextPlayStop(tl, 'season', { day: 2, bag: 1 })).toEqual({ day: 3, bag: 1 });
+    expect(nextPlayStop(tl, 'season', { day: 3, bag: 1 })).toBeNull();
+    // A round's playback ends with the round.
+    expect(nextPlayStop(tl, 'round', { day: 2, bag: 1 })).toBeNull();
+    expect(nextPlayStop(tl, 'day', { day: 0, bag: 0 })).toEqual({ day: 0, bag: 1 });
+    expect(nextPlayStop(tl, 'day', { day: 0, bag: 3 })).toBeNull();
+  });
+
+  it('compares a day with the day before on the season, else with the bag before', () => {
+    expect(previousStop(tl, 'season', { day: 1, bag: 1 })).toEqual({ day: 0, bag: 3 });
+    expect(previousStop(tl, 'season', { day: 0, bag: 2 })).toEqual({ day: 0, bag: 1 });
+    expect(previousStop(tl, 'round', { day: 1, bag: 1 })).toEqual({ day: 0, bag: 3 });
+    expect(previousStop(tl, 'day', { day: 0, bag: 1 })).toEqual({ day: 0, bag: 0 });
+    expect(previousStop(tl, 'season', { day: 0, bag: 3 })).toBeNull();
+  });
+});
+
 describe('scoresAt', () => {
   it('counts a day up to a bag: earlier games in full, games that had started from their hits', () => {
     // Sep 29 after Devers' single: game 1 under way, game 2 not started.
@@ -130,6 +154,23 @@ describe('scoresAt', () => {
     expect(s.games.map((g) => g.status)).toEqual(['Live', 'Preview', 'Preview', 'Preview', 'Preview', 'Preview']);
     expect(totals(1, s)).toEqual({ A: 4, B: 1 });
     expect(s.stats.find((x) => x.playerId === JUDGE)).toMatchObject({ gamePk: 1, tb: 4, h: 1, hr: 1 });
+  });
+
+  it("rebuilds a game's lines at a moment from its plays, walks and runs included", () => {
+    const play = (playerId: number, endedAt: string, line: Partial<PlayLine>): PlayLine => ({
+      gamePk: 1, playerId, endedAt, ab: 0, h: 0, tb: 0, hr: 0, bb: 0, hbp: 0, sf: 0, r: 0, rbi: 0, ...line,
+    });
+    const plays = [
+      play(DEVERS, '2026-09-29T17:10:00Z', { bb: 1 }),
+      play(JUDGE, '2026-09-29T17:30:00Z', { ab: 1, h: 1, tb: 4, hr: 1, r: 1, rbi: 2 }),
+      play(DEVERS, '2026-09-29T17:30:00Z', { r: 1 }),
+      play(DEVERS, '2026-09-29T18:00:00Z', { ab: 1, h: 1, tb: 1 }),
+    ];
+    // Just after Judge's home run: Devers has walked and scored, but not singled yet.
+    const s = scoresAt(tl, games, stats, { day: 0, bag: 1 }, plays);
+    expect(s.stats.find((x) => x.playerId === JUDGE)).toMatchObject({ ab: 1, h: 1, tb: 4, hr: 1, r: 1, rbi: 2 });
+    expect(s.stats.find((x) => x.playerId === DEVERS)).toMatchObject({ ab: 0, bb: 1, tb: 0, r: 1 });
+    expect(totals(1, s)).toEqual({ A: 4, B: 0 });
   });
 
   it("counts nothing from a day before its first bag", () => {
@@ -184,5 +225,6 @@ describe('positions', () => {
   it('snaps to the nearest stop', () => {
     const list = stopsFor(tl, 'season', { day: 0, bag: 0 });
     expect(nearestStop(tl, list, 2.4)).toEqual({ day: 1, bag: 1 });
+    expect(nearestStop(tl, stopsFor(tl, 'round', { day: 0, bag: 1 }), 0.6)).toEqual({ day: 0, bag: 2 });
   });
 });

@@ -8,6 +8,9 @@ import {
   dayEnd,
   isDayEnd,
   nearestStop,
+  nextPlayStop,
+  playStops,
+  previousStop,
   sameStop,
   scoresAt,
   type Stop,
@@ -27,12 +30,12 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
-import { type Scores, coreSpells, useScores } from '@/lib/scores';
+import { type Scores, coreSpells, useScores, useSeasonPlayLines } from '@/lib/scores';
 import { type SeasonData, useSeason } from '@/lib/season';
 import { teamName } from '@/lib/teams';
 
-/** How long each step of playback takes, by zoom: a day, a bag in a round, a bag in a day. */
-const PLAY_MS: Record<Zoom, number> = { season: 700, round: 140, day: 450 };
+/** How long each bag of playback takes, by zoom: a whole season, a round, a day. */
+const PLAY_MS: Record<Zoom, number> = { season: 100, round: 140, day: 450 };
 
 /**
  * Fantasy standings: each round's TB by game, and any team's TB by player. Desktops show both
@@ -87,23 +90,23 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
   const valid = stop && stop.day < days.length && stop.bag <= days[stop.day].bags.length ? stop : null;
   const at = valid ?? latest;
   const atLatest = !at || !latest || sameStop(at, latest);
-  const shown: Scores = at && !atLatest ? { ...scores, ...scoresAt(timeline, scores.games, scores.stats, at) } : scores;
+  // The middle of a day is rebuilt from the season's play-by-play, loaded the first time it's needed.
+  const plays = useSeasonPlayLines((at !== null && !isDayEnd(timeline, at)) || playing);
+  const shown: Scores = at && !atLatest ? { ...scores, ...scoresAt(timeline, scores.games, scores.stats, at, plays) } : scores;
   const round = futureRound ?? (at ? days[at.day].round : currentRound(scores.games));
-  const list = at ? stopsFor(timeline, zoom, at) : [];
-  const index = at ? list.findIndex((s) => sameStop(s, at)) : -1;
 
   const go = (s: Stop) => {
     setFutureRound(null);
     setStop(latest && sameStop(s, latest) ? null : s);
   };
 
-  // Playback: a step at a time through the zoom's stops, stopping at the last.
+  // Playback: bag by bag (over the whole season when zoomed out), stopping at the last.
   const step = useRef<() => void>(() => {});
   useEffect(() => {
     step.current = () => {
-      const next = list[index + 1];
+      const next = at ? nextPlayStop(timeline, zoom, at) : null;
       if (next) go(next);
-      if (!list[index + 2]) setPlaying(false);
+      if (!next || !nextPlayStop(timeline, zoom, next)) setPlaying(false);
     };
   });
   useEffect(() => {
@@ -113,7 +116,8 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
   }, [playing, zoom]);
   const play = () => {
     if (playing) return setPlaying(false);
-    if (index >= list.length - 1 && list.length) go(list[0]);
+    if (!at) return;
+    if (!nextPlayStop(timeline, zoom, at)) go(playStops(timeline, zoom, at)[0]);
     setPlaying(true);
   };
   const zoomTo = (z: Zoom) => {
@@ -135,19 +139,19 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
   const lastDay = days.findLastIndex((d) => d.round === round);
   const settled = atLatest || (at !== null && (at.day > lastDay || (at.day === lastDay && isDayEnd(timeline, at))));
   // Places moved since the previous stop in the same round.
-  const prev = index > 0 ? list[index - 1] : null;
+  const prev = at ? previousStop(timeline, zoom, at) : null;
   const teamIds = roundTeamIds(data, round);
   const moves = new Map<string, number>();
   if (prev && days[prev.day].round === round && !futureRound) {
-    const before = scoresAt(timeline, scores.games, scores.stats, prev);
+    const before = scoresAt(timeline, scores.games, scores.stats, prev, plays);
     const rankBefore = new Map(roundStandings(round, teamIds, before.games, before.stats, spells).map((r) => [r.teamId, r.rank]));
     for (const r of roundStandings(round, teamIds, shown.games, shown.stats, spells)) {
       const was = rankBefore.get(r.teamId);
       if (was !== undefined && was !== r.rank) moves.set(r.teamId, was - r.rank);
     }
   }
-  // Zoomed in, the cell the bag the scrubber is on went into.
-  const bag = at && zoom !== 'season' && at.bag > 0 ? days[at.day].bags[at.bag - 1] : null;
+  // On a bag (any stop but a day's end on the season), the cell it went into.
+  const bag = at && at.bag > 0 && (zoom !== 'season' || !isDayEnd(timeline, at)) ? days[at.day].bags[at.bag - 1] : null;
   const bagGame = bag ? scores.games.find((g) => g.gamePk === bag.gamePk) : undefined;
   const flash = bag && bagGame && bag.round === round ? { teamId: bag.teamId, column: `${bagGame.gameType}${bagGame.seriesGameNumber}` } : null;
 
