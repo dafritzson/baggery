@@ -16,7 +16,7 @@ export interface PlayerRow {
   team: string;
   wins: number | null;
   bye: boolean;
-  /** This postseason so far: null before it has any games (or PA from before it was stored). */
+  /** This postseason so far: null before it has games or his team has played (or PA from before it was stored). */
   postPa: number | null;
   postTb: number | null;
   g: number | null;
