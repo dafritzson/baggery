@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type ScoreGame,
   currentRound,
+  playerSeries,
   roundColumns,
   roundDecided,
   roundStandings,
@@ -140,5 +141,53 @@ describe('roundDecided', () => {
   it('needs four wins in a best-of-seven', () => {
     expect(roundDecided(3, series('W', [1, 2], 'WWWLL', 7, 2))).toBe(false);
     expect(roundDecided(3, series('W', [1, 2], 'WWWLLW', 7, 1))).toBe(true);
+  });
+});
+
+describe('playerSeries', () => {
+  it('gives his TB in each started game of his team, a series at a time, with whose roster he was on', () => {
+    expect(playerSeries(JUDGE, 147, games, stats, spells)).toEqual([
+      {
+        gameType: 'F',
+        label: 'WC',
+        name: 'Wild Card',
+        length: 3,
+        games: [
+          { number: 1, tb: 5, live: false, teamId: 'A' },
+          { number: 2, tb: 0, live: false, teamId: 'A' },
+        ],
+        total: 5,
+      },
+      {
+        gameType: 'D',
+        label: 'DS',
+        name: 'Division Series',
+        length: 5,
+        // Game 2 hasn't started.
+        games: [{ number: 1, tb: 1, live: true, teamId: 'A' }],
+        total: 1,
+      },
+    ]);
+  });
+
+  it('shows games before he was drafted with no team, so they counted for no one', () => {
+    const series = playerSeries(GUERRERO, 141, games, stats, spells);
+    expect(series.map((s) => s.games)).toEqual([[{ number: 1, tb: 8, live: true, teamId: 'B' }]]);
+    const late = playerSeries(GUERRERO, 141, games, stats, [{ ...spells[2], from: '2026-10-05T00:00:00Z' }]);
+    expect(late[0].games[0].teamId).toBeNull();
+  });
+
+  it('keeps his dropped team’s games with the team that had him', () => {
+    expect(playerSeries(DEVERS, 111, games, stats, spells).map((s) => s.games.map((g) => g.teamId))).toEqual([['B', 'B']]);
+  });
+
+  it('marks games his team played without him', () => {
+    const benched = playerSeries(JUDGE, 147, games, stats.filter((s) => !(s.gamePk === 2 && s.playerId === JUDGE)), spells);
+    expect(benched[0].games[1]).toEqual({ number: 2, tb: null, live: false, teamId: 'A' });
+    expect(benched[0].total).toBe(5);
+  });
+
+  it('is empty before his team plays', () => {
+    expect(playerSeries(JUDGE, 147, games.map((g) => ({ ...g, status: 'Preview' })), stats, spells)).toEqual([]);
   });
 });

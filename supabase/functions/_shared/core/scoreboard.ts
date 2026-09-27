@@ -206,6 +206,65 @@ export function teamSeriesBlocks(
   return blocks;
 }
 
+export interface PlayerSeriesGame {
+  /** 1-based game number in the series. */
+  number: number;
+  /** His TB, or null when his team played without him (he's not in the box score). */
+  tb: number | null;
+  live: boolean;
+  /** The fantasy team he was on at first pitch; null when he was on none, so the bags counted for no one. */
+  teamId: TeamId | null;
+}
+
+export interface PlayerSeries {
+  gameType: GameType;
+  label: string;
+  name: string;
+  /** Most games the series can go. */
+  length: number;
+  /** His MLB team's games in the series that have started, in order. */
+  games: PlayerSeriesGame[];
+  total: number;
+}
+
+/**
+ * One player's postseason, a series at a time, for the player popup: his TB in each game his MLB
+ * team has started, and whose fantasy roster he was on for it. Series his team hasn't played in
+ * are left out.
+ */
+export function playerSeries(
+  playerId: PlayerId,
+  mlbTeamId: number,
+  games: ScoreGame[],
+  stats: ScoreStat[],
+  spells: RosterSpell[],
+): PlayerSeries[] {
+  const tbByGame = new Map(stats.filter((s) => s.playerId === playerId).map((s) => [s.gamePk, s.tb]));
+  const theirs = games
+    .filter((g) => hasStarted(g) && (g.homeTeamId === mlbTeamId || g.awayTeamId === mlbTeamId))
+    .sort((a, b) => a.seriesGameNumber - b.seriesGameNumber);
+  return SERIES.flatMap((series) => {
+    const played = theirs.filter((g) => g.gameType === series.gameType);
+    if (!played.length) return [];
+    const list = played.map((g) => ({
+      number: g.seriesGameNumber,
+      tb: tbByGame.get(g.gamePk) ?? null,
+      live: g.status === 'Live',
+      teamId: ownerAt(spells, playerId, g.start) ?? null,
+    }));
+    return [
+      {
+        gameType: series.gameType,
+        label: series.label,
+        name: series.name,
+        length: series.games,
+        games: list,
+        total: list.reduce((a, g) => a + (g.tb ?? 0), 0),
+      },
+    ];
+  });
+}
+
 /** A team's TB for each fantasy round, from its series blocks. */
 export function roundTotals(blocks: SeriesBlock[]): Record<FantasyRound, number> {
   const totals: Record<FantasyRound, number> = { 1: 0, 2: 0, 3: 0 };

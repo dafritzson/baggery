@@ -1,6 +1,7 @@
 import { createContext, createElement, type ReactNode, use, useCallback, useEffect, useRef, useState } from 'react';
 
 import { type ScoreChanges, type Scores, applyChanges, toGame, toLine, toStat } from '@core/score-feed.ts';
+import type { ScoreGame, ScoreStat } from '@core/scoreboard.ts';
 import type { RosterSpell } from '@core/scoring.ts';
 
 import { type SeasonData, useSeason } from '@/lib/season';
@@ -159,4 +160,56 @@ function useLiveScores(data: SeasonData | null): ScoresState {
   }, [year, playerKey, refetch]);
 
   return { scores, refetch };
+}
+
+/**
+ * One player's postseason for the player popup: his MLB team's games this season and his TB in
+ * them. Loaded each time the popup opens (a few KB), not kept live. Null while loading or if
+ * loading failed.
+ */
+export function usePlayerScores(
+  playerId: number,
+  mlbTeamId: number | undefined,
+  year: number | undefined,
+): { games: ScoreGame[]; stats: ScoreStat[] } | null {
+  const key = mlbTeamId && year ? `${playerId}:${mlbTeamId}:${year}` : null;
+  const [result, setResult] = useState<{ key: string; games: ScoreGame[]; stats: ScoreStat[] } | null>(null);
+
+  useEffect(() => {
+    if (!key) return;
+    let cancelled = false;
+    Promise.all([
+      supabase
+        .from('mlb_games')
+        .select('game_pk, game_type, series_game_number, start_time, status, home_team_id, away_team_id')
+        .eq('season_year', year!)
+        .or(`home_team_id.eq.${mlbTeamId},away_team_id.eq.${mlbTeamId}`)
+        .not('series_game_number', 'is', null),
+      supabase
+        .from('player_game_stats')
+        .select('game_pk, tb, mlb_games!inner(season_year)')
+        .eq('mlb_player_id', playerId)
+        .eq('mlb_games.season_year', year!),
+    ]).then(([games, stats]) => {
+      if (cancelled || games.error || stats.error) return;
+      setResult({
+        key,
+        games: games.data.map((g) => ({
+          gamePk: g.game_pk,
+          gameType: g.game_type,
+          seriesGameNumber: g.series_game_number,
+          start: g.start_time,
+          status: g.status,
+          homeTeamId: g.home_team_id,
+          awayTeamId: g.away_team_id,
+        })),
+        stats: stats.data.map((s) => ({ gamePk: s.game_pk, playerId, tb: s.tb })),
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [key, playerId, mlbTeamId, year]);
+
+  return result && result.key === key ? result : null;
 }
