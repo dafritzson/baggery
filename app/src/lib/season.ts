@@ -88,6 +88,9 @@ export interface MlbTeam {
   eliminated: boolean;
   wins: number | null;
   has_bye: boolean;
+  /** 1–6 in its league, once the pool is synced. */
+  seed: number | null;
+  league: 'AL' | 'NL' | null;
 }
 
 export interface SeasonData {
@@ -158,7 +161,7 @@ async function fetchSeason(
       .eq('season_id', season.id),
     supabase
       .from('season_mlb_teams')
-      .select('eliminated, wins, has_bye, team:mlb_teams(id, name, abbreviation)')
+      .select('eliminated, wins, has_bye, seed, team:mlb_teams(id, name, abbreviation, league)')
       .eq('season_id', season.id),
     supabase.from('league_members').select('user_id, role').eq('league_id', season.league_id),
     supabase.from('profiles').select('id, display_name, avatar_path, google_avatar_url'),
@@ -202,8 +205,8 @@ async function fetchSeason(
   }
   const mlbTeams = new Map<number, MlbTeam>();
   for (const row of seasonTeams.data ?? []) {
-    const team = row.team as unknown as Pick<MlbTeam, 'id' | 'name' | 'abbreviation'>;
-    mlbTeams.set(team.id, { ...team, eliminated: row.eliminated, wins: row.wins, has_bye: row.has_bye });
+    const team = row.team as unknown as Pick<MlbTeam, 'id' | 'name' | 'abbreviation' | 'league'>;
+    mlbTeams.set(team.id, { ...team, eliminated: row.eliminated, wins: row.wins, has_bye: row.has_bye, seed: row.seed });
   }
 
   const teamRows = (teams.data ?? []) as Team[];

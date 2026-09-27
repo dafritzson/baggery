@@ -32,12 +32,8 @@ E[G] could take the draft number, and the column could be labelled for the round
 
 ### Regress the skill, not the playing time
 
+(xBags already works this way; the idea is to do the same for RDTB.)
+
 RDTB regresses TB per game as a whole, which pulls playing time toward average along with
 hitting skill. An alternative: RDSLG × (the player's AB per game) × E[G]. That regresses only
 slugging and keeps each player's real at-bats per game (lineup spot, platoon, bench role).
-
-### Coin-flip series odds
-
-E[G] treats every game as 50/50. It could use team strength (e.g. regular-season win %) and home
-field (the higher Wild Card seed hosts every game) for each team's chance to advance and
-expected series length.

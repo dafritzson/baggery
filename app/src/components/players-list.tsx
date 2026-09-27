@@ -3,6 +3,9 @@ import { Platform, Pressable, ScrollView, StyleSheet, TextInput, View, useWindow
 import Svg, { Circle, Path } from 'react-native-svg';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
+import type { TeamOdds } from '@core/odds.ts';
+import { expectedBags } from '@core/stats.ts';
+
 import { COLUMNS, type Column, type ColumnFilters, type ColumnKey, DEFAULT_COLUMNS, type PlayerRow, PlayerTable } from '@/components/player-table';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -11,7 +14,8 @@ import { useTheme } from '@/hooks/use-theme';
 import { type Range, filterRows } from '@/lib/column-filters';
 import { useOpenPlayer } from '@/lib/player';
 import { usePlayerColumns } from '@/lib/player-columns';
-import { projection } from '@/lib/projections';
+import { projection, teamOdds } from '@/lib/projections';
+import { useScores } from '@/lib/scores';
 import type { Draft, SeasonData } from '@/lib/season';
 import { supabase } from '@/lib/supabase';
 
@@ -110,6 +114,7 @@ export function availablePlayers(
   data: SeasonData,
   board: Board = currentBoard(data),
   totals: PostseasonTotals | null = null,
+  odds: Map<number, TeamOdds> | null = null,
 ): (PlayerRow & { mlbTeamId: number })[] {
   const postseason = !!totals?.size;
   // Teams that have played: any of their hitters has a postseason line.
@@ -121,6 +126,7 @@ export function availablePlayers(
     )
     .map((p) => {
       const team = data.mlbTeams.get(p.mlb_team_id);
+      const teamOdd = odds?.get(p.mlb_team_id);
       const { bye, rdslg, tbExpected, rdtb } = projection(data, p);
       const ab = p.at_bats;
       const h = p.hits;
@@ -133,6 +139,8 @@ export function availablePlayers(
         name: data.players.get(p.mlb_player_id)?.full_name ?? `Player ${p.mlb_player_id}`,
         team: team?.abbreviation ?? '',
         wins: team?.wins ?? null,
+        adv: teamOdd ? 100 * teamOdd.advance : null,
+        xBags: teamOdd && ab !== null && p.games_played !== null ? expectedBags(p.regular_season_tb, ab, p.games_played, teamOdd.games) : null,
         bye,
         postPa: postseason && played.has(p.mlb_team_id) ? (totals!.get(p.mlb_player_id)?.pa ?? 0) : null,
         postTb: postseason && played.has(p.mlb_team_id) ? (totals!.get(p.mlb_player_id)?.tb ?? 0) : null,
@@ -196,9 +204,16 @@ export function PlayersList({
 
   const shownBoard = useMemo(() => board ?? currentBoard(data), [board, data]);
   const totals = usePostseasonTotals(data.season.year, shownBoard.statsBefore);
-  const available = useMemo(() => availablePlayers(data, shownBoard, totals), [data, shownBoard, totals]);
-  // Postseason columns only once it has games (before that they'd be empty), Draft 1's (Bye) only before.
-  const offered = useMemo(() => COLUMNS.filter((c) => (totals?.size ? !c.draft1 : !c.postseason)), [totals]);
+  const { scores } = useScores();
+  // Waits for the games, so a series under way isn't shown from 0-0.
+  const odds = useMemo(() => (scores ? teamOdds(data, scores.games, shownBoard.statsBefore) : null), [data, scores, shownBoard.statsBefore]);
+  const available = useMemo(() => availablePlayers(data, shownBoard, totals, odds), [data, shownBoard, totals, odds]);
+  // Postseason columns only once it has games (before that they'd be empty), Draft 1's (Bye) only
+  // before; the odds columns only with odds.
+  const offered = useMemo(
+    () => COLUMNS.filter((c) => (totals?.size ? !c.draft1 : !c.postseason) && (odds || !c.odds)),
+    [totals, odds],
+  );
   const columns = useMemo(() => chosen.filter((k) => offered.some((c) => c.key === k)), [chosen, offered]);
   const q = query.trim().toLowerCase();
   const shown = available.filter(

@@ -1,3 +1,6 @@
+import { type TeamOdds, postseasonOdds } from '@core/odds.ts';
+import { postseasonSeries } from '@core/schedule.ts';
+import type { GameInfo } from '@core/score-feed.ts';
 import { expectedTb, regressedSlg, regressedTb } from '@core/stats.ts';
 
 import type { PoolEntry, SeasonData } from '@/lib/season';
@@ -21,4 +24,17 @@ export function projection(data: SeasonData, entry: PoolEntry): Projection {
     tbExpected: g === null ? null : expectedTb(tb, g, bye),
     rdtb: g === null ? null : regressedTb(tb, g, bye),
   };
+}
+
+/**
+ * Each postseason team's odds from here on (core/odds.ts), from its seed and record and the
+ * series so far: counting only games that started before `before` when given (a finished draft's
+ * lock). Null until the pool sync has set a full 6 seeds per league.
+ */
+export function teamOdds(data: SeasonData, games: GameInfo[], before?: string | null): Map<number, TeamOdds> | null {
+  const teams = [...data.mlbTeams.values()].flatMap((t) =>
+    t.seed !== null && t.league !== null && t.wins !== null ? [{ teamId: t.id, league: t.league, seed: t.seed, wins: t.wins }] : [],
+  );
+  const cut = before ? Date.parse(before) : Infinity;
+  return postseasonOdds(teams, postseasonSeries(games.filter((g) => Date.parse(g.start) < cut)));
 }

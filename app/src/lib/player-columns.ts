@@ -9,7 +9,7 @@ const KEY = 'baggery.playerTable.columns';
 // Every column there was when the choice was saved, so a new default column still shows for people
 // who picked their own. Choices saved before this was kept knew every column but these.
 const KNOWN_KEY = 'baggery.playerTable.knownColumns';
-const ADDED_SINCE: ColumnKey[] = ['postPa', 'postTb'];
+const ADDED_SINCE: ColumnKey[] = ['postPa', 'postTb', 'adv', 'xBags'];
 const listeners = new Set<() => void>();
 let columns: ColumnKey[] = DEFAULT_COLUMNS;
 

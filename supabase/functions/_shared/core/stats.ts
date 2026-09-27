@@ -99,3 +99,30 @@ export function byeTeamIds(teams: StandingsTeam[]): Set<number> {
   }
   return byes;
 }
+
+/**
+ * Each postseason team's seed in its league: division winners 1–3 and wild cards 4–6, each by
+ * league rank. Empty for a league without exactly 3 division winners and 3 wild cards (a past
+ * season's format).
+ */
+export function playoffSeeds(teams: StandingsTeam[], playoffTeamIds: number[]): Map<number, number> {
+  const seeds = new Map<number, number>();
+  const inPlayoffs = new Set(playoffTeamIds);
+  for (const league of ['AL', 'NL'] as const) {
+    const field = teams.filter((t) => t.league === league && inPlayoffs.has(t.teamId)).sort((a, b) => a.leagueRank - b.leagueRank);
+    const winners = field.filter((t) => t.divisionRank === 1);
+    const wildCards = field.filter((t) => t.divisionRank !== 1);
+    if (winners.length !== 3 || wildCards.length !== 3) continue;
+    [...winners, ...wildCards].forEach((t, i) => seeds.set(t.teamId, i + 1));
+  }
+  return seeds;
+}
+
+/**
+ * xBags: expected TB for the rest of the postseason. RDSLG × the player's own at-bats per game ×
+ * the games his team expects to play, so it regresses his slugging but keeps his playing time.
+ * Null without at-bats or games.
+ */
+export function expectedBags(tb: number, ab: number, games: number, teamGamesLeft: number): number | null {
+  return ab === 0 || games === 0 ? null : regressedSlg(tb, ab) * (ab / games) * teamGamesLeft;
+}
