@@ -29,8 +29,8 @@ describe('bagAlert', () => {
     expect(bagAlert(bag({ bags: 8, singles: 0, hr: 2 })).title).toBe('👜👜👜👜 Shohei Ohtani got 8 bags');
   });
 
-  it('says "your team" for your own hitter', () => {
-    expect(bagAlert(bag({ bags: 4, singles: 0, hr: 1, yours: true })).body).toBe('HR for your team');
+  it('names your own team without its manager', () => {
+    expect(bagAlert(bag({ bags: 4, singles: 0, hr: 1, yours: true })).body).toBe('HR for Bag Boys');
   });
 
   it('leaves out the manager when there is none or it is the team name', () => {

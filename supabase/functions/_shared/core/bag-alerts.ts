@@ -11,10 +11,10 @@ export interface Bag {
   doubles: number;
   triples: number;
   hr: number;
-  /** The fantasy team the bag counts for, and its manager. */
+  /** The fantasy team the bag counts for, and its manager's first name. */
   team: string;
   manager: string | null;
-  /** The team is the alert's recipient's own. */
+  /** The team is the alert's recipient's own: named without its manager, who they know. */
   yours: boolean;
 }
 
@@ -30,12 +30,15 @@ const HITS = [
   ['hr', 'HR'],
 ] as const;
 
-/** "👜 Shohei Ohtani got a bag" / "HR for your team", with a bag emoji per bag (up to 4). */
+/**
+ * "👜 Shohei Ohtani got a bag" / "HR for Bag Boys (Mike)", with a bag emoji per bag (up to 4). Your
+ * own team is just its name: "HR for Hot Bag Summer".
+ */
 export function bagAlert(bag: Bag): Alert {
   const title = `${'👜'.repeat(Math.min(Math.max(bag.bags, 1), 4))} ${bag.player} got ${
     bag.bags === 1 ? 'a bag' : `${bag.bags} bags`
   }`;
-  const team = bag.yours ? 'your team' : bag.manager && bag.manager !== bag.team ? `${bag.team} (${bag.manager})` : bag.team;
+  const team = !bag.yours && bag.manager && bag.manager !== bag.team ? `${bag.team} (${bag.manager})` : bag.team;
   return { title, body: `${capitalize(hitsText(bag))} for ${team}` };
 }
 

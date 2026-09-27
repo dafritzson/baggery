@@ -16,7 +16,7 @@ export async function sendBagAlerts(): Promise<number> {
     select s.endpoint, s.p256dh, s.auth, s.user_id,
            p.full_name as player, e.bags, e.singles, e.doubles, e.triples, e.hr,
            coalesce(t.name, 'Team ' || t.slot) as team, t.user_id as team_user_id,
-           pr.display_name as manager
+           nullif(split_part(pr.display_name, ' ', 1), '') as manager
     from taken d
     join private.bag_events e on e.id = d.event_id
     join public.push_subscriptions s on s.endpoint = d.endpoint
