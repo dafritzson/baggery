@@ -27,6 +27,7 @@ import {
 import { playerSeries } from '@core/scoreboard.ts';
 import { type GameType, ROUND_FOR_GAME_TYPE } from '@core/types.ts';
 
+import { Button } from '@/components/button';
 import { injuryText } from '@/components/injury';
 import { MatchupStrip, PlatoonSplitTable } from '@/components/platoon';
 import { type GridRow, ScoreGrid } from '@/components/score-grid';
@@ -196,7 +197,7 @@ export function PlayerDetails({
         dragHandlers={dragHandlers}
         draft={
           canDraft && (
-            <DraftChip
+            <Button
               label={draftAction!.label}
               onPress={() => {
                 onClose?.();
@@ -291,48 +292,34 @@ function Header({
       style={[styles.header, { borderBottomColor: theme.border }, dragHandlers && styles.dragHandle]}
       {...dragHandlers}>
       {dragHandlers && <View style={[styles.grabber, { backgroundColor: theme.border }]} />}
-      <Image
-        source={headshotUrl(playerId)}
-        style={[styles.headshot, { backgroundColor: theme.backgroundElement }]}
-        contentFit="cover"
-        accessibilityIgnoresInvertColors
-      />
-      <View style={styles.headerText}>
-        <ThemedText type="default" style={styles.name} numberOfLines={1}>{name}</ThemedText>
-        {bio !== '' && <ThemedText type="small" themeColor="textSecondary">{bio}</ThemedText>}
-        {injury && <ThemedText type="smallBold" style={{ color: theme.danger }}>{injury}</ThemedText>}
-        {(status || draft) && (
-          <View style={styles.statusRow}>
-            {status && (
-              <View style={[styles.status, { backgroundColor: status.available ? theme.tint : theme.backgroundElement }]}>
-                <ThemedText type="smallBold" style={styles.statusText} themeColor={status.available ? 'text' : 'textSecondary'}>
-                  {status.label}
-                </ThemedText>
-              </View>
-            )}
-            {draft}
-          </View>
+      <View style={styles.headerTop}>
+        <Image
+          source={headshotUrl(playerId)}
+          style={[styles.headshot, { backgroundColor: theme.backgroundElement }]}
+          contentFit="cover"
+          accessibilityIgnoresInvertColors
+        />
+        <View style={styles.headerText}>
+          <ThemedText type="default" style={styles.name} numberOfLines={1}>{name}</ThemedText>
+          {bio !== '' && <ThemedText type="small" themeColor="textSecondary">{bio}</ThemedText>}
+          {injury && <ThemedText type="smallBold" style={{ color: theme.danger }}>{injury}</ThemedText>}
+          {status && (
+            <View style={[styles.status, { backgroundColor: status.available ? theme.tint : theme.backgroundElement }]}>
+              <ThemedText type="smallBold" style={styles.statusText} themeColor={status.available ? 'text' : 'textSecondary'}>
+                {status.label}
+              </ThemedText>
+            </View>
+          )}
+        </View>
+        {onClose && (
+          <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close">
+            <ThemedText type="default" themeColor="textSecondary" style={styles.close}>✕</ThemedText>
+          </Pressable>
         )}
       </View>
-      {onClose && (
-        <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close">
-          <ThemedText type="default" themeColor="textSecondary" style={styles.close}>✕</ThemedText>
-        </Pressable>
-      )}
+      {/* Full width under the name, so it's easy to hit on a phone. */}
+      {draft}
     </View>
-  );
-}
-
-/** The Draft button, sized like the status tag it sits next to. */
-function DraftChip({ label, onPress }: { label: string; onPress: () => void }) {
-  const theme = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      style={({ pressed }) => [styles.status, { backgroundColor: theme.accent, opacity: pressed ? 0.8 : 1 }]}>
-      <ThemedText type="smallBold" numberOfLines={1} style={[styles.statusText, { color: theme.accentText }]}>{label}</ThemedText>
-    </Pressable>
   );
 }
 
@@ -783,21 +770,15 @@ const styles = StyleSheet.create({
   panel: { width: '100%', overflow: 'hidden' },
   panelWide: { maxWidth: 760, maxHeight: '90%', borderRadius: Radius.lg },
   panelCompact: { maxHeight: '92%', borderTopLeftRadius: Radius.lg, borderTopRightRadius: Radius.lg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.three,
-    padding: Spacing.three,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
+  header: { gap: Spacing.three, padding: Spacing.three, borderBottomWidth: StyleSheet.hairlineWidth },
+  headerTop: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.three },
   // Web: keep the browser from scrolling or selecting text while the header is dragged.
   dragHandle: Platform.select({ web: { touchAction: 'none', userSelect: 'none', cursor: 'grab' } as object, default: {} }),
   grabber: { position: 'absolute', top: 6, alignSelf: 'center', left: '50%', marginLeft: -18, width: 36, height: 5, borderRadius: 3 },
   headshot: { width: 64, height: 64, borderRadius: 32 },
   headerText: { flex: 1, gap: Spacing.half },
   name: { fontSize: 20, lineHeight: 26, fontWeight: 700 },
-  statusRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.two, marginTop: Spacing.half },
-  status: { paddingHorizontal: Spacing.two, paddingVertical: 1, borderRadius: Radius.sm },
+  status: { alignSelf: 'flex-start', marginTop: Spacing.half, paddingHorizontal: Spacing.two, paddingVertical: 1, borderRadius: Radius.sm },
   statusText: { fontSize: 12, lineHeight: 18 },
   close: { fontSize: 18, lineHeight: 22, paddingHorizontal: Spacing.one },
   body: { padding: Spacing.three, gap: Spacing.four, paddingBottom: Spacing.five },
