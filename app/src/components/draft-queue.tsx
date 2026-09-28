@@ -131,9 +131,15 @@ export function QueueList({
     <Card>
       <ThemedText type="small" themeColor="textSecondary">
         Only you can see your queue. When autodraft picks for you (your switch, or the commissioner’s autopick), it
-        takes the top player here who’s still available{dropFrom ? ', dropping who you chose' : ''}. If the queue runs
-        out, it goes back to the most regular-season TB.
+        takes the top player here who’s still available. If the queue runs out, it goes back to the most regular-season
+        TB.
       </ThemedText>
+      {dropFrom && (
+        <ThemedText type="small" themeColor="textSecondary">
+          A redraft pick is a swap, so choose who each player replaces. Left on “Replaces: a hitter whose team is out”,
+          he’s skipped if none of yours is out.
+        </ThemedText>
+      )}
       {autodraft}
       {queue.error && <ThemedText themeColor="danger">{queue.error}</ThemedText>}
       {shown.length === 0 ? (
@@ -160,7 +166,7 @@ export function QueueList({
   );
 }
 
-/** "Drop: Mookie Betts ▾": who a redraft entry drops. Unset, autodraft drops a player whose team is out. */
+/** "Replaces: Mookie Betts ▾": who a redraft entry drops. Unset, autodraft drops a hitter whose team is out. */
 function DropPicker({
   data,
   roster,
@@ -175,9 +181,9 @@ function DropPicker({
   const current = value !== undefined && roster.includes(value) ? value : undefined;
   return (
     <DropdownMenu.Root>
-      <DropdownMenu.Trigger className="menu-trigger" aria-label="Who to drop">
+      <DropdownMenu.Trigger className="menu-trigger" aria-label="Who he replaces">
         <ThemedText type="small" themeColor={current === undefined ? 'textSecondary' : 'text'} numberOfLines={1}>
-          Drop: {current === undefined ? 'a player whose team is out' : playerName(data, current)} ▾
+          Replaces: {current === undefined ? 'a hitter whose team is out' : playerName(data, current)} ▾
         </ThemedText>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content className="menu-content" align="start" sideOffset={6} collisionPadding={8}>
@@ -186,7 +192,7 @@ function DropPicker({
           className="menu-item"
           value={current === undefined ? 'on' : 'off'}
           onValueChange={() => onChange(undefined)}>
-          <DropdownMenu.ItemTitle>A player whose team is out (else skip him)</DropdownMenu.ItemTitle>
+          <DropdownMenu.ItemTitle>A hitter whose team is out</DropdownMenu.ItemTitle>
           <DropdownMenu.ItemIndicator className="menu-check">✓</DropdownMenu.ItemIndicator>
         </DropdownMenu.CheckboxItem>
         {roster.map((id) => (
