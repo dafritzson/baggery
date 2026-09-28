@@ -13,8 +13,8 @@ import { supabase } from '@/lib/supabase';
 
 const SCOPES: { value: Scope; label: string }[] = [
   { value: 'off', label: 'Off' },
-  { value: 'mine', label: 'Mine' },
-  { value: 'league', label: 'All' },
+  { value: 'mine', label: 'My Baggers' },
+  { value: 'league', label: 'Everyone' },
 ];
 
 const DELAYS = [
@@ -73,10 +73,10 @@ function reachWarning(standing: Standing, scope: Scope, email: string | undefine
     return `${email ?? 'This account'} isn’t in the league, so no alerts will come here. Sign in with the account you play with.`;
   }
   if (scope === 'mine' && standing === 'no-team') {
-    return 'You don’t have a team this season, so Mine won’t alert. Choose All, or claim a spot.';
+    return 'You don’t have a team this season, so My Baggers won’t alert. Choose Everyone, or claim a spot.';
   }
   if (scope === 'mine' && standing === 'out') {
-    return 'Your team is out, so Mine won’t alert anymore. Choose All to follow the rest.';
+    return 'Your team is out, so My Baggers won’t alert anymore. Choose Everyone to follow the rest.';
   }
   return null;
 }
@@ -167,9 +167,10 @@ export function AlertsSettings() {
           <AlertRow icon="✅" name="Draft done" detail="When the last pick is made" value={prefs.draftDone} onChange={(v) => save({ draftDone: v })} />
         </View>
       </Card>
-      <Card
-        title="Game alerts"
-        action={<Toggle options={SCOPES} value={prefs.scope} onChange={(v) => save({ scope: v })} />}>
+      <Card title="Game alerts">
+        <View style={styles.scope}>
+          <Toggle options={SCOPES} value={prefs.scope} onChange={(v) => save({ scope: v })} />
+        </View>
         {warning && <ThemedText type="small" themeColor="danger">{warning}</ThemedText>}
         {games ? (
           <View>
@@ -187,7 +188,7 @@ export function AlertsSettings() {
           </View>
         ) : (
           <ThemedText type="small" themeColor="textSecondary">
-            Bags, subs, the cut line and lineups. Choose Mine for your hitters, or All for every team still alive.
+            Bags, subs, the cut line and lineups. Choose My Baggers for your hitters, or Everyone for every team still alive.
           </ThemedText>
         )}
       </Card>
@@ -250,6 +251,7 @@ function Divider() {
 }
 
 const styles = StyleSheet.create({
+  scope: { flexDirection: 'row' },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, minHeight: 56, paddingVertical: Spacing.one },
   icon: { width: 24, textAlign: 'center' },
   text: { flex: 1 },
