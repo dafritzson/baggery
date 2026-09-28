@@ -49,7 +49,7 @@ export function roundTeamIds(data: SeasonData, round: FantasyRound): string[] {
  * Below the standings: the season as a race (each team's running round total, stepping up bag by
  * bag) with a slider under it that moves the standings to any moment. Zoomed out it stops at the
  * end of each game day; zoomed in on a round or a day, at every bag. Drag or tap anywhere on the
- * chart or the bar, or play it: play, pause, go one bag on, or fast forward (2×, 4×, back to 1×).
+ * chart or the bar, or play it: play, pause, go one bag on, or fast forward (2×, 4×, 8×, back to 1×).
  * Paused on a bag, its videos (MLB's clip and Savant's) are a tap away under the readout.
  */
 export function SeasonScrubber({
@@ -80,7 +80,7 @@ export function SeasonScrubber({
   onStop: (stop: Stop) => void;
   onZoom: (zoom: Zoom) => void;
   playing: boolean;
-  /** Playback speed: 1, 2 or 4. */
+  /** Playback speed: 1, 2, 4 or 8. */
   speed: number;
   onPlay: () => void;
   /** Pauses and goes one bag on; undefined at the end. */
