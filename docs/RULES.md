@@ -112,9 +112,10 @@ The eliminated managers' team, so they keep following along. It's in the Standin
 - **Queue**: a manager who'd rather not leave it to TB can queue players for a draft, in order
   (the draft room's Queue tab, or Add to queue on a player). Autodraft, their switch or the
   commissioner's autopick, takes the top queued player still available first, even one on the
-  injured list. In a redraft each queued player can name who he replaces; if not, or if that
-  player is already gone, autodraft drops one whose MLB team is eliminated, and skips the queued
-  player when there's none. Once nobody in the queue can be taken, autodraft goes back to TB as
+  injured list. In a redraft a queued player fills an empty spot (a player whose MLB team is
+  eliminated, or who is off its postseason roster), top of the queue first; the manager can
+  instead have him replace a player who's still playing. A queued player with no spot to fill is
+  skipped. Once nobody in the queue can be taken, autodraft goes back to TB as
   above. A queue is private: only its manager sees it. On a ghost turn it's the queue of the
   manager making it.
 

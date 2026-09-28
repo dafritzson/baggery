@@ -117,6 +117,9 @@ export function QueueList({
   const theme = useTheme();
   const shown = queue.entries.filter((e) => available.has(e.playerId));
   const roster = dropFrom ? currentRosters(data).get(dropFrom) ?? [] : [];
+  // Hitters whose team is out (or who are off its postseason roster) leave empty spots to fill.
+  const empty = roster.filter((id) => isOut(data, id));
+  const alive = roster.filter((id) => !isOut(data, id));
   const move = (from: number, to: number) =>
     queue.update((q) => {
       const next = [...q];
@@ -135,9 +138,10 @@ export function QueueList({
         TB.
       </ThemedText>
       {dropFrom && (
-        <ThemedText type="small" themeColor="textSecondary">
-          A redraft pick is a swap, so choose who each player replaces. Left on “Replaces: a hitter whose team is out”,
-          he’s skipped if none of yours is out.
+        <ThemedText type="small" themeColor={empty.length ? 'text' : 'textSecondary'}>
+          {empty.length
+            ? `${empty.length === 1 ? '1 empty spot' : `${empty.length} empty spots`} to fill (${empty.map((id) => playerName(data, id)).join(', ')}: team out). Your queue fills them from the top.`
+            : 'Your spots fill when a hitter’s team is knocked out. To swap out someone still playing, choose him under Replaces.'}
         </ThemedText>
       )}
       {autodraft}
@@ -153,7 +157,7 @@ export function QueueList({
               <ThemedText type="smallBold" themeColor="textSecondary" style={styles.rank}>{i + 1}</ThemedText>
               <View style={styles.main}>
                 <PlayerName playerId={e.playerId} numberOfLines={1}>{playerLine(data, e.playerId)}</PlayerName>
-                {dropFrom && <DropPicker data={data} roster={roster} value={e.dropPlayerId} onChange={(d) => setDrop(e.playerId, d)} />}
+                {dropFrom && <DropPicker data={data} alive={alive} value={e.dropPlayerId} onChange={(d) => setDrop(e.playerId, d)} />}
               </View>
               <IconButton label="↑" hint="Move up" disabled={i === 0} onPress={() => move(i, i - 1)} />
               <IconButton label="↓" hint="Move down" disabled={i === shown.length - 1} onPress={() => move(i, i + 1)} />
@@ -166,24 +170,34 @@ export function QueueList({
   );
 }
 
-/** "Replaces: Mookie Betts ▾": who a redraft entry drops. Unset, autodraft drops a hitter whose team is out. */
+/** Whether a rostered hitter leaves an empty spot: his MLB team is out, or he's off its postseason roster. */
+function isOut(data: SeasonData, playerId: number): boolean {
+  const pool = data.poolByPlayer.get(playerId);
+  return !pool || !pool.on_postseason_roster || !!data.mlbTeams.get(pool.mlb_team_id)?.eliminated;
+}
+
+/**
+ * "Fills: an empty spot ▾", or "Replaces: Mookie Betts ▾" to swap out a hitter still playing.
+ * Unset, autodraft fills a spot left by a hitter whose team is out, and skips him when there's none.
+ */
 function DropPicker({
   data,
-  roster,
+  alive,
   value,
   onChange,
 }: {
   data: SeasonData;
-  roster: number[];
+  /** Rostered hitters still playing: the ones a manager would choose to swap out. */
+  alive: number[];
   value: number | undefined;
   onChange: (dropPlayerId: number | undefined) => void;
 }) {
-  const current = value !== undefined && roster.includes(value) ? value : undefined;
+  const current = value !== undefined && alive.includes(value) ? value : undefined;
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger className="menu-trigger" aria-label="Who he replaces">
         <ThemedText type="small" themeColor={current === undefined ? 'textSecondary' : 'text'} numberOfLines={1}>
-          Replaces: {current === undefined ? 'a hitter whose team is out' : playerName(data, current)} ▾
+          {current === undefined ? 'Fills: an empty spot' : `Replaces: ${playerName(data, current)}`} ▾
         </ThemedText>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content className="menu-content" align="start" sideOffset={6} collisionPadding={8}>
@@ -192,10 +206,11 @@ function DropPicker({
           className="menu-item"
           value={current === undefined ? 'on' : 'off'}
           onValueChange={() => onChange(undefined)}>
-          <DropdownMenu.ItemTitle>A hitter whose team is out</DropdownMenu.ItemTitle>
+          <DropdownMenu.ItemTitle>Fill an empty spot</DropdownMenu.ItemTitle>
           <DropdownMenu.ItemIndicator className="menu-check">✓</DropdownMenu.ItemIndicator>
         </DropdownMenu.CheckboxItem>
-        {roster.map((id) => (
+        {alive.length > 0 && <DropdownMenu.Label key="swap" className="menu-label">Or swap out</DropdownMenu.Label>}
+        {alive.map((id) => (
           <DropdownMenu.CheckboxItem
             key={String(id)}
             className="menu-item"
