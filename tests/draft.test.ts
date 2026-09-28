@@ -6,6 +6,7 @@ import {
   applyAction,
   autodraftAction,
   draftable,
+  ghostTurns,
   nextTurn,
   randomOrder,
   redraftOrder,
@@ -207,5 +208,102 @@ describe('redraftOrder', () => {
   it('shuffles only teams fully tied with each other', () => {
     const orders = new Set([0, 0.99].map((r) => redraftOrder(ranked, ['A', 'B', 'C', 'D'], () => r).join('')));
     expect([...orders].sort()).toEqual(['ABCD', 'ACBD']);
+  });
+});
+
+describe('ghost turns', () => {
+  // Draft 3: survivors A, B, C snake; the ghost G's 2 adds come after, by X then Y.
+  const draft3: DraftConfig = {
+    kind: 'redraft',
+    order,
+    rounds: 1,
+    ghost: { teamId: 'G', turns: ghostTurns(3, ['X', 'Y'], []) },
+  };
+  // Draft 4: G is in the snake (3rd); its first 2 turns add (by P, Q), its last 2 redraft (by X, Y).
+  const draft4: DraftConfig = {
+    kind: 'redraft',
+    order: ['A', 'B', 'G'],
+    rounds: 4,
+    ghost: { teamId: 'G', turns: ghostTurns(4, ['X', 'Y'], ['P', 'Q']) },
+  };
+  const rosters4 = () =>
+    new Map([
+      ['A', [10, 11, 12, 13]],
+      ['B', [20, 21, 22, 23]],
+      ['G', [30, 31]],
+    ]);
+  const s4 = (actions: DraftAction[] = []) => {
+    let s = state(draft4, { rosters: rosters4(), everRostered: new Set([10, 11, 12, 13, 20, 21, 22, 23, 30, 31]) });
+    for (const a of actions) s = applyAction(s, a);
+    return s;
+  };
+
+  it('ghostTurns: Draft 3 adds by the round-1-out managers; Draft 4 adds then redrafts', () => {
+    expect(ghostTurns(3, ['X', 'Y'], [])).toEqual([
+      { by: 'X', kind: 'add' },
+      { by: 'Y', kind: 'add' },
+    ]);
+    expect(ghostTurns(4, ['X', 'Y'], ['P', 'Q'])).toEqual([
+      { by: 'P', kind: 'add' },
+      { by: 'Q', kind: 'add' },
+      { by: 'X', kind: 'redraft' },
+      { by: 'Y', kind: 'redraft' },
+    ]);
+    expect(ghostTurns(2, ['X'], ['P'])).toEqual([]);
+  });
+
+  it('Draft 3: the ghost picks after the snake, in a round of its own', () => {
+    const actions = [pick('A', 1, 10), pick('B', 2, 20), pick('C', 3, 30)];
+    expect(nextTurn(draft3, actions)).toEqual({ teamId: 'G', round: 2, slot: 3, ghost: { by: 'X', kind: 'add' } });
+    expect(nextTurn(draft3, [...actions, pick('G', 4)])).toEqual({ teamId: 'G', round: 2, slot: 4, ghost: { by: 'Y', kind: 'add' } });
+    expect(nextTurn(draft3, [...actions, pick('G', 4), pick('G', 5)])).toBeNull();
+  });
+
+  it('Draft 3: the survivors yielding doesn’t skip the ghost', () => {
+    const actions = [yieldTurn('A'), yieldTurn('B'), yieldTurn('C')];
+    expect(nextTurn(draft3, actions)?.ghost).toEqual({ by: 'X', kind: 'add' });
+  });
+
+  it('Draft 4: the ghost’s snake slots take its turns in order', () => {
+    // Snake: A B G | G B A | A B G | G B A
+    const s = s4([pick('A', 1, 10), pick('B', 2, 20)]);
+    expect(nextTurn(s.config, s.actions)).toEqual({ teamId: 'G', round: 1, slot: 2, ghost: { by: 'P', kind: 'add' } });
+    const s2 = s4([pick('A', 1, 10), pick('B', 2, 20), pick('G', 3)]);
+    expect(nextTurn(s2.config, s2.actions)).toEqual({ teamId: 'G', round: 2, slot: 3, ghost: { by: 'Q', kind: 'add' } });
+    const s3 = s4([pick('A', 1, 10), pick('B', 2, 20), pick('G', 3), pick('G', 4), pick('B', 5, 21), pick('A', 6, 11), pick('A', 7, 12), pick('B', 8, 22)]);
+    expect(nextTurn(s3.config, s3.actions)).toEqual({ teamId: 'G', round: 3, slot: 8, ghost: { by: 'X', kind: 'redraft' } });
+  });
+
+  it('an add fills a spot: no drop, no yield', () => {
+    const s = s4([pick('A', 1, 10), pick('B', 2, 20)]);
+    expect(validateAction(s, pick('G', 3))).toBeNull();
+    expect(validateAction(s, pick('G', 3, 30))).toMatch(/empty spot/);
+    expect(validateAction(s, yieldTurn('G'))).toMatch(/can’t skip/);
+  });
+
+  it('a redraft turn is an ordinary redraft pick', () => {
+    const s = s4([pick('A', 1, 10), pick('B', 2, 20), pick('G', 3), pick('G', 4), pick('B', 5, 21), pick('A', 6, 11), pick('A', 7, 12), pick('B', 8, 22)]);
+    expect(validateAction(s, pick('G', 9, 30))).toBeNull();
+    expect(validateAction(s, pick('G', 9))).toMatch(/must drop/);
+    expect(validateAction(s, pick('G', 9, 10))).toMatch(/not on your roster/);
+    expect(validateAction(s, yieldTurn('G'))).toBeNull();
+    // A pass on a ghost turn passes only that turn: Y still gets the ghost's last (round 4 opens G, B, A).
+    const after = applyAction(s, yieldTurn('G'));
+    expect(nextTurn(after.config, after.actions)).toEqual({ teamId: 'G', round: 4, slot: 9, ghost: { by: 'Y', kind: 'redraft' } });
+    // Another team's yield still ends its draft.
+    const bYields = applyAction(applyAction(after, pick('G', 9, 30)), yieldTurn('B'));
+    expect(nextTurn(bYields.config, bYields.actions)).toEqual({ teamId: 'A', round: 4, slot: 11 });
+  });
+
+  it('autodraft fills an add with the best hitter and redrafts only dead hitters', () => {
+    const candidates = [
+      { playerId: 1, regularSeasonTb: 200 },
+      { playerId: 2, regularSeasonTb: 350 },
+    ];
+    const add = s4([pick('A', 5, 10), pick('B', 6, 20)]);
+    expect(autodraftAction(add, candidates, [])).toEqual(pick('G', 2));
+    const redraftTurn = s4([pick('A', 5, 10), pick('B', 6, 20), pick('G', 7), pick('G', 8), pick('B', 9, 21), pick('A', 14, 11), pick('A', 15, 12), pick('B', 16, 22)]);
+    expect(autodraftAction(redraftTurn, candidates, [31])).toEqual(pick('G', 2, 31));
+    expect(autodraftAction(redraftTurn, candidates, [])).toEqual(yieldTurn('G'));
   });
 });

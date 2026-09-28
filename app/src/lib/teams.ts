@@ -1,4 +1,4 @@
-import type { SeasonData, Team } from '@/lib/season';
+import { type SeasonData, type Team, ghostManagers } from '@/lib/season';
 import { randomTeamName } from '@/lib/team-name-list';
 
 // Names for unclaimed spots (claimed teams always have a stored name): random on each page
@@ -22,6 +22,7 @@ export function suggestTeamName(data: SeasonData): string {
  * start from this, so they match what the page already shows for the team.
  */
 export function teamName(team: Team): string {
+  if (team.is_ghost) return '👻 Ghost';
   if (team.name) return team.name;
   let name = unclaimedNames.get(team.id);
   if (!name) {
@@ -41,6 +42,10 @@ export function ownerName(data: SeasonData, team: Team): string | null {
  * nothing in a finished season (past teams are named after their manager already).
  */
 export function ownerLine(data: SeasonData, team: Team): string | null {
+  if (team.is_ghost) {
+    const names = ghostManagers(data).map((t) => ownerName(data, t) ?? teamName(t));
+    return names.length ? names.join(', ') : 'Eliminated managers';
+  }
   return ownerName(data, team) ?? (data.season.status === 'complete' ? null : 'Open spot');
 }
 

@@ -49,7 +49,7 @@ export function TeamTile({
   // Past seasons' teams are named after their manager: no need to say it twice.
   const line = ownerLine(data, team);
   const owner = line === teamName(team) ? null : line;
-  const openSpot = !team.user_id && data.season.status !== 'complete';
+  const openSpot = !team.user_id && !team.is_ghost && data.season.status !== 'complete';
   // Past seasons' unclaimed teams are named after their manager, so their badge takes the name's initial.
   const badgeOwner = openSpot ? null : (ownerName(data, team) ?? teamName(team));
   const surface = mine ? theme.mine : theme.background;

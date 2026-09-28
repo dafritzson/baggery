@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { roundDecided, roundStandings } from '@core/scoreboard.ts';
-import { eliminations } from '@core/scoring.ts';
+import { eliminations, facesCut } from '@core/scoring.ts';
 import type { FantasyRound } from '@core/types.ts';
 
 import { Button } from '@/components/button';
@@ -75,7 +75,8 @@ export function CloseRoundCard({ data, scores, round, refetch }: { data: SeasonD
   if (!previousClosed || !decided) return null;
 
   // The same ranking the server uses: TB, then the tiebreakers.
-  const alive = data.teams.filter((t) => t.eliminated_after_round === null).map((t) => t.id);
+  // The ghost team faces only round 3's cut.
+  const alive = data.teams.filter((t) => t.eliminated_after_round === null && facesCut({ isGhost: t.is_ghost }, round)).map((t) => t.id);
   const standings = roundStandings(round, alive, scores.games, scores.stats, coreSpells(data));
   const cut = eliminations(
     standings.map((s) => ({ ...s.totals, teamId: s.teamId, rank: s.rank })),

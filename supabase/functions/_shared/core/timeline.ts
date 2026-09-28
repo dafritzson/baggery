@@ -278,6 +278,8 @@ export function roundLines(
   round: FantasyRound,
   teamIds: TeamId[],
   survivors: number,
+  /** The teams the cut is drawn from (the ghost team in round 2 faces no cut); all of `teamIds` by default. */
+  cutTeamIds: TeamId[] = teamIds,
 ): RoundLines | null {
   const days = roundDays(tl, games, round);
   if (!days.length) return null;
@@ -285,7 +287,11 @@ export function roundLines(
   const totals = new Map(teamIds.map((id) => [id, 0]));
   const teams = new Map<TeamId, Vertices>(teamIds.map((id) => [id, [[days[0], 0]]]));
   const cut: Vertices = [[days[0], 0]];
-  const cutNow = () => [...totals.values()].sort((a, b) => b - a)[Math.min(survivors, totals.size) - 1] ?? 0;
+  const counted = new Set(cutTeamIds);
+  const cutNow = () => {
+    const values = [...totals].filter(([id]) => counted.has(id)).map(([, v]) => v).sort((a, b) => b - a);
+    return values[Math.min(survivors, values.length) - 1] ?? 0;
+  };
   const step = (line: Vertices, x: number, v: number) => {
     const last = line[line.length - 1][1];
     if (v !== last) line.push([x, last], [x, v]);

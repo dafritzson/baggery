@@ -6,6 +6,8 @@ import { execSync } from 'node:child_process';
 import { type SupabaseClient, createClient } from '@supabase/supabase-js';
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { type DraftAction, type Turn, nextTurn } from '../../supabase/functions/_shared/core/draft.ts';
+
 const status = JSON.parse(execSync('npx supabase status -o json', { encoding: 'utf8' }));
 const url: string = status.API_URL;
 const publishableKey: string = status.PUBLISHABLE_KEY;
@@ -566,5 +568,127 @@ describe('almanac', () => {
     expect(freeman.tb).toBeGreaterThan(10);
     expect(new Map(data.almanac.playersByManager).get(ana)).toEqual([expect.objectContaining({ playerId: FREEMAN, years: [2025] })]);
     expect(data.scouting).toHaveLength(3);
+  });
+});
+
+describe('ghost team', () => {
+  // Rounds 1 and 2 are closed by hand: there are no 2026 games to score them from.
+  const OUT_1 = ['Kyle', 'James'];
+  const OUT_2 = ['Curtis', 'Darren'];
+  const teamIds = (managers: string[]) => managers.map((m) => teamIdByManager.get(m)!);
+  let draft3: string;
+  let draft4: string;
+  let ghostId: string;
+
+  /** Who's on the clock in a draft, replayed with the core's rules (ghost turns included). */
+  async function turnIn(id: string): Promise<Turn | null> {
+    const { data: d } = await admin.from('drafts').select('kind, pick_order, rounds, ghost_turns').eq('id', id).single();
+    const { data: rows } = await admin.from('draft_actions').select('type, fantasy_team_id').eq('draft_id', id).order('action_number');
+    const actions = rows!.map(
+      (a): DraftAction => (a.type === 'yield' ? { type: 'yield', teamId: a.fantasy_team_id } : { type: 'pick', teamId: a.fantasy_team_id, addPlayerId: 0 }),
+    );
+    const ghost = d!.ghost_turns.length ? { teamId: ghostId, turns: d!.ghost_turns } : undefined;
+    return nextTurn({ kind: d!.kind, order: d!.pick_order, rounds: d!.rounds, ghost }, actions);
+  }
+  const ghostRoster = async () =>
+    (await admin.from('roster_spells').select('mlb_player_id').eq('fantasy_team_id', ghostId).is('dropped_by_draft_id', null)).data!.map((s) => s.mlb_player_id);
+
+  it('joins Draft 3 once round 1 closes, with its 2 adds after the survivors’ snake', async () => {
+    const { data: drafts } = await admin.from('drafts').select('id, number').eq('season_id', SEASON_ID).in('number', [3, 4]);
+    draft3 = drafts!.find((d) => d.number === 3)!.id;
+    draft4 = drafts!.find((d) => d.number === 4)!.id;
+    await admin.from('drafts').update({ locks_at: new Date(Date.now() + 86_400_000).toISOString() }).in('id', [draft3, draft4]);
+    await admin.from('fantasy_teams').update({ eliminated_after_round: 1 }).in('id', teamIds(OUT_1));
+
+    expect((await call('Daniel', 'draft', { draftId: draft3, action: 'start' })).ok).toBe(true);
+    const { data: ghost } = await admin.from('fantasy_teams').select('id, name, slot, user_id').eq('season_id', SEASON_ID).eq('is_ghost', true).single();
+    ghostId = ghost!.id;
+    expect(ghost).toMatchObject({ name: '👻 Ghost', slot: 8, user_id: null });
+    const { data: d } = await admin.from('drafts').select('pick_order, ghost_turns').eq('id', draft3).single();
+    expect(d!.pick_order).toHaveLength(5);
+    expect(d!.pick_order).not.toContain(ghostId);
+    expect(d!.ghost_turns.map((g: { kind: string }) => g.kind)).toEqual(['add', 'add']);
+    expect(d!.ghost_turns.map((g: { by: string }) => managerByTeamId.get(g.by)).sort()).toEqual([...OUT_1].sort());
+
+    // Nobody manages it: it can't be renamed (or claimed or assigned).
+    const { error } = await clients.get('Daniel')!.rpc('rename_team', { p_team_id: ghostId, p_name: 'Casper' });
+    expect(error?.message).toMatch(/ghost/);
+    // And no manager's team can take its name.
+    const own = { p_team_id: teamIdByManager.get('Daniel') };
+    for (const name of ['👻 ghost', '👻\uFE0F  GHOST']) {
+      const { error: taken } = await clients.get('Daniel')!.rpc('rename_team', { ...own, p_name: name });
+      expect(taken?.message).toMatch(/belongs to the ghost/);
+    }
+  });
+
+  it('lets only the manager whose turn it is make a ghost pick, which fills a spot', async () => {
+    for (let turn = await turnIn(draft3); turn && !turn.ghost; turn = await turnIn(draft3)) {
+      expect((await call(managerByTeamId.get(turn.teamId)!, 'draft', { draftId: draft3, action: 'yield' })).ok).toBe(true);
+    }
+    const turn = (await turnIn(draft3))!;
+    expect(turn.ghost?.kind).toBe('add');
+    const by = managerByTeamId.get(turn.ghost!.by)!;
+    const other = OUT_1.find((m) => m !== by)!;
+    const player = await bestAvailable();
+    expect((await call(other, 'draft', { draftId: draft3, action: 'pick', addPlayerId: player })).error).toMatch(/not your turn/);
+    expect((await call(by, 'draft', { draftId: draft3, action: 'yield' })).error).toMatch(/can’t skip/);
+    expect((await call(by, 'draft', { draftId: draft3, action: 'pick', addPlayerId: player, dropPlayerId: player })).error).toMatch(/empty spot/);
+    expect((await call(by, 'draft', { draftId: draft3, action: 'pick', addPlayerId: player })).ok).toBe(true);
+
+    const { data: action } = await admin.from('draft_actions').select('fantasy_team_id, by_team_id').eq('draft_id', draft3).eq('add_player_id', player).single();
+    expect(action).toEqual({ fantasy_team_id: ghostId, by_team_id: teamIdByManager.get(by) });
+    expect(await ghostRoster()).toEqual([player]);
+    // Their own pick, so not a commissioner action in the league log.
+    const { data: logged } = await admin.from('league_log').select('id').eq('action', 'pick').contains('details', { draftId: draft3 });
+    expect(logged).toHaveLength(0);
+  });
+
+  it('autopicks a missed ghost pick, which the commissioner can undo', async () => {
+    const status = async () => (await admin.from('drafts').select('status').eq('id', draft3).single()).data!.status;
+    expect((await call('Daniel', 'draft', { draftId: draft3, action: 'autopick' })).ok).toBe(true);
+    expect(await status()).toBe('complete');
+    expect(await ghostRoster()).toHaveLength(2);
+    expect((await call('Daniel', 'draft', { draftId: draft3, action: 'undo' })).ok).toBe(true);
+    expect(await status()).toBe('live');
+    expect(await ghostRoster()).toHaveLength(1);
+    expect((await call('Daniel', 'draft', { draftId: draft3, action: 'autopick' })).ok).toBe(true);
+    expect(await status()).toBe('complete');
+  });
+
+  it('drafts in the Draft 4 snake with the finalists: 2 adds, then 2 ordinary redraft turns', async () => {
+    await admin.from('fantasy_teams').update({ eliminated_after_round: 2 }).in('id', teamIds(OUT_2));
+    expect((await call('Daniel', 'draft', { draftId: draft4, action: 'start' })).ok).toBe(true);
+    const { data: d } = await admin.from('drafts').select('pick_order, ghost_turns').eq('id', draft4).single();
+    expect(d!.pick_order).toHaveLength(4);
+    expect(d!.pick_order).toContain(ghostId);
+    const turns: { by: string; kind: string }[] = d!.ghost_turns;
+    expect(turns.map((g) => g.kind)).toEqual(['add', 'add', 'redraft', 'redraft']);
+    expect(turns.slice(0, 2).map((g) => managerByTeamId.get(g.by)).sort()).toEqual([...OUT_2].sort());
+    expect(turns.slice(2).map((g) => managerByTeamId.get(g.by)).sort()).toEqual([...OUT_1].sort());
+
+    // The finalists stand pat; the ghost fills its spots, then its first redraft turn passes and
+    // the second manager still gets theirs.
+    let passed = false;
+    for (let turn = await turnIn(draft4), i = 0; turn && i < 20; turn = await turnIn(draft4), i++) {
+      if (!turn.ghost) {
+        expect((await call(managerByTeamId.get(turn.teamId)!, 'draft', { draftId: draft4, action: 'yield' })).ok).toBe(true);
+        continue;
+      }
+      const by = managerByTeamId.get(turn.ghost.by)!;
+      if (turn.ghost.kind === 'add') {
+        expect((await call(by, 'draft', { draftId: draft4, action: 'pick', addPlayerId: await bestAvailable() })).ok).toBe(true);
+      } else if (!passed) {
+        expect((await call(by, 'draft', { draftId: draft4, action: 'yield' })).ok).toBe(true);
+        passed = true;
+      } else {
+        const drop = (await ghostRoster())[0];
+        expect((await call(by, 'draft', { draftId: draft4, action: 'pick', addPlayerId: await bestAvailable() })).error).toMatch(/must drop/);
+        expect((await call(by, 'draft', { draftId: draft4, action: 'pick', addPlayerId: await bestAvailable(), dropPlayerId: drop })).ok).toBe(true);
+      }
+    }
+    expect((await admin.from('drafts').select('status').eq('id', draft4).single()).data!.status).toBe('complete');
+    expect(await ghostRoster()).toHaveLength(4);
+    const { data: ghostActions } = await admin.from('draft_actions').select('by_team_id').eq('draft_id', draft4).eq('fantasy_team_id', ghostId);
+    expect(ghostActions!.map((a) => managerByTeamId.get(a.by_team_id)).sort()).toEqual([...OUT_1, ...OUT_2].sort());
   });
 });

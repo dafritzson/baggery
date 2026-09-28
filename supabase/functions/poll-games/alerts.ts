@@ -7,6 +7,7 @@
 import { bagAlert } from '../_shared/core/bag-alerts.ts';
 import { bagParam } from '../_shared/core/bag-celebration.ts';
 import { type LineupHitter, cutAlert, cutFlips, cutSpots, lineupAlert, lineupNews, scratchAlert, subAlert } from '../_shared/core/game-alerts.ts';
+import { facesCut } from '../_shared/core/scoring.ts';
 import type { FantasyRound } from '../_shared/core/types.ts';
 import { type Tx, sql } from '../_shared/db.ts';
 import { type Subscription, sendPush } from '../_shared/push.ts';
@@ -188,7 +189,7 @@ export async function queueCutAlerts(): Promise<number> {
       where imported_at is null and status <> 'complete'
       order by year desc limit 1`;
     if (!season) return 0;
-    const teams = await tx`select id, eliminated_after_round from public.fantasy_teams where season_id = ${season.id}`;
+    const teams = await tx`select id, eliminated_after_round, is_ghost from public.fantasy_teams where season_id = ${season.id}`;
     const round = ([1, 2, 3] as FantasyRound[]).find((r) => !teams.some((t) => t.eliminated_after_round === r));
     if (!round) return 0;
     const ended = await tx`
@@ -200,7 +201,8 @@ export async function queueCutAlerts(): Promise<number> {
     if (!ended.length) return 0;
     await tx`insert into private.cut_checks ${tx(ended.map((g) => ({ game_pk: g.game_pk })), 'game_pk')} on conflict do nothing`;
 
-    const alive = teams.filter((t) => t.eliminated_after_round === null).map((t) => t.id as string);
+    // The ghost team only faces a cut in round 3.
+    const alive = teams.filter((t) => t.eliminated_after_round === null && facesCut({ isGhost: t.is_ghost }, round)).map((t) => t.id as string);
     if (!alive.length) return 0;
     const survivors = season.survivors_after_round[round - 1] ?? 1;
     const spots = cutSpots(await roundRanking(tx, season, round, alive), survivors);

@@ -1,7 +1,7 @@
 import { router, useGlobalSearchParams } from 'expo-router';
 import { createContext, createElement, type ReactNode, use, useCallback, useEffect, useRef, useState } from 'react';
 
-import type { DraftAction } from '@core/draft.ts';
+import type { DraftAction, DraftConfig, GhostTurn } from '@core/draft.ts';
 
 import { useAuth } from '@/lib/auth';
 import { photoUrl } from '@/lib/avatars';
@@ -16,6 +16,8 @@ export interface Team {
   user_id: string | null;
   autodraft: boolean;
   eliminated_after_round: number | null;
+  /** The ghost team: the eliminated managers' team, which plays rounds 2 and 3 (see RULES.md). */
+  is_ghost: boolean;
 }
 
 export interface Draft {
@@ -29,6 +31,8 @@ export interface Draft {
   pick_order: string[];
   rounds: number;
   locks_at: string | null;
+  /** The ghost team's turns in this draft, set when it starts. */
+  ghost_turns: GhostTurn[];
 }
 
 export interface DraftActionRow {
@@ -40,6 +44,8 @@ export interface DraftActionRow {
   drop_player_id: number | null;
   is_auto: boolean;
   created_at: string;
+  /** On a ghost pick, the eliminated manager's team whose turn it was. */
+  by_team_id: string | null;
 }
 
 export interface Spell {
@@ -364,6 +370,23 @@ export function coreActions(actions: DraftActionRow[], draftId: string): DraftAc
             dropPlayerId: a.drop_player_id ?? undefined,
           },
     );
+}
+
+/** The draft's rules for core/draft.ts, the ghost's turns included. */
+export function draftConfig(data: SeasonData, draft: Draft): DraftConfig {
+  const ghost = data.teams.find((t) => t.is_ghost);
+  return {
+    kind: draft.kind,
+    order: draft.pick_order,
+    rounds: draft.rounds,
+    ghost: ghost && draft.ghost_turns.length ? { teamId: ghost.id, turns: draft.ghost_turns } : undefined,
+  };
+}
+
+/** The managers' teams behind the ghost team: whoever has had a ghost turn, in draft order. */
+export function ghostManagers(data: SeasonData): Team[] {
+  const ids = [...new Set(data.drafts.flatMap((d) => d.ghost_turns.map((g) => g.by)))];
+  return ids.map((id) => data.teams.find((t) => t.id === id)).filter((t): t is Team => !!t);
 }
 
 /** Each team's current players (not dropped). */

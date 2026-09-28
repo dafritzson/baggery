@@ -67,6 +67,20 @@ export function teamRoundTotals(
   return [...totals.values()];
 }
 
+/**
+ * Whether a fantasy team plays `round`: until the round it's eliminated after. The ghost team
+ * (eliminated managers' hitters) plays only rounds 2 and 3.
+ */
+export function inRound(team: { eliminatedAfterRound: number | null; isGhost?: boolean }, round: FantasyRound): boolean {
+  if (team.isGhost && round < 2) return false;
+  return team.eliminatedAfterRound === null || team.eliminatedAfterRound >= round;
+}
+
+/** Whether a round's cut can eliminate a team: the ghost is only ever cut after round 3. */
+export function facesCut(team: { isGhost?: boolean }, round: FantasyRound): boolean {
+  return !team.isGhost || round === 3;
+}
+
 export function slg(t: Pick<StatLine, 'ab' | 'tb'>): number {
   return t.ab === 0 ? 0 : t.tb / t.ab;
 }

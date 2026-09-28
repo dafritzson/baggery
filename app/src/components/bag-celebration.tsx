@@ -150,7 +150,7 @@ function Card({
             bag,
             scores,
             coreSpells(data),
-            data.teams.map((t) => ({ id: t.id, eliminatedAfterRound: t.eliminated_after_round })),
+            data.teams.map((t) => ({ id: t.id, eliminatedAfterRound: t.eliminated_after_round, isGhost: t.is_ghost })),
           )
         : null,
     [bag, data, scores],

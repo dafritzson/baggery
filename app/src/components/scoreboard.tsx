@@ -10,7 +10,7 @@ import {
   roundTotals,
   teamSeriesBlocks,
 } from '@core/scoreboard.ts';
-import { eliminations } from '@core/scoring.ts';
+import { eliminations, facesCut, inRound } from '@core/scoring.ts';
 import type { FantasyRound } from '@core/types.ts';
 
 import { OwnerBadge, YouTag } from '@/components/owner-badge';
@@ -86,12 +86,16 @@ export function StandingsTable({
   /** The cell of the bag the scrubber is on: its team and game column ("D3"). */
   flash?: { teamId: string; column: string } | null;
 }) {
-  // Teams eliminated in an earlier round aren't in this one.
-  const teams = data.teams.filter((t) => t.eliminated_after_round === null || t.eliminated_after_round >= round);
+  // Teams eliminated in an earlier round aren't in this one. The ghost team plays round 2 without
+  // facing its cut: it's listed below everyone, outside the ranking.
+  const playing = data.teams.filter((t) => inRound({ eliminatedAfterRound: t.eliminated_after_round, isGhost: t.is_ghost }, round));
+  const teams = playing.filter((t) => facesCut({ isGhost: t.is_ghost }, round));
+  const aside = playing.filter((t) => !facesCut({ isGhost: t.is_ghost }, round));
   const standings = roundStandings(round, teams.map((t) => t.id), scores.games, scores.stats, coreSpells(data));
+  const asideStandings = aside.length ? roundStandings(round, aside.map((t) => t.id), scores.games, scores.stats, coreSpells(data)) : [];
   const columns = roundColumns(round, scores.games);
   const survivors = data.season.survivors_after_round[round - 1] ?? teams.length;
-  const byId = new Map(teams.map((t) => [t.id, t]));
+  const byId = new Map(playing.map((t) => [t.id, t]));
   const theme = useTheme();
   const [tieGroup, setTieGroup] = useState<number | null>(null);
   // Who's through: once the round is closed, whatever was recorded (a drink-off included);
@@ -116,12 +120,13 @@ export function StandingsTable({
   const started = columns.some((c) => c.started);
 
   const anyMoved = ordered.some((s) => (moves?.get(s.teamId) ?? 0) !== 0);
-  const rows: GridRow[] = ordered.map((s, i) => {
+  const rows: GridRow[] = [...ordered, ...asideStandings].map((s, i) => {
     const team = byId.get(s.teamId)!;
+    const ranked = i < ordered.length;
     const owner = ownerLine(data, team);
     const mine = team.id === data.myTeam?.id;
-    const tied = ordered.some((o) => o !== s && o.rank === s.rank);
-    const levelOnBags = started && tiedTotals.includes(s.total);
+    const tied = ranked && ordered.some((o) => o !== s && o.rank === s.rank);
+    const levelOnBags = ranked && started && tiedTotals.includes(s.total);
     const moved = moves?.get(s.teamId) ?? 0;
     return {
       key: s.teamId,
@@ -129,9 +134,9 @@ export function StandingsTable({
         <>
           {/* No rank column before the round starts, so it doesn't eat into long team names. */}
           {started && (
-            <ThemedText type="small" themeColor="textSecondary" style={styles.rank}>{tied ? `T${s.rank}` : s.rank}</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.rank}>{!ranked ? '–' : tied ? `T${s.rank}` : s.rank}</ThemedText>
           )}
-          {!compact && <View style={styles.badge}><OwnerBadge teamId={team.id} owner={owner} photo={team.user_id ? data.photos.get(team.user_id) : null} mine={mine} /></View>}
+          {!compact && <View style={styles.badge}><OwnerBadge teamId={team.id} owner={team.is_ghost ? '👻' : owner} photo={team.user_id ? data.photos.get(team.user_id) : null} mine={mine} /></View>}
           <TeamLabel name={teamName(team)} owner={owner} mine={mine} />
           {levelOnBags && (
             <Pressable
@@ -165,7 +170,7 @@ export function StandingsTable({
       highlight: flash?.teamId === s.teamId ? columns.findIndex((c) => `${c.gameType}${c.number}` === flash.column) : undefined,
       selected: team.id === selectedTeamId,
       mine,
-      standing: started ? status(s.teamId) : undefined,
+      standing: started && ranked ? status(s.teamId) : undefined,
       cutAfter: started && i === through - 1 && ordered.length > through,
       onPress: () => onSelectTeam(team.id),
     };
@@ -244,6 +249,8 @@ export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; sco
   const shown = blocks.filter((b, i) => {
     const round = ROUNDS.find((r) => roundSeries(r.round).some((s) => s.gameType === b.gameType))!.round;
     if (out !== null && round > out) return false;
+    // The ghost team starts in round 2.
+    if (team.is_ghost && round === 1) return false;
     return i === 0 || scores.games.some((g) => g.gameType === b.gameType);
   });
   const mine = team.id === data.myTeam?.id;
@@ -264,7 +271,7 @@ export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; sco
           style={[styles.totalCell, compact && styles.totalCellFull, i > 0 && { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: theme.border }]}>
           <ThemedText themeColor="textSecondary" style={styles.totalLabel}>RD {r.round}</ThemedText>
           <ThemedText style={styles.totalNumber}>
-            {out !== null && r.round > out ? 'Out' : started(r.round) ? totals[r.round] : '—'}
+            {out !== null && r.round > out ? 'Out' : team.is_ghost && r.round === 1 ? '—' : started(r.round) ? totals[r.round] : '—'}
           </ThemedText>
         </View>
       ))}
@@ -277,7 +284,7 @@ export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; sco
         // Phones: photo, name and owner on top, the round totals across the full width below.
         <View style={styles.teamHeadCompact}>
           <View style={styles.teamNameRow}>
-            <OwnerBadge teamId={team.id} owner={owner} photo={photo} size={44} />
+            <OwnerBadge teamId={team.id} owner={team.is_ghost ? '👻' : owner} photo={photo} size={44} />
             {label}
           </View>
           {totalsStrip}
@@ -285,7 +292,7 @@ export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; sco
       ) : (
         // As tall as the round chips' row beside it, so both columns' tables start level.
         <View style={styles.teamHead}>
-          <OwnerBadge teamId={team.id} owner={owner} photo={photo} mine={mine} size={36} />
+          <OwnerBadge teamId={team.id} owner={team.is_ghost ? '👻' : owner} photo={photo} mine={mine} size={36} />
           {label}
           {totalsStrip}
         </View>

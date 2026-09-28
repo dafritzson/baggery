@@ -1,6 +1,7 @@
-// Monte Carlo for the ghost team (an idea, not a rule yet). The 2 managers knocked out after the
-// Division Series each add a hitter at the end of the Championship Series redraft; the 2 knocked
-// out after the CS each add one in the World Series draft. Those 4 hitters are the ghost team,
+// Monte Carlo for the ghost team. The rule adopted is --ghost-in-cs (docs/RULES.md); the others
+// are the versions it was chosen over. The 2 managers knocked out after the Division Series each
+// add a hitter at the end of the Championship Series redraft; the 2 knocked out after the CS each
+// add one in the World Series draft. Those 4 hitters are the ghost team,
 // scored against the 3 finalists in the WS round. If the 4 eliminated managers' bags (Wild Card
 // through CS) plus the bags the ghost's CS picks earn in the CS beat the 3 finalists' bags, the
 // ghost picks first in the WS draft; otherwise it picks after the finalists.
