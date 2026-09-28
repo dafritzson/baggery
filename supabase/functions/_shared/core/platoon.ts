@@ -221,23 +221,50 @@ export function seriesStarters(
 export interface ExpectedGame {
   chance: number;
   lhpChance: number;
+  /** When it starts (ms): scheduled, or estimated (core/matchups.ts expectedGames). */
+  start?: number;
 }
 
 /**
- * Plate appearances he can expect over `totalGames` expected team games: the games we know
- * something about (the current series), and league-average starters for the rest.
+ * A hitter on the injured list: he plays no games before `from` (ms), and every game after, as if
+ * he'd never been hurt. `now` is where the postseason games we know nothing about start from.
  */
-export function expectedPaOver(splits: Splits, known: ExpectedGame[], totalGames: number): number {
-  return overGames(known, totalGames, (lhp) => expectedPaPerGame(splits, lhp));
+export interface Sidelined {
+  from: number;
+  now: number;
+}
+
+/** A postseason team plays about a game every day and a half, with travel and off days between. */
+export const DAYS_PER_POSTSEASON_GAME = 1.5;
+
+/**
+ * Plate appearances he can expect over `totalGames` expected team games: the games we know
+ * something about (the current series), and league-average starters for the rest. None in games
+ * before he's back from the injured list.
+ */
+export function expectedPaOver(splits: Splits, known: ExpectedGame[], totalGames: number, sidelined: Sidelined | null = null): number {
+  return overGames(known, totalGames, (lhp) => expectedPaPerGame(splits, lhp), sidelined);
 }
 
 /** Games he can expect to start over `totalGames` expected team games, like expectedPaOver. */
-export function expectedStartsOver(splits: Splits, known: ExpectedGame[], totalGames: number): number {
-  return overGames(known, totalGames, (lhp) => lhp * startChance(splits, 'L') + (1 - lhp) * startChance(splits, 'R'));
+export function expectedStartsOver(splits: Splits, known: ExpectedGame[], totalGames: number, sidelined: Sidelined | null = null): number {
+  return overGames(known, totalGames, (lhp) => lhp * startChance(splits, 'L') + (1 - lhp) * startChance(splits, 'R'), sidelined);
 }
 
-function overGames(known: ExpectedGame[], totalGames: number, perGame: (lhpChance: number) => number): number {
+/** Of `totalGames` expected team games, how many he can expect to be there for (all of them unless he's injured). */
+export function expectedGamesAvailable(known: ExpectedGame[], totalGames: number, sidelined: Sidelined | null = null): number {
+  return overGames(known, totalGames, () => 1, sidelined);
+}
+
+function overGames(known: ExpectedGame[], totalGames: number, perGame: (lhpChance: number) => number, sidelined: Sidelined | null): number {
+  const plays = (g: ExpectedGame) => !sidelined || g.start === undefined || g.start >= sidelined.from;
   const knownGames = known.reduce((sum, g) => sum + g.chance, 0);
-  const rest = Math.max(0, totalGames - knownGames);
-  return known.reduce((sum, g) => sum + g.chance * perGame(g.lhpChance), 0) + rest * perGame(LEAGUE_LHP_SHARE);
+  let rest = Math.max(0, totalGames - knownGames);
+  if (sidelined) {
+    // The rest come after the known games, one every DAYS_PER_POSTSEASON_GAME days: he misses the
+    // ones before he's back.
+    const after = Math.max(sidelined.now, ...known.map((g) => g.start ?? -Infinity));
+    rest = Math.max(0, rest - Math.max(0, (sidelined.from - after) / (DAYS_PER_POSTSEASON_GAME * DAY_MS)));
+  }
+  return known.reduce((sum, g) => sum + (plays(g) ? g.chance * perGame(g.lhpChance) : 0), 0) + rest * perGame(LEAGUE_LHP_SHARE);
 }

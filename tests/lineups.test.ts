@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { scheduleGames, scheduleProbables } from '../supabase/functions/poll-games/feed.ts';
 import {
+  absences,
   handSplitRows,
   hitterLineupGames,
   people,
@@ -110,6 +111,65 @@ describe('a hitter from lineups and people', () => {
     ]);
     expect(rows.L).toHaveLength(3);
     expect(rows.R).toHaveLength(1);
+  });
+});
+
+describe('absences', () => {
+  const DAY = 86_400_000;
+  const t = (typeCode: string, day: string, description: string, extra: object = {}) => ({
+    typeCode,
+    date: day,
+    effectiveDate: day,
+    description,
+    person: { id: 10 },
+    ...extra,
+  });
+
+  it('keeps his stints on the injured list and in the minors, and leaves out other players', () => {
+    const moves = [
+      t('SC', '2026-05-01', 'New York Yankees placed CF X on the 10-day injured list retroactive to April 29, 2026.', { effectiveDate: '2026-04-29' }),
+      t('SC', '2026-05-10', 'New York Yankees sent CF X on a rehab assignment to Scranton.'),
+      t('SC', '2026-05-12', 'New York Yankees transferred CF X from the 10-day injured list to the 60-day injured list.'),
+      t('SC', '2026-06-30', 'New York Yankees activated CF X from the 60-day injured list.'),
+      t('OPT', '2026-07-05', 'New York Yankees optioned CF X to Scranton.'),
+      t('CU', '2026-07-20', 'New York Yankees recalled CF X from Scranton.'),
+      t('SC', '2026-09-20', 'New York Yankees placed CF X on the 10-day injured list.'),
+      { ...t('SC', '2026-06-01', 'New York Yankees placed SS Y on the 10-day injured list.'), person: { id: 11 } },
+    ];
+    expect(absences(moves, 10, NYY)).toEqual([
+      { from: '2026-04-29', to: '2026-06-30' },
+      { from: '2026-07-05', to: '2026-07-20' },
+      { from: '2026-09-20', to: null },
+    ]);
+  });
+
+  it('counts him out from the start when his first move brings him back', () => {
+    expect(absences([t('SC', '2026-05-15', 'New York Yankees activated RF X from the 60-day injured list.')], 10, NYY)).toEqual([
+      { from: '0000-00-00', to: '2026-05-15' },
+    ]);
+    expect(absences([t('TR', '2026-07-30', 'Boston Red Sox traded RF X to New York Yankees.', { fromTeam: { id: BOS }, toTeam: { id: NYY } })], 10, NYY)).toEqual([
+      { from: '0000-00-00', to: '2026-07-30' },
+    ]);
+    expect(absences([], 10, NYY)).toEqual([]);
+  });
+
+  it("leaves the games he couldn't play out of his lineup games, so they don't count as sitting", () => {
+    const persons = people({ people: [{ id: 600, fullName: 'Righty', pitchHand: { code: 'R' } }] });
+    // 20 team games; he starts the 10 he's healthy for and is hurt for the other 10.
+    const data = {
+      dates: Array.from({ length: 20 }, (_, i) => {
+        const date = new Date(Date.parse('2026-08-01') + i * DAY).toISOString().slice(0, 10);
+        return { games: [game(i + 1, date, i < 10 ? lineup(10) : lineup(20), lineup(30), 500, 600)] };
+      }),
+    };
+    const list = teamGames(data, NYY);
+    const hurt = absences([t('SC', '2026-08-11', 'New York Yankees placed CF X on the 10-day injured list.')], 10, NYY);
+    expect(hitterLineupGames(list, 10, persons)).toHaveLength(20);
+    const healthy = hitterLineupGames(list, 10, persons, hurt);
+    expect(healthy).toHaveLength(10);
+    expect(healthy.every((g) => g.spot === 1)).toBe(true);
+    // Back in the lineup while the transactions say he's out: he was there.
+    expect(hitterLineupGames(list, 10, persons, [{ from: '2026-08-05', to: null }])).toHaveLength(10);
   });
 });
 

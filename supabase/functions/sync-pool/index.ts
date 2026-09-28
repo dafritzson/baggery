@@ -4,7 +4,9 @@
 // Also the hitters on those teams' injured lists who could come off them before the postseason
 // ends, marked as injured: Draft 1 lets managers take them.
 // Also platoons and batting order (core/platoon.ts): each hitter's starts and lineup spots against
-// each hand's starters and his splits against each hand, and each team's likely rotation.
+// each hand's starters and his splits against each hand, and each team's likely rotation. Games he
+// couldn't play (on the injured list, in the minors, before a trade), from each team's
+// transactions, don't count as games he sat.
 // Commissioner only. For an imported past season it fills the pool for the Draft and Research
 // tabs from that year's end-of-season rosters, for the postseason teams the import stored.
 //
@@ -31,6 +33,7 @@ import {
   type Person,
   type PlatoonRecord,
   type TeamGame,
+  absences,
   handSplitRows,
   hitterLineupGames,
   people,
@@ -212,13 +215,22 @@ async function leagueHandLines(year: number): Promise<Partial<Record<Hand, Batti
 
 /**
  * Platoons and batting order for the pool's hitters, and each team's rotation. One schedule read
- * per team (every game's lineup and starters: ~1 MB each, so one at a time), one roster read per
- * team for the splits, and the hands of everyone involved.
+ * per team (every game's lineup and starters: ~1 MB each, so one at a time), one transactions read
+ * per team (who was on the injured list or in the minors when), one roster read per team for the
+ * splits, and the hands of everyone involved.
  */
 async function platoons(year: number, teamIds: number[], players: PoolPlayer[], rosterDate: string | null): Promise<Platoons> {
   const games = new Map<number, TeamGame[]>();
+  // deno-lint-ignore no-explicit-any
+  const transactions = new Map<number, any[]>();
   for (const teamId of teamIds) {
     games.set(teamId, teamGames(await mlb(`/schedule?sportId=1&teamId=${teamId}&season=${year}&gameType=R&hydrate=lineups,probablePitcher`), teamId));
+    // Best effort: without them, games a hitter was injured for count as games he sat.
+    const moves = await mlb(`/transactions?teamId=${teamId}&startDate=${year}-01-01&endDate=${year}-12-31`).catch((e) => {
+      console.error(`Transactions unavailable for team ${teamId}:`, e);
+      return null;
+    });
+    transactions.set(teamId, moves?.transactions ?? []);
   }
   const persons = await peopleById([...new Set([...[...games.values()].flatMap(starterIds), ...players.map((p) => p.id)])]);
   // deno-lint-ignore no-explicit-any
@@ -240,7 +252,8 @@ async function platoons(year: number, teamIds: number[], players: PoolPlayer[], 
   for (const p of players) {
     const rows = splitRows.get(p.id) ?? {};
     const lines = Object.fromEntries(Object.entries(rows).map(([hand, r]) => [hand, seasonLine(r)]));
-    const platoon = platoonRecord(hitterLineupGames(games.get(p.teamId) ?? [], p.id, persons), lines, (line, hand) => {
+    const away = absences(transactions.get(p.teamId) ?? [], p.id, p.teamId);
+    const platoon = platoonRecord(hitterLineupGames(games.get(p.teamId) ?? [], p.id, persons, away), lines, (line, hand) => {
       const lg = league[hand];
       return lg ? opsPlus(line, lg) : null;
     });

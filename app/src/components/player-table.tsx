@@ -111,7 +111,7 @@ const rate = (key: ColumnKey, label: string, title: string, width = 52): Column 
 export const COLUMNS: Column[] = [
   { ...count('tb', 'TB', 'Total bases', 44), default: true },
   {
-    ...count('xBags', 'xBags', 'Expected TB across the rest of the postseason, from his starts and lineup spot against each hand', 58),
+    ...count('xBags', 'xBags', 'Expected TB across the rest of the postseason, from his starts and lineup spot against each hand (games he was injured for don’t count as sitting; none before he can come off the injured list)', 58),
     format: oneDecimal,
     default: true,
     odds: true,

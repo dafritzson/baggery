@@ -46,3 +46,14 @@ export function injuredListReturn(
   const earliest = addDays(since ?? today, days);
   return { returnOn: since && earliest, inTime: !lastDay || earliest <= lastDay };
 }
+
+/**
+ * When a hitter on the injured list (a `days`-day list) can play again, for xBags: from the start
+ * of the day he can come off it (3 AM Eastern, so the night before's late games don't count, while
+ * MLB's 3:33 AM placeholder for a game without a time does), or when that's unknown, a full stay
+ * from `now`. Null when he's not on one. As ms.
+ */
+export function playableFrom(days: number | null, returnOn: string | null, now: number): number | null {
+  if (days === null) return null;
+  return returnOn ? Date.parse(`${returnOn}T07:00:00Z`) : now + days * 86_400_000;
+}
