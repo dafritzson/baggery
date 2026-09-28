@@ -67,11 +67,19 @@ export function hitsText(bag: Pick<Bag, 'singles' | 'doubles' | 'triples' | 'hr'
   return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 
-/** The alert that confirms a device's alerts work (Settings → Send a test). */
-export function testAlert(scope: 'mine' | 'league'): Alert {
+/**
+ * The alert that confirms a device's alerts work (Settings → Send a test). With game alerts off
+ * (scope 'off'), only draft alerts come.
+ */
+export function testAlert(scope: 'off' | 'mine' | 'league'): Alert {
   return {
     title: '👜 Alerts are on',
-    body: scope === 'mine' ? "You'll get one when one of your hitters gets a bag." : "You'll get one when anyone's hitter gets a bag.",
+    body:
+      scope === 'mine'
+        ? "You'll get one when one of your hitters gets a bag."
+        : scope === 'league'
+          ? "You'll get one when anyone's hitter gets a bag."
+          : "You'll get one when you're on the clock in a draft.",
   };
 }
 
