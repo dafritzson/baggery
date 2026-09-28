@@ -100,13 +100,24 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
   const status = clockStatus(data, draft, turn, myTurn, actions.length);
   const errorText = error && <ThemedText themeColor="danger">{error}</ThemedText>;
   const commissioner = useCommissionerActions(data, draft, turn, run);
-  const yieldButton = myTurn && draft.kind === 'redraft' && !filling && (
-    <Button
-      label={turn?.ghost ? 'Pass this ghost turn' : "I'm done: yield my remaining picks"}
-      variant="secondary"
-      onPress={() => run({ action: 'yield' })}
-    />
-  );
+  // Hitters whose MLB team is out can't stay: no yielding (or passing a ghost turn) until they're replaced.
+  const mustReplace = dropOptions.filter((id) => data.mlbTeams.get(data.poolByPlayer.get(id)?.mlb_team_id ?? 0)?.eliminated).length;
+  const yieldButton =
+    myTurn &&
+    draft.kind === 'redraft' &&
+    !filling &&
+    (mustReplace > 0 ? (
+      <ThemedText type="small" themeColor="textSecondary">
+        {mustReplace === 1 ? 'You have 1 empty spot' : `You have ${mustReplace} empty spots`} (team out) to fill before you can{' '}
+        {turn?.ghost ? 'pass' : 'yield'}.
+      </ThemedText>
+    ) : (
+      <Button
+        label={turn?.ghost ? 'Pass this ghost turn' : "I'm done: yield my remaining picks"}
+        variant="secondary"
+        onPress={() => run({ action: 'yield' })}
+      />
+    ));
   // The Queue tab goes away once you have no turns left to queue for.
   const tab = chosenTab === 'queue' && !target ? 'players' : chosenTab;
   const queued = queue.entries.filter((e) => draftable.has(e.playerId)).length;

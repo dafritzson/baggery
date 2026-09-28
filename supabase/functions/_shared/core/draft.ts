@@ -49,6 +49,11 @@ export interface DraftState {
   everRostered: Set<PlayerId>;
   /** Players currently eligible to be drafted (in the pool and their MLB team alive). */
   eligible: Set<PlayerId>;
+  /**
+   * Rostered players whose MLB team is eliminated. They can't stay: a team holding one can't yield
+   * (or pass a ghost turn) while there's anyone left to replace him with.
+   */
+  eliminated?: Set<PlayerId>;
 }
 
 export const ROSTER_SIZE = 4;
@@ -106,7 +111,10 @@ export function validateAction(state: DraftState, action: DraftAction): string |
 
   if (action.type === 'yield') {
     if (turn.ghost?.kind === 'add') return 'The ghost can’t skip filling a spot.';
-    return state.config.kind === 'initial' ? 'You cannot yield in the initial draft.' : null;
+    if (state.config.kind === 'initial') return 'You cannot yield in the initial draft.';
+    const out = mustReplace(state, turn.teamId);
+    if (out > 0) return `Replace your ${out === 1 ? 'eliminated hitter' : `${out} eliminated hitters`} before you yield.`;
+    return null;
   }
 
   const roster = state.rosters.get(action.teamId) ?? [];
@@ -125,6 +133,19 @@ export function validateAction(state: DraftState, action: DraftAction): string |
   if (action.dropPlayerId === undefined) return 'A redraft pick must drop a player.';
   if (!roster.includes(action.dropPlayerId)) return 'That player is not on your roster.';
   return null;
+}
+
+/**
+ * How many of a team's players are on an eliminated MLB team and must be replaced: 0 once nobody
+ * undrafted is left to replace them with.
+ */
+export function mustReplace(state: DraftState, teamId: TeamId): number {
+  const eliminated = state.eliminated;
+  if (!eliminated?.size) return 0;
+  const out = (state.rosters.get(teamId) ?? []).filter((p) => eliminated.has(p)).length;
+  if (!out) return 0;
+  for (const p of state.eligible) if (!state.everRostered.has(p)) return out;
+  return 0;
 }
 
 /** Applies a legal action to the roster state. Does not validate. */

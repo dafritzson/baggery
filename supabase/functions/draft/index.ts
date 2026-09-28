@@ -132,6 +132,8 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
       rosters,
       everRostered: new Set(spells.map((s) => s.mlb_player_id)),
       eligible: new Set(available.map((p) => p.mlb_player_id)),
+      // Players on a knocked-out MLB team can't stay on a roster (no yielding while holding one).
+      eliminated: new Set(pool.filter((p) => p.eliminated).map((p) => p.mlb_player_id)),
     },
     autodraftTeams: new Set(teams.filter((t) => t.autodraft).map((t) => t.id)),
     droppable: spells.filter((s) => s.dropped_by_draft_id === null && unavailable.has(s.mlb_player_id)).map((s) => s.mlb_player_id),

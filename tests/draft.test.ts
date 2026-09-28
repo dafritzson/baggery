@@ -6,6 +6,7 @@ import {
   applyAction,
   autodraftAction,
   draftable,
+  mustReplace,
   ghostTurns,
   nextTurn,
   randomOrder,
@@ -135,6 +136,22 @@ describe('validateAction: redraft', () => {
 
   it('allows yielding', () => {
     expect(validateAction(s(), yieldTurn('A'))).toBeNull();
+  });
+
+  it('won’t let a team yield while it has a hitter whose MLB team is eliminated', () => {
+    const out = state(redraft, { rosters, everRostered, eliminated: new Set([10, 12, 20]) });
+    expect(mustReplace(out, 'A')).toBe(2);
+    expect(validateAction(out, yieldTurn('A'))).toMatch(/Replace your 2 eliminated hitters/);
+    // Once they're replaced it can yield.
+    const replaced = state(redraft, { rosters: new Map([...rosters, ['A', [1, 11, 2, 13]]]), everRostered, eliminated: new Set([10, 12]) });
+    expect(validateAction(replaced, yieldTurn('A'))).toBeNull();
+  });
+
+  it('lets a team with an eliminated hitter yield once nobody is left to replace him', () => {
+    const everyone = new Set([...everRostered, ...Array.from({ length: 100 }, (_, i) => i + 1)]);
+    const out = state(redraft, { rosters, everRostered: everyone, eliminated: new Set([10]) });
+    expect(mustReplace(out, 'A')).toBe(0);
+    expect(validateAction(out, yieldTurn('A'))).toBeNull();
   });
 });
 
