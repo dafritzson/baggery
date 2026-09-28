@@ -28,8 +28,10 @@ import { playerSeries } from '@core/scoreboard.ts';
 import { type GameType, ROUND_FOR_GAME_TYPE } from '@core/types.ts';
 
 import { Button } from '@/components/button';
+import { hoverTitle, noSelect, useHoldTip } from '@/components/hold-tip';
 import { injuryText } from '@/components/injury';
 import { MatchupStrip, PlatoonSplitTable } from '@/components/platoon';
+import { COLUMNS as DRAFT_COLUMNS, type ColumnKey } from '@/components/player-table';
 import { type GridRow, ScoreGrid } from '@/components/score-grid';
 import { StatChart } from '@/components/stat-chart';
 import { ThemedText } from '@/components/themed-text';
@@ -353,6 +355,8 @@ interface Column {
   label: string;
   width: number;
   value: (c: Counts, season: SeasonExtras | null) => string;
+  /** What the header stands for, when it isn't a standard stat. */
+  tip?: string;
 }
 
 const COUNT = (key: keyof Counts, label: string, width = 30): Column => ({ label, width, value: (c) => String(c[key]) });
@@ -382,16 +386,20 @@ const COUNT_COLUMNS: Column[] = [
   RATE('ops', 'OPS'),
 ];
 
+/** The draft table's tip for the same stat. */
+const draftTip = (key: ColumnKey) => DRAFT_COLUMNS.find((c) => c.key === key)?.title;
+
 /** Blank on the Last N rows. The projections match the draft table's columns. */
 const SEASON_COLUMNS: Column[] = [
-  { label: 'OPS+', width: 48, value: (_, s) => (s?.opsPlus == null ? '' : String(s.opsPlus)) },
-  { label: 'RDSLG', width: 60, value: (_, s) => (s?.projection?.rdslg == null ? '' : formatRate(s.projection.rdslg)) },
+  { label: 'OPS+', width: 48, tip: draftTip('opsPlus'), value: (_, s) => (s?.opsPlus == null ? '' : String(s.opsPlus)) },
+  { label: 'RDSLG', width: 60, tip: draftTip('rdslg'), value: (_, s) => (s?.projection?.rdslg == null ? '' : formatRate(s.projection.rdslg)) },
   {
     label: 'TB·E[G]/162',
     width: 88,
+    tip: draftTip('tbExpected'),
     value: (_, s) => (s?.projection?.tbExpected == null ? '' : s.projection.tbExpected.toFixed(1)),
   },
-  { label: 'RDTB', width: 50, value: (_, s) => (s?.projection?.rdtb == null ? '' : s.projection.rdtb.toFixed(1)) },
+  { label: 'RDTB', width: 50, tip: draftTip('rdtb'), value: (_, s) => (s?.projection?.rdtb == null ? '' : s.projection.rdtb.toFixed(1)) },
 ];
 
 const LINE_COLUMNS = [...COUNT_COLUMNS, ...SEASON_COLUMNS];
@@ -705,12 +713,15 @@ function StatTable({
   labelWidth: number;
 }) {
   const theme = useTheme();
+  // Phones: a finger held on a header with a tip says what it is.
+  const { hold, tip } = useHoldTip();
   // Room for a note after the label ("Last 30 since 5/12"), only when a row has one.
   const width = labelWidth + (rows.some((r) => r.note) ? 72 : 0);
   const tbIndex = columns.findIndex((c) => c.label === 'TB');
   const rowBorder = (i: number) => i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border };
   return (
     <ThemedView type="backgroundElement" style={styles.table}>
+      {tip}
       <View style={[styles.labelColumn, { width, borderRightColor: theme.border }]}>
         <View style={[styles.tableRow, styles.tableHead, { borderBottomColor: theme.border }]} />
         {rows.map((r, i) => (
@@ -725,13 +736,21 @@ function StatTable({
       <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ flexGrow: 1 }}>
         <View style={{ flexGrow: 1 }}>
           <View style={[styles.tableRow, styles.tableHead, styles.cells, { borderBottomColor: theme.border }]}>
-            {columns.map((c, j) => (
-              <View key={c.label} style={[styles.cell, { minWidth: c.width }, j === tbIndex && { backgroundColor: theme.tint }]}>
+            {columns.map((c, j) => {
+              const cell = [styles.cell, { minWidth: c.width }, j === tbIndex && { backgroundColor: theme.tint }];
+              const label = (
                 <ThemedText type="smallBold" themeColor={j === tbIndex ? 'text' : 'textSecondary'} style={styles.cellText}>
                   {c.label}
                 </ThemedText>
-              </View>
-            ))}
+              );
+              return c.tip ? (
+                <Pressable key={c.label} ref={hoverTitle(c.tip)} onLongPress={hold()} style={[cell, noSelect]}>
+                  {label}
+                </Pressable>
+              ) : (
+                <View key={c.label} style={cell}>{label}</View>
+              );
+            })}
           </View>
           {rows.map((r, i) => (
             <View key={r.key} style={[styles.tableRow, styles.cells, rowBorder(i)]}>

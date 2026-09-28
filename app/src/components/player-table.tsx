@@ -4,6 +4,7 @@ import Svg, { Path } from 'react-native-svg';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { FilterSheet } from '@/components/filter-sheet';
+import { hoverTitle, noSelect, useHoldTip } from '@/components/hold-tip';
 import { InjuryChip } from '@/components/injury';
 import { PlatoonChip } from '@/components/platoon';
 import { ThemedText } from '@/components/themed-text';
@@ -63,7 +64,7 @@ type SortKey = 'name' | ColumnKey;
 export interface Column {
   key: ColumnKey;
   label: string;
-  /** What the label stands for, in the column picker. */
+  /** What the label stands for: in the column picker, and the header's tip (hover, or a finger held on it). */
   title: string;
   width: number;
   value: (row: PlayerRow) => number | null;
@@ -80,7 +81,7 @@ export interface Column {
   odds?: boolean;
   /** Shown instead of the formatted value, e.g. "2 · 7". */
   text?: (row: PlayerRow) => string | null;
-  /** Web: what resting the pointer on a cell says about it. */
+  /** Web: what resting the pointer on a cell, or holding a finger on it, says about it. */
   cellTitle?: (row: PlayerRow) => string | null;
   /** Underlined with dots, e.g. xBags adjusted for a platoon. */
   marked?: (row: PlayerRow) => boolean;
@@ -170,17 +171,6 @@ const ROW_HEIGHT = 36;
 const sticky = (edges: { top?: number; left?: number }, zIndex: number) =>
   ({ position: 'sticky', ...edges, zIndex }) as unknown as ViewStyle;
 
-/**
- * Web: shows `text` when the pointer rests on the element (react-native-web doesn't pass `title`
- * through). Phones have no hover; the column menu lists what each column is.
- */
-function hoverTitle(text: string) {
-  if (Platform.OS !== 'web') return undefined;
-  return (el: unknown) => {
-    (el as HTMLElement | null)?.setAttribute?.('title', text);
-  };
-}
-
 /** Compares with nulls last, whichever way the column is sorted. */
 function compareNullable(a: number | null, b: number | null, desc: boolean): number {
   if (a === null || b === null) return (a === null ? 1 : 0) - (b === null ? 1 : 0);
@@ -245,6 +235,8 @@ export function PlayerTable({
   const nameColumnWidth = tableWidth && !box ? { maxWidth: tableWidth * MAX_NAME_SHARE } : null;
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'tb', desc: true });
   const [pressedId, setPressedId] = useState<number | null>(null);
+  // Phones: a finger held on a header, or on a cell with a tip, says what it is.
+  const { hold, tip } = useHoldTip();
   // The bounds each filter menu offers, from every row it could filter.
   const bounds = useMemo(
     () => new Map(COLUMNS.map((c) => [c.key, c.flag ? [] : thresholds(filterSource.map(c.value))])),
@@ -293,7 +285,7 @@ export function PlayerTable({
       <View style={[styles.header, styles.cells, { borderBottomColor: theme.border }, box && [sticky({ top: 0 }, 1), fill]]}>
         {columns.map((c) => (
           <View key={c.key} style={{ minWidth: c.width, flexGrow: c.width, flexBasis: c.width }}>
-            <Pressable ref={hoverTitle(c.title)} onPress={() => sortBy(c.key)} style={styles.cell}>
+            <Pressable ref={hoverTitle(c.title)} onPress={() => sortBy(c.key)} onLongPress={hold(() => sortBy(c.key))} style={styles.cell}>
               <ThemedText
                 type="smallBold"
                 numberOfLines={1}
@@ -319,7 +311,7 @@ export function PlayerTable({
         ))}
       </View>
       {sorted.map((r, i) => (
-        <Pressable key={r.id} {...rowPress(r.id)} style={[rowStyle(r.id, i), styles.cells]}>
+        <Pressable key={r.id} {...rowPress(r.id)} onLongPress={hold(() => onSelect(r.id))} style={[rowStyle(r.id, i), styles.cells]}>
           {columns.map((c) => {
             const value = c.value(r);
             const title = c.cellTitle?.(r);
@@ -345,8 +337,9 @@ export function PlayerTable({
   return (
     <ThemedView
       type="backgroundElement"
-      style={[styles.table, box && styles.box, style]}
+      style={[styles.table, box && styles.box, noSelect, style]}
       onLayout={(e) => (box ? setOuterWidth : setTableWidth)(e.nativeEvent.layout.width)}>
+      {tip}
       {box && (
         // The box's width less its vertical scrollbar: sizing the name column to the outer width
         // left the last column under the scrollbar.
