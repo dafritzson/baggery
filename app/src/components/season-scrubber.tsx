@@ -234,7 +234,8 @@ export function SeasonScrubber({
         <View style={styles.readout}>
           <ThemedText type="smallBold" numberOfLines={2}>{main}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={2} style={styles.sub}>{sub}</ThemedText>
-          {bag && !playing && <BagVideos bag={bag} />}
+          {/* The links' row is always there, empty without links, so the card keeps its height. */}
+          {bag && !playing ? <BagVideos bag={bag} /> : <View style={styles.videos} />}
         </View>
         <View accessibilityRole="tablist" accessibilityLabel="Zoom" style={[styles.zoom, { backgroundColor: theme.backgroundSelected, boxShadow: theme.sunken }]}>
           {ZOOMS.map((z) => {
