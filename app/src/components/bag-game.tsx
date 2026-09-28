@@ -358,8 +358,9 @@ function Final({ view, score, before, onReplay }: {
         : before && score > before.mine
         ? 'New personal best!'
         : null;
-  // Standings after this game, without waiting for the saved scores to reload.
-  const record = newRecord ? { score, name: 'you' } : before?.record;
+  // Standings after this game, without waiting for the saved scores to reload. Tying the record
+  // takes it too: the last to reach it holds it.
+  const record = before && score > 0 && score >= (before.record?.score ?? 0) ? { score, name: 'you' } : before?.record;
   const details = before && [
     record && `Record ${record.score} (${record.name})`,
     `Your best ${Math.max(before.mine, score)}`,
