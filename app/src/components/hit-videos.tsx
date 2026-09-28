@@ -30,16 +30,31 @@ export const savantUrl = (playId: string) => `https://baseballsavant.mlb.com/spo
  * gets the day after the game (poll-games checks). A hit with neither yet is listed without links.
  * Loaded when opened, so it costs nothing until someone taps ▶. Both open in the browser. The sheet
  * opens once they're in, at its full height: around the loader it opened tall and then dropped.
+ * With `playId` (the standings timeline's bag), only that hit.
  */
-export function HitVideosSheet({ gamePk, playerId, title, onClose }: { gamePk: number; playerId: number; title: string; onClose: () => void }) {
+export function HitVideosSheet({
+  gamePk,
+  playerId,
+  playId,
+  title,
+  onClose,
+}: {
+  gamePk: number;
+  playerId: number;
+  playId?: string;
+  title: string;
+  onClose: () => void;
+}) {
   const [hits, setHits] = useState<Hit[] | null>(null);
   useEffect(() => {
     let stale = false;
-    supabase
+    let query = supabase
       .from('mlb_hits')
       .select('play_id, event, inning, top_inning, clip_slug, clip_headline, savant_ready')
       .eq('game_pk', gamePk)
-      .eq('mlb_player_id', playerId)
+      .eq('mlb_player_id', playerId);
+    if (playId) query = query.eq('play_id', playId);
+    query
       .order('ended_at')
       .then(({ data }) => {
         if (!stale) setHits((data ?? []) as Hit[]);
@@ -47,7 +62,7 @@ export function HitVideosSheet({ gamePk, playerId, title, onClose }: { gamePk: n
     return () => {
       stale = true;
     };
-  }, [gamePk, playerId]);
+  }, [gamePk, playerId, playId]);
 
   return (
     <Sheet visible={hits !== null} title={title} onClose={onClose}>
