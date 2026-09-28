@@ -37,6 +37,12 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
 - `league_managers`: everyone who has managed in the league, by first name. Every team points to its
   manager (`fantasy_teams.manager_id`): imported teams from the sheets, app-played teams from the
   claiming account's link (the commissioner links accounts in Settings → Past managers).
+- `commissioner_log`: every commissioner action (starting a draft, picking, passing or autopicking
+  for someone else's team, undo, their autodraft switch, closing or reopening a round, renaming or
+  assigning someone else's team, linking past managers, syncing the pool, reloading games,
+  importing a season), who took it and when, with a summary written at the time. Each row is
+  written in the same transaction as its action. Only the league's commissioner can read it
+  (Settings → Commissioner log), and nobody can change or delete it through the API.
 - `fantasy_teams`: numbered spots in a season (`slot`). A signed-in user claims an open spot and
   names the team; `user_id` and `name` are nullable, so open spots and historical teams work.
   Unnamed spots show a random name in the app (`app/src/lib/team-name-list.ts`). `eliminated_after_round`.

@@ -16,6 +16,7 @@
 
 import { requireCommissioner, requireUser } from '../_shared/auth.ts';
 import { autoCloseRounds } from '../_shared/close-round.ts';
+import { logCommissioner } from '../_shared/commissioner-log.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
 import { queueCutAlerts, queueSubAlerts, sendBagAlerts, sendQueuedAlerts } from './alerts.ts';
@@ -440,5 +441,13 @@ serve(async (req) => {
     }
     return json({ hits, next: games.length === 4 ? games[3].game_pk : null });
   }
-  return json(await poll(season.year, true));
+  const result = await poll(season.year, true);
+  // The videos batches that follow are part of the same reload, so only this call is logged.
+  await logCommissioner(sql, {
+    seasonId: body.seasonId,
+    userId,
+    action: 'reload-games',
+    summary: `Reloaded ${season.year}'s games from MLB`,
+  });
+  return json(result);
 });

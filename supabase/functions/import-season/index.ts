@@ -8,6 +8,7 @@
 // played in the app can never be overwritten.
 
 import { requireUser } from '../_shared/auth.ts';
+import { logCommissioner } from '../_shared/commissioner-log.ts';
 import { IMPORT_DRAFTS, importSpells, type SeasonImport, validateSeasonImport } from '../_shared/core/season-import.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
@@ -33,7 +34,7 @@ serve(async (req) => {
     if (played?.year && season.year >= played.year) {
       throw new UserError(`Only seasons before ${played.year} can be imported.`);
     }
-    await tx`delete from seasons where league_id = ${leagueId} and year = ${season.year}`;
+    const [replaced] = await tx`delete from seasons where league_id = ${leagueId} and year = ${season.year} returning id`;
 
     await tx`
       insert into mlb_teams ${tx(season.mlbTeams, 'id', 'name', 'abbreviation', 'league')}
@@ -120,6 +121,13 @@ serve(async (req) => {
         })),
         'season_id', 'fantasy_team_id', 'mlb_player_id', 'from_at', 'to_at', 'added_by_draft_id', 'dropped_by_draft_id',
       )}`;
+    await logCommissioner(tx, {
+      seasonId: id,
+      userId,
+      action: 'import-season',
+      summary: `${replaced ? 'Re-imported' : 'Imported'} the ${season.year} season from the old sheets`,
+      details: { year: season.year },
+    });
     return id as string;
   });
 

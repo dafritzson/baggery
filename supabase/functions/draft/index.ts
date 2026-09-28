@@ -4,6 +4,7 @@
 // POST { draftId, action: 'start' | 'pick' | 'yield' | 'autopick' | 'undo' | 'set-autodraft', ... }
 
 import { isCommissioner, requireUser } from '../_shared/auth.ts';
+import { logCommissioner, playerName, teamLabel } from '../_shared/commissioner-log.ts';
 import {
   type DraftAction,
   type DraftState,
@@ -153,6 +154,18 @@ async function advance(tx: Tx, ctx: Ctx) {
   }
 }
 
+/** Logs a pick the commissioner made for someone else's team. */
+async function logPick(tx: Tx, ctx: Ctx, userId: string, action: 'pick' | 'autopick', teamId: string, add: number, drop: number | null) {
+  const dropped = drop !== null ? `, dropping ${await playerName(tx, drop)}` : '';
+  await logCommissioner(tx, {
+    seasonId: ctx.draft.season_id,
+    userId,
+    action,
+    summary: `${action === 'autopick' ? 'Autopicked' : 'Picked'} ${await playerName(tx, add)} for ${await teamLabel(tx, teamId)}${dropped} in Draft ${ctx.draft.number}`,
+    details: { draftId: ctx.draft.id, teamId, addPlayerId: add, dropPlayerId: drop },
+  });
+}
+
 async function requireLive(ctx: Ctx) {
   if (ctx.draft.status !== 'live') throw new UserError('The draft is not live.');
 }
@@ -176,6 +189,15 @@ async function setAutodraft(body: Body, userId: string) {
       throw new UserError('Only the commissioner can do that.', 403);
     }
     await tx`update fantasy_teams set autodraft = ${on} where id = ${teamId}`;
+    if (team.user_id !== userId) {
+      await logCommissioner(tx, {
+        seasonId: draft.season_id,
+        userId,
+        action: 'set-autodraft',
+        summary: `Turned autodraft ${on ? 'on' : 'off'} for ${await teamLabel(tx, teamId)}`,
+        details: { draftId: draft.id, teamId, autodraft: on },
+      });
+    }
     if (!on || draft.status !== 'live') return;
 
     const actions = await tx`
@@ -244,6 +266,13 @@ serve(async (req) => {
         ctx.draft = { ...ctx.draft, status: 'live', pick_order: order };
         ctx.state = { ...ctx.state, config: { ...ctx.state.config, order } };
         for (const id of order) if (!ctx.state.rosters.has(id)) ctx.state.rosters.set(id, []);
+        await logCommissioner(tx, {
+          seasonId: ctx.draft.season_id,
+          userId,
+          action: 'start',
+          summary: `Started Draft ${ctx.draft.number}`,
+          details: { draftId: ctx.draft.id, order },
+        });
         await advance(tx, ctx);
         break;
       }
@@ -252,12 +281,25 @@ serve(async (req) => {
         const teamId = actingFor();
         if (body.addPlayerId === undefined) throw new UserError('Choose a player.');
         await commit(tx, ctx, { type: 'pick', teamId, addPlayerId: body.addPlayerId, dropPlayerId: body.dropPlayerId }, userId, false);
+        if (ctx.teamOwners.get(teamId) !== userId) {
+          await logPick(tx, ctx, userId, 'pick', teamId, body.addPlayerId, body.dropPlayerId ?? null);
+        }
         await advance(tx, ctx);
         break;
       }
       case 'yield': {
         await requireLive(ctx);
-        await commit(tx, ctx, { type: 'yield', teamId: actingFor() }, userId, false);
+        const teamId = actingFor();
+        await commit(tx, ctx, { type: 'yield', teamId }, userId, false);
+        if (ctx.teamOwners.get(teamId) !== userId) {
+          await logCommissioner(tx, {
+            seasonId: ctx.draft.season_id,
+            userId,
+            action: 'yield',
+            summary: `Passed for ${await teamLabel(tx, teamId)} in Draft ${ctx.draft.number}`,
+            details: { draftId: ctx.draft.id, teamId },
+          });
+        }
         await advance(tx, ctx);
         break;
       }
@@ -268,6 +310,17 @@ serve(async (req) => {
         const action = autodraftAction(ctx.state, ctx.candidates, ctx.droppable);
         if (!action) throw new UserError('No eligible players left.');
         await commit(tx, ctx, action, userId, true);
+        if (action.type === 'pick') {
+          await logPick(tx, ctx, userId, 'autopick', action.teamId, action.addPlayerId, action.dropPlayerId ?? null);
+        } else {
+          await logCommissioner(tx, {
+            seasonId: ctx.draft.season_id,
+            userId,
+            action: 'autopick',
+            summary: `Autodrafted a pass for ${await teamLabel(tx, action.teamId)} in Draft ${ctx.draft.number}`,
+            details: { draftId: ctx.draft.id, teamId: action.teamId },
+          });
+        }
         await advance(tx, ctx);
         break;
       }
@@ -277,8 +330,30 @@ serve(async (req) => {
         const [last] = await tx`
           delete from draft_actions where draft_id = ${ctx.draft.id}
           and action_number = (select max(action_number) from draft_actions where draft_id = ${ctx.draft.id})
-          returning type, add_player_id, drop_player_id`;
+          returning action_number, fantasy_team_id, type, add_player_id, drop_player_id, is_auto, made_by`;
         if (!last) throw new UserError('Nothing to undo.');
+        const team = await teamLabel(tx, last.fantasy_team_id);
+        const what =
+          last.type === 'pick'
+            ? `${last.is_auto ? 'autopick' : 'pick'} of ${await playerName(tx, last.add_player_id)}` +
+              (last.drop_player_id !== null ? `, dropping ${await playerName(tx, last.drop_player_id)},` : '')
+            : last.is_auto ? 'autodraft pass' : 'pass';
+        await logCommissioner(tx, {
+          seasonId: ctx.draft.season_id,
+          userId,
+          action: 'undo',
+          summary: `Undid ${team}'s ${what} in Draft ${ctx.draft.number}`,
+          details: {
+            draftId: ctx.draft.id,
+            actionNumber: last.action_number,
+            teamId: last.fantasy_team_id,
+            type: last.type,
+            addPlayerId: last.add_player_id,
+            dropPlayerId: last.drop_player_id,
+            isAuto: last.is_auto,
+            madeBy: last.made_by,
+          },
+        });
         if (last.type === 'pick') {
           await tx`delete from roster_spells where season_id = ${ctx.draft.season_id} and mlb_player_id = ${last.add_player_id}`;
           if (last.drop_player_id !== null) {

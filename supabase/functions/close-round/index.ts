@@ -8,6 +8,7 @@
 
 import { requireCommissioner, requireUser } from '../_shared/auth.ts';
 import { type Season, closeRound } from '../_shared/close-round.ts';
+import { logCommissioner, teamLabel } from '../_shared/commissioner-log.ts';
 import type { FantasyRound } from '../_shared/core/types.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
@@ -42,9 +43,23 @@ serve(async (req) => {
       // Left for the commissioner to close again, so the poller doesn't close it straight back.
       await tx`update seasons set manual_rounds = array_append(array_remove(manual_rounds, ${round}::smallint), ${round}::smallint) where id = ${seasonId}`;
       if (round === 3) await tx`update seasons set status = 'active' where id = ${seasonId}`;
+      await logCommissioner(tx, { seasonId, userId, action: 'reopen-round', summary: `Reopened round ${round}`, details: { round } });
       return { reopened: round };
     }
-    return await closeRound(tx, s, round, body.drinkOffWinners);
+    const closed = await closeRound(tx, s, round, body.drinkOffWinners);
+    if ('eliminated' in closed) {
+      const winners = body.drinkOffWinners?.length
+        ? ` with drink-off winners ${(await Promise.all(body.drinkOffWinners.map((t) => teamLabel(tx, t)))).join(', ')}`
+        : '';
+      await logCommissioner(tx, {
+        seasonId,
+        userId,
+        action: 'close-round',
+        summary: `Closed round ${round}${winners}`,
+        details: { round, drinkOffWinners: body.drinkOffWinners ?? [], eliminated: closed.eliminated },
+      });
+    }
+    return closed;
   });
   return json(result);
 });

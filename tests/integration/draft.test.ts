@@ -162,6 +162,28 @@ describe('draft 1', () => {
     expect(count).toBe(0);
   });
 
+  it("logs the commissioner's actions, which only the commissioner can read and nobody can change", async () => {
+    const { data: log } = await clients.get('Daniel')!.from('commissioner_log').select('action, summary, user_id').order('id');
+    expect(log!.map((l) => l.action)).toEqual(['rename_team', 'sync-pool', 'start', 'undo']);
+    expect(log![0].summary).toBe('Renamed Big Bags to Kyle Bags');
+    expect(log![3].summary).toMatch(/^Undid .+'s pick of .+ in Draft 1$/);
+    const { data: profile } = await admin.from('profiles').select('id').eq('display_name', 'Daniel').single();
+    expect(log!.every((l) => l.user_id === profile!.id)).toBe(true);
+
+    // Managers renaming their own team or picking on their turn aren't logged, and can't read it.
+    const kyle = clients.get('Kyle')!;
+    expect((await kyle.from('commissioner_log').select('id')).data).toEqual([]);
+    expect((await kyle.rpc('rename_team', { p_team_id: teamIdByManager.get('Kyle'), p_name: 'Kyle Bags' })).error).toBeNull();
+
+    const daniel = clients.get('Daniel')!;
+    expect((await daniel.from('commissioner_log').delete().eq('action', 'undo')).error?.message).toMatch(/permission denied/);
+    expect(
+      (await daniel.from('commissioner_log').update({ summary: 'nothing to see' }).eq('action', 'undo')).error?.message,
+    ).toMatch(/permission denied/);
+    const { count } = await admin.from('commissioner_log').select('*', { count: 'exact', head: true });
+    expect(count).toBe(4);
+  });
+
   it('lets the commissioner undo a mistaken pick and the autopicks after it, one at a time', async () => {
     const up = await onTheClock();
     const upTeam = teamIdByManager.get(up)!;

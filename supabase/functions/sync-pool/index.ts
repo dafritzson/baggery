@@ -9,6 +9,7 @@
 // POST { seasonId, teamIds?: number[] }  (teamIds overrides the clinched-teams lookup)
 
 import { requireCommissioner, requireUser } from '../_shared/auth.ts';
+import { logCommissioner } from '../_shared/commissioner-log.ts';
 import type { Hand } from '../_shared/core/platoon.ts';
 import { type Counts, sumCounts } from '../_shared/core/player-stats.ts';
 import {
@@ -363,6 +364,13 @@ serve(async (req) => {
         update drafts set locks_at = ${wildCardStart}
         where season_id = ${seasonId} and number = 1 and status = 'scheduled'`;
     }
+    await logCommissioner(tx, {
+      seasonId,
+      userId,
+      action: 'sync-pool',
+      summary: `Synced ${year}'s player pool from MLB (${playoffTeamIds.length} teams, ${players.length} players)`,
+      details: { teamIds: playoffTeamIds },
+    });
   });
 
   return json({ ok: true, teams: playoffTeamIds.length, players: players.length, draft1LocksAt: wildCardStart, platoons: !!platoon });
