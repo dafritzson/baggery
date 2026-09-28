@@ -216,7 +216,7 @@ function BottomTabBar() {
       edges={['bottom', 'left', 'right']}
       style={styles.bottomBar}
       pointerEvents="box-none"
-      // Its own layer while the Games tab zooms (global.css), so the page doesn't cover it.
+      // Its pill is its own layer while the Games tab zooms (global.css), so the page doesn't cover it.
       {...({ dataSet: { tabBar: '' } } as object)}>
       <View
         accessibilityRole="tablist"

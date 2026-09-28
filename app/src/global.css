@@ -231,8 +231,16 @@
 :root[data-zoom] [data-zoom-fixed] {
   view-transition-name: zoom-fixed;
 }
-:root[data-zoom] [data-tab-bar] {
+/*
+ * The phone tab bar's pill rather than the whole bar: a snapshot keeps the backdrop-filter of the
+ * element it's of (the transition puts it on the group), so the glass stays frosted through the
+ * zoom, and Safari doesn't leave it clear afterwards as it did with the bar's wrapper.
+ */
+:root[data-zoom] [data-tab-bar] > [role='tablist'] {
   view-transition-name: zoom-tab-bar;
+}
+::view-transition-group(zoom-tab-bar) {
+  border-radius: 999px;
 }
 ::view-transition-group(zoom-page) {
   overflow: clip;
