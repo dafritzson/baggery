@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Owner } from '../supabase/functions/_shared/core/bag-alerts.ts';
-import { type CutSpot, type Sub, cutAlert, cutFlips, cutSpots, subAlert } from '../supabase/functions/_shared/core/game-alerts.ts';
+import {
+  type CutSpot,
+  type LineupHitter,
+  type Sub,
+  cutAlert,
+  cutFlips,
+  cutSpots,
+  lineupAlert,
+  lineupNews,
+  scratchAlert,
+  subAlert,
+} from '../supabase/functions/_shared/core/game-alerts.ts';
 import { emptyTotals, rankTeams } from '../supabase/functions/_shared/core/scoring.ts';
 
 const sub = (over: Partial<Sub> = {}): Sub => ({
@@ -113,5 +124,58 @@ describe('cutAlert', () => {
 
   it('talks about first place in the last round', () => {
     expect(cutAlert(spot({ rank: 2, survivors: 1 })).body).toBe('Down to 2nd. Only 1st wins it all.');
+  });
+});
+
+describe('lineupNews', () => {
+  it('calls a lineup seen for the first time posted', () => {
+    expect(lineupNews(undefined, [1, 2, 3])).toEqual({ posted: true, scratched: [] });
+  });
+
+  it('finds who a changed lineup dropped', () => {
+    expect(lineupNews([1, 2, 3], [1, 4, 3])).toEqual({ posted: false, scratched: [2] });
+    expect(lineupNews([1, 2, 3], [3, 2, 1])).toEqual({ posted: false, scratched: [] });
+  });
+});
+
+describe('lineupAlert', () => {
+  const hitter = (over: Partial<LineupHitter> = {}): LineupHitter => ({ player: 'Mookie Betts', spot: 1, injured: false, owner: null, ...over });
+
+  it('names where your hitters bat, in batting order, and who is on the bench', () => {
+    expect(
+      lineupAlert('Los Angeles Dodgers', [
+        hitter({ player: 'Freddie Freeman', spot: 3 }),
+        hitter(),
+        hitter({ player: 'Will Smith', spot: null }),
+      ]),
+    ).toEqual({
+      title: '📋 Los Angeles Dodgers lineup is in',
+      body: 'Mookie Betts leading off, Freddie Freeman batting 3rd · Will Smith on the bench 🪑',
+    });
+  });
+
+  it("names someone else's hitters' managers", () => {
+    expect(lineupAlert('Los Angeles Dodgers', [hitter({ owner: 'Mike' }), hitter({ player: 'Max Muncy', spot: null, owner: 'Dana' })]).body).toBe(
+      'Mookie Betts (Mike) leading off · Max Muncy (Dana) on the bench 🪑',
+    );
+  });
+
+  it('keeps injured hitters apart from the bench', () => {
+    expect(
+      lineupAlert('Los Angeles Dodgers', [
+        hitter({ player: 'Will Smith', spot: null }),
+        hitter({ player: 'Max Muncy', spot: null }),
+        hitter({ player: 'Tommy Edman', spot: null, injured: true }),
+      ]).body,
+    ).toBe('Will Smith and Max Muncy on the bench 🪑 · Tommy Edman on the injured list 🩹');
+  });
+});
+
+describe('scratchAlert', () => {
+  it('says who a late change dropped', () => {
+    expect(scratchAlert('Freddie Freeman', 'Los Angeles Dodgers', { team: 'Bag Boys', manager: 'Mike', yours: false })).toEqual({
+      title: '🪑 Freddie Freeman is out of the lineup',
+      body: 'A late change for the Los Angeles Dodgers · Bag Boys (Mike)',
+    });
   });
 });

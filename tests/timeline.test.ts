@@ -210,6 +210,13 @@ describe('roundLines', () => {
     expect(valueAt(lines.cut, 3)).toBe(7);
   });
 
+  it('draws the cut from only the teams facing it', () => {
+    // B leads the whole way; counting only A, the cut is A's total.
+    const onlyA = roundLines(tl, games, stats, spells, 1, ['A', 'B'], 1, ['A'])!;
+    expect(valueAt(onlyA.cut, 3)).toBe(valueAt(onlyA.teams.get('A')!, 3));
+    expect(valueAt(onlyA.cut, 1)).toBe(valueAt(onlyA.teams.get('A')!, 1));
+  });
+
   it('is null for a round with no games yet', () => {
     expect(roundLines(tl, games, stats, spells, 3, ['A'], 1)).toBeNull();
   });

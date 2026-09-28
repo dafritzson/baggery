@@ -185,13 +185,16 @@ async function logPick(tx: Tx, ctx: Ctx, userId: string, action: 'pick' | 'autop
   });
 }
 
-/** The season's ghost team, created on first use: the spot after the managers', named Ghost. */
+/**
+ * The season's ghost team, created on first use: the spot after the managers'. Its name has the
+ * emoji so it can't collide with a manager's team name (names are unique in a season).
+ */
 async function ghostTeam(tx: Tx, seasonId: string): Promise<string> {
   const [existing] = await tx`select id from fantasy_teams where season_id = ${seasonId} and is_ghost`;
   if (existing) return existing.id;
   const [created] = await tx`
     insert into fantasy_teams (season_id, slot, name, is_ghost)
-    select ${seasonId}, coalesce(max(slot), 0) + 1, 'Ghost', true from fantasy_teams where season_id = ${seasonId}
+    select ${seasonId}, coalesce(max(slot), 0) + 1, '👻 Ghost', true from fantasy_teams where season_id = ${seasonId}
     returning id`;
   return created.id;
 }
@@ -232,7 +235,7 @@ async function setAutodraft(body: Body, userId: string) {
 
     const actions = await tx`
       select type, fantasy_team_id from draft_actions where draft_id = ${draft.id} order by action_number`;
-    const [ghostTeam] = draft.ghost_turns.length
+    const [ghostRow] = draft.ghost_turns.length
       ? await tx`select id from fantasy_teams where season_id = ${draft.season_id} and is_ghost`
       : [];
     const turn = nextTurn(
@@ -240,7 +243,7 @@ async function setAutodraft(body: Body, userId: string) {
         kind: draft.kind,
         order: draft.pick_order,
         rounds: draft.rounds,
-        ghost: ghostTeam ? { teamId: ghostTeam.id, turns: draft.ghost_turns } : undefined,
+        ghost: ghostRow ? { teamId: ghostRow.id, turns: draft.ghost_turns } : undefined,
       },
       actions.map((a): DraftAction =>
         a.type === 'yield' ? { type: 'yield', teamId: a.fantasy_team_id } : { type: 'pick', teamId: a.fantasy_team_id, addPlayerId: 0 },

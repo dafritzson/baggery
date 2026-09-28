@@ -1,11 +1,12 @@
-// Alerts on this device (Settings): bag alerts, and sub and cut alerts with them. poll-games sends the alerts themselves.
+// Alerts on this device (Settings): bag alerts, and sub, cut and lineup alerts with them. poll-games sends the alerts themselves.
 //
 // POST { action: 'key' }                          the public key browsers subscribe with.
-// POST { action: 'subscribe', subscription, scope, delaySeconds, subs?, cut? }
+// POST { action: 'subscribe', subscription, scope, delaySeconds, subs?, cut?, lineups? }
 //                                                 signed in: saves this browser's subscription and
-//                                                 its choices (also to change them). `subs` and
-//                                                 `cut` turn sub and cut alerts on or off; left
-//                                                 out, they stay as they were (on at first).
+//                                                 its choices (also to change them). `subs`, `cut`
+//                                                 and `lineups` turn sub, cut and lineup alerts on
+//                                                 or off; left out, they stay as they were (at
+//                                                 first sub and cut alerts on, lineup alerts off).
 // POST { action: 'unsubscribe', endpoint }        signed in: this browser's alerts are off.
 // POST { action: 'test', endpoint }               signed in: sends this browser a test alert.
 
@@ -24,6 +25,7 @@ interface Body {
   delaySeconds?: number;
   subs?: boolean;
   cut?: boolean;
+  lineups?: boolean;
   endpoint?: string;
 }
 
@@ -43,16 +45,18 @@ serve(async (req) => {
       if (!DELAYS.includes(delay)) throw new UserError('Choose a delay from the list.');
       const subs = typeof body.subs === 'boolean' ? body.subs : null;
       const cut = typeof body.cut === 'boolean' ? body.cut : null;
+      const lineups = typeof body.lineups === 'boolean' ? body.lineups : null;
       // An endpoint belongs to one browser; whoever signs in there last gets its alerts.
       await sql`
-        insert into push_subscriptions (endpoint, user_id, p256dh, auth, scope, delay_seconds, sub_alerts, cut_alerts)
+        insert into push_subscriptions (endpoint, user_id, p256dh, auth, scope, delay_seconds, sub_alerts, cut_alerts, lineup_alerts)
         values (${endpoint}, ${userId}, ${keys.p256dh}, ${keys.auth}, ${body.scope}, ${delay},
-                coalesce(${subs}::boolean, true), coalesce(${cut}::boolean, true))
+                coalesce(${subs}::boolean, true), coalesce(${cut}::boolean, true), coalesce(${lineups}::boolean, false))
         on conflict (endpoint) do update set
           user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth,
           scope = excluded.scope, delay_seconds = excluded.delay_seconds,
           sub_alerts = coalesce(${subs}::boolean, push_subscriptions.sub_alerts),
-          cut_alerts = coalesce(${cut}::boolean, push_subscriptions.cut_alerts)`;
+          cut_alerts = coalesce(${cut}::boolean, push_subscriptions.cut_alerts),
+          lineup_alerts = coalesce(${lineups}::boolean, push_subscriptions.lineup_alerts)`;
       return json({ ok: true });
     }
 

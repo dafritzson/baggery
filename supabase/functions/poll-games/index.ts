@@ -19,7 +19,7 @@ import { autoCloseRounds } from '../_shared/close-round.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
 import { logCommissioner } from '../_shared/league-log.ts';
-import { queueCutAlerts, queueSubAlerts, sendBagAlerts, sendQueuedAlerts } from './alerts.ts';
+import { queueCutAlerts, queueLineupAlerts, queueSubAlerts, sendBagAlerts, sendQueuedAlerts } from './alerts.ts';
 import {
   type ProbableRow,
   boxscoreBatting,
@@ -32,6 +32,7 @@ import {
   playLines,
   savantHasVideo,
   scheduleGames,
+  scheduleLineups,
   scheduleProbables,
 } from './feed.ts';
 
@@ -317,8 +318,9 @@ async function syncProbables(rows: ProbableRow[], gamePks: number[]) {
  */
 async function syncSchedule(year: number, all: boolean): Promise<number> {
   const teams = await knownTeamIds(year);
-  // The person part brings each probable pitcher's hand, for the draft table's platoons.
-  const schedule = await mlb(`/schedule?sportId=1&season=${year}&gameType=F,D,L,W&hydrate=probablePitcher,person`);
+  // The person part brings each probable pitcher's hand, for the draft table's platoons; the
+  // lineups are for lineup alerts.
+  const schedule = await mlb(`/schedule?sportId=1&season=${year}&gameType=F,D,L,W&hydrate=probablePitcher,person,lineups`);
   const games = scheduleGames(schedule, year, teams);
   if (games.length) {
     const settled = all ? new Date(Date.now() - 24 * 3600 * 1000).toISOString() : new Date().toISOString();
@@ -353,6 +355,10 @@ async function syncSchedule(year: number, all: boolean): Promise<number> {
              and (mlb_games.home_score, mlb_games.away_score) is distinct from (excluded.home_score, excluded.away_score))`;
   }
   await syncProbables(scheduleProbables(schedule, games), games.map((g) => g.game_pk));
+  if (!all) {
+    // A failure here mustn't stop the scores.
+    await queueLineupAlerts(scheduleLineups(schedule, games)).catch((e) => console.error('lineup alerts', e));
+  }
   // Only the latest season's read counts for the cron job's schedule; reloading a past season
   // mustn't delay the next read of the one being played.
   await sql`update private.poller set schedule_synced_at = now() where ${year} = (select max(year) from seasons)`;

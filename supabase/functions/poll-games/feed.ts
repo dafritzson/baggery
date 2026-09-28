@@ -118,6 +118,35 @@ export function scheduleProbables(data: any, games: GameRow[]): ProbableRow[] {
   return [...rows.values()];
 }
 
+/** A team's posted starting lineup for a game: player ids, leadoff first. */
+export interface LineupRow {
+  game_pk: number;
+  mlb_team_id: number;
+  player_ids: number[];
+}
+
+/**
+ * The starting lineups posted for the games scheduleGames keeps, from the same schedule read with
+ * `hydrate=lineups`. A team's is missing until it's posted (usually 2–4 hours before first pitch).
+ */
+// deno-lint-ignore no-explicit-any
+export function scheduleLineups(data: any, games: GameRow[]): LineupRow[] {
+  const kept = new Set(games.map((g) => g.game_pk));
+  const rows = new Map<string, LineupRow>();
+  // deno-lint-ignore no-explicit-any
+  for (const g of (data?.dates ?? []).flatMap((d: any) => d.games ?? [])) {
+    if (!kept.has(g.gamePk) || g.status?.detailedState === 'Postponed') continue;
+    for (const side of ['home', 'away'] as const) {
+      const teamId: number | undefined = g.teams?.[side]?.team?.id;
+      // deno-lint-ignore no-explicit-any
+      const ids: number[] = (g.lineups?.[`${side}Players`] ?? []).map((p: any) => p?.id).filter(Boolean);
+      if (!teamId || !ids.length) continue;
+      rows.set(`${g.gamePk}:${teamId}`, { game_pk: g.gamePk, mlb_team_id: teamId, player_ids: ids });
+    }
+  }
+  return [...rows.values()];
+}
+
 /** Every player who batted in a game, from `/game/{gamePk}/boxscore`. */
 // deno-lint-ignore no-explicit-any
 export function boxscoreBatting(gamePk: number, data: any): { rows: BattingRow[]; players: { id: number; full_name: string }[] } {

@@ -212,7 +212,7 @@ function clockStatus(data: SeasonData, draft: Draft, turn: Turn | null, myTurn: 
   const forGhost = turn.ghost ? ' for the 👻 Ghost' : '';
   return {
     headline: myTurn ? `You're on the clock${forGhost}!` : `${teamLabel(data, team)} is on the clock${forGhost}`,
-    detail: `${turn.round > draft.rounds ? 'Ghost picks' : `Round ${turn.round}`} · Pick ${pickLabel(turn.slot, n, draft.rounds)} · #${actionCount + 1} overall`,
+    detail: `${turn.round > draft.rounds ? `Ghost pick ${pickLabel(turn.slot, n, draft.rounds)}` : `Round ${turn.round} · Pick ${(turn.slot % n) + 1}`} · #${actionCount + 1} overall`,
     last,
   };
 }

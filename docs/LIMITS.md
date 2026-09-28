@@ -155,6 +155,13 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   photo change: a few hundred a season.
   Settings reads the latest 20 only for the commissioner, ~6 KB per visit, plus 20 more on
   "Show older". No new function calls, realtime traffic or polling.
+- **Lineup alerts.** No new MLB requests or Edge Function calls: the schedule `poll-games`
+  already reads (every minute around game time, every 10 minutes otherwise) now also asks for the
+  posted lineups (`hydrate=lineups`). That makes each read bigger, up to ~100–150 KB more by the
+  World Series (18 hitters a game, every postseason game), but it's a download into the function
+  from MLB, not Supabase egress. Each read compares the lineups of games starting within a day with
+  `private.lineups` (a couple of dozen small rows) and only looks up drafted hitters and devices
+  when one changed: a few times a game. Off by default; the pushes are ~1 KB each.
 - **Realtime messages per second.** The old per-row Postgres Changes could burst 150–250 messages
   right after a poll on a busy day. One broadcast per poll keeps it to about one message per open
   app every 10 seconds. The draft room still uses Postgres Changes on low-traffic tables

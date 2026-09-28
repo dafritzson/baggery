@@ -24,7 +24,7 @@ import { CloseRoundCard } from '@/components/close-round-card';
 import { Columns } from '@/components/columns';
 import { Loader } from '@/components/loader';
 import { RoundChips, StandingsTable, TeamScoreboard } from '@/components/scoreboard';
-import { SeasonScrubber, roundTeamIds } from '@/components/season-scrubber';
+import { SeasonScrubber, rankedTeamIds, roundTeamIds } from '@/components/season-scrubber';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -140,7 +140,8 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
   const settled = atLatest || (at !== null && (at.day > lastDay || (at.day === lastDay && isDayEnd(timeline, at))));
   // Places moved since the previous stop in the same round.
   const prev = at ? previousStop(timeline, zoom, at) : null;
-  const teamIds = roundTeamIds(data, round);
+  // Only ranked teams move (the ghost team in round 2 is listed outside the ranking).
+  const teamIds = rankedTeamIds(data, round);
   const moves = new Map<string, number>();
   if (prev && days[prev.day].round === round && !futureRound) {
     const before = scoresAt(timeline, scores.games, scores.stats, prev, plays);

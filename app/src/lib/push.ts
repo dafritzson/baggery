@@ -1,5 +1,5 @@
-// Alerts on this device (bag, sub and cut alerts): web push, so web only (push.web.ts). An iOS app
-// would use expo-notifications; until then Settings doesn't offer them there.
+// Alerts on this device (bag, sub, cut and lineup alerts): web push, so web only (push.web.ts). An
+// iOS app would use expo-notifications; until then Settings doesn't offer them there.
 
 export type Scope = 'mine' | 'league';
 
@@ -10,6 +10,8 @@ export interface Prefs {
   subs: boolean;
   /** Cut alerts: 🥵 on the hot seat, 😮‍💨 off the chopping block. */
   cut: boolean;
+  /** Lineup alerts (off unless turned on): 📋 a starting lineup is posted, 🪑 a hitter is dropped from one. */
+  lineups: boolean;
 }
 
 /**

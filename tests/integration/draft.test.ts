@@ -603,7 +603,7 @@ describe('ghost team', () => {
     expect((await call('Daniel', 'draft', { draftId: draft3, action: 'start' })).ok).toBe(true);
     const { data: ghost } = await admin.from('fantasy_teams').select('id, name, slot, user_id').eq('season_id', SEASON_ID).eq('is_ghost', true).single();
     ghostId = ghost!.id;
-    expect(ghost).toMatchObject({ name: 'Ghost', slot: 8, user_id: null });
+    expect(ghost).toMatchObject({ name: '👻 Ghost', slot: 8, user_id: null });
     const { data: d } = await admin.from('drafts').select('pick_order, ghost_turns').eq('id', draft3).single();
     expect(d!.pick_order).toHaveLength(5);
     expect(d!.pick_order).not.toContain(ghostId);

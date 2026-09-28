@@ -15,7 +15,7 @@ import {
   valueAt,
   type Zoom,
 } from '@core/timeline.ts';
-import { inRound } from '@core/scoring.ts';
+import { facesCut, inRound } from '@core/scoring.ts';
 import type { FantasyRound } from '@core/types.ts';
 
 import { ThemedText } from '@/components/themed-text';
@@ -40,6 +40,12 @@ const colLabel = (g: GameInfo) => `${SERIES.find((s) => s.gameType === g.gameTyp
 /** The teams in a round (not knocked out before it; the ghost team from round 2). */
 export function roundTeamIds(data: SeasonData, round: FantasyRound): string[] {
   return data.teams.filter((t) => inRound({ eliminatedAfterRound: t.eliminated_after_round, isGhost: t.is_ghost }, round)).map((t) => t.id);
+}
+
+/** The teams in a round that are ranked and face its cut: all but the ghost team in round 2. */
+export function rankedTeamIds(data: SeasonData, round: FantasyRound): string[] {
+  const inIt = new Set(roundTeamIds(data, round));
+  return data.teams.filter((t) => inIt.has(t.id) && facesCut({ isGhost: t.is_ghost }, round)).map((t) => t.id);
 }
 
 /**
@@ -85,7 +91,7 @@ export function SeasonScrubber({
   const mine = data.myTeam?.id;
   const survivors = (r: FantasyRound) => data.season.survivors_after_round[r - 1] ?? roundTeamIds(data, r).length;
   const rounds = ([1, 2, 3] as FantasyRound[]).flatMap((r) => {
-    const lines = roundLines(timeline, games, stats, spells, r, roundTeamIds(data, r), survivors(r));
+    const lines = roundLines(timeline, games, stats, spells, r, roundTeamIds(data, r), survivors(r), rankedTeamIds(data, r));
     return lines ? [{ round: r, lines }] : [];
   });
   const current = rounds.find((r) => r.round === round);

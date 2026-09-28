@@ -4,6 +4,7 @@ import Svg, { Path } from 'react-native-svg';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { FilterSheet } from '@/components/filter-sheet';
+import { hoverTitle, noSelect, useHoldTip } from '@/components/hold-tip';
 import { InjuryChip } from '@/components/injury';
 import { PlatoonChip } from '@/components/platoon';
 import { ThemedText } from '@/components/themed-text';
@@ -63,7 +64,7 @@ type SortKey = 'name' | ColumnKey;
 export interface Column {
   key: ColumnKey;
   label: string;
-  /** What the label stands for, in the column picker. */
+  /** What the label stands for: in the column picker, and the header's tip (hover, or a finger held on it). */
   title: string;
   width: number;
   value: (row: PlayerRow) => number | null;
@@ -80,7 +81,7 @@ export interface Column {
   odds?: boolean;
   /** Shown instead of the formatted value, e.g. "2 · 7". */
   text?: (row: PlayerRow) => string | null;
-  /** Web: what resting the pointer on a cell says about it. */
+  /** Web: what resting the pointer on a cell, or holding a finger on it, says about it. */
   cellTitle?: (row: PlayerRow) => string | null;
   /** Underlined with dots, e.g. xBags adjusted for a platoon. */
   marked?: (row: PlayerRow) => boolean;
@@ -108,7 +109,7 @@ const rate = (key: ColumnKey, label: string, title: string, width = 52): Column 
 });
 
 export const COLUMNS: Column[] = [
-  { ...count('adv', 'Adv%', "His team's chance to get through this fantasy round", 54), format: (v) => `${Math.round(v)}%`, default: true, odds: true },
+  { ...count('tb', 'TB', 'Total bases', 44), default: true },
   {
     ...count('xBags', 'xBags', 'Expected TB across the rest of the postseason, from his starts and lineup spot against each hand', 58),
     format: oneDecimal,
@@ -117,18 +118,28 @@ export const COLUMNS: Column[] = [
     marked: (r) => !!r.platoon?.side,
     cellTitle: (r) => (r.platoon?.side ? 'Adjusted for his platoon: the starts he can expect against the likely starters' : null),
   },
+  { ...count('rdtb', 'RDTB', 'Regressed TB per game × expected round 1 games', 52), format: oneDecimal, default: true },
+  { ...count('tbExpected', 'TB·E[G]/162', 'TB per game × expected round 1 games', 96), format: oneDecimal, default: true },
+  { ...rate('rdslg', 'RDSLG', 'SLG regressed toward .435', 60), default: true },
+  { ...count('adv', 'Adv%', "His team's chance to get through this fantasy round", 54), format: (v) => `${Math.round(v)}%`, default: true, odds: true },
   {
     ...count('spot', 'Spot', 'Usual lineup spot (and against the other hand, when it differs)', 50),
     default: true,
     text: (r) => r.platoon?.spotLabel ?? null,
     cellTitle: (r) => spotTitle(r.platoon),
   },
-  count('wins', 'Wins', 'Team wins', 50),
   { key: 'bye', label: 'Bye', title: 'Team has a Wild Card bye', width: 44, value: (r) => (r.bye ? 1 : 0), format: (v) => (v ? '✓' : ''), default: true, flag: { yes: 'Bye', no: 'No bye' }, draft1: true },
-  { ...count('postPa', 'Post PA', 'Plate appearances this postseason', 66), default: true, postseason: true },
+  count('wins', 'Wins', 'Team wins', 50),
   { ...count('postTb', 'Post TB', 'Total bases this postseason', 66), default: true, postseason: true },
-  count('g', 'G', 'Games'),
+  { ...count('postPa', 'Post PA', 'Plate appearances this postseason', 66), default: true, postseason: true },
+  { ...count('tbPerGame', 'TB/G', 'Total bases per game', 50), format: (v) => v.toFixed(2) },
+  { ...rate('slg', 'SLG', 'Slugging percentage'), default: true },
+  { ...count('opsPlus', 'OPS+', 'OPS+ (100 is league average)', 58), default: true },
+  rate('ops', 'OPS', 'On-base plus slugging', 58),
+  rate('obp', 'OBP', 'On-base percentage'),
+  rate('avg', 'AVG', 'Batting average'),
   { ...count('pa', 'PA', 'Plate appearances', 44), default: true },
+  count('g', 'G', 'Games'),
   count('ab', 'AB', 'At-bats', 44),
   count('h', 'H', 'Hits'),
   count('doubles', '2B', 'Doubles'),
@@ -138,16 +149,6 @@ export const COLUMNS: Column[] = [
   count('rbi', 'RBI', 'Runs batted in', 44),
   count('bb', 'BB', 'Walks'),
   count('so', 'SO', 'Strikeouts', 44),
-  rate('avg', 'AVG', 'Batting average'),
-  rate('obp', 'OBP', 'On-base percentage'),
-  { ...rate('slg', 'SLG', 'Slugging percentage'), default: true },
-  rate('ops', 'OPS', 'On-base plus slugging', 58),
-  { ...count('opsPlus', 'OPS+', 'OPS+ (100 is league average)', 58), default: true },
-  { ...count('tb', 'TB', 'Total bases', 44), default: true },
-  { ...count('tbPerGame', 'TB/G', 'Total bases per game', 50), format: (v) => v.toFixed(2) },
-  { ...rate('rdslg', 'RDSLG', 'SLG regressed toward .435', 60), default: true },
-  { ...count('tbExpected', 'TB·E[G]/162', 'TB per game × expected round 1 games', 96), format: oneDecimal, default: true },
-  { ...count('rdtb', 'RDTB', 'Regressed TB per game × expected round 1 games', 52), format: oneDecimal, default: true },
 ];
 
 /** "Bats 2nd against RHP, 7th against LHP". */
@@ -169,17 +170,6 @@ const ROW_HEIGHT = 36;
 // Web only: the header row and name column stay in view while the table scrolls under them.
 const sticky = (edges: { top?: number; left?: number }, zIndex: number) =>
   ({ position: 'sticky', ...edges, zIndex }) as unknown as ViewStyle;
-
-/**
- * Web: shows `text` when the pointer rests on the element (react-native-web doesn't pass `title`
- * through). Phones have no hover; the column menu lists what each column is.
- */
-function hoverTitle(text: string) {
-  if (Platform.OS !== 'web') return undefined;
-  return (el: unknown) => {
-    (el as HTMLElement | null)?.setAttribute?.('title', text);
-  };
-}
 
 /** Compares with nulls last, whichever way the column is sorted. */
 function compareNullable(a: number | null, b: number | null, desc: boolean): number {
@@ -245,6 +235,8 @@ export function PlayerTable({
   const nameColumnWidth = tableWidth && !box ? { maxWidth: tableWidth * MAX_NAME_SHARE } : null;
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'tb', desc: true });
   const [pressedId, setPressedId] = useState<number | null>(null);
+  // Phones: a finger held on a header, or on a cell with a tip, says what it is.
+  const { hold, tip } = useHoldTip();
   // The bounds each filter menu offers, from every row it could filter.
   const bounds = useMemo(
     () => new Map(COLUMNS.map((c) => [c.key, c.flag ? [] : thresholds(filterSource.map(c.value))])),
@@ -293,7 +285,7 @@ export function PlayerTable({
       <View style={[styles.header, styles.cells, { borderBottomColor: theme.border }, box && [sticky({ top: 0 }, 1), fill]]}>
         {columns.map((c) => (
           <View key={c.key} style={{ minWidth: c.width, flexGrow: c.width, flexBasis: c.width }}>
-            <Pressable ref={hoverTitle(c.title)} onPress={() => sortBy(c.key)} style={styles.cell}>
+            <Pressable ref={hoverTitle(c.title)} onPress={() => sortBy(c.key)} onLongPress={hold(() => sortBy(c.key))} style={styles.cell}>
               <ThemedText
                 type="smallBold"
                 numberOfLines={1}
@@ -319,7 +311,7 @@ export function PlayerTable({
         ))}
       </View>
       {sorted.map((r, i) => (
-        <Pressable key={r.id} {...rowPress(r.id)} style={[rowStyle(r.id, i), styles.cells]}>
+        <Pressable key={r.id} {...rowPress(r.id)} onLongPress={hold(() => onSelect(r.id))} style={[rowStyle(r.id, i), styles.cells]}>
           {columns.map((c) => {
             const value = c.value(r);
             const title = c.cellTitle?.(r);
@@ -345,8 +337,9 @@ export function PlayerTable({
   return (
     <ThemedView
       type="backgroundElement"
-      style={[styles.table, box && styles.box, style]}
+      style={[styles.table, box && styles.box, noSelect, style]}
       onLayout={(e) => (box ? setOuterWidth : setTableWidth)(e.nativeEvent.layout.width)}>
+      {tip}
       {box && (
         // The box's width less its vertical scrollbar: sizing the name column to the outer width
         // left the last column under the scrollbar.
