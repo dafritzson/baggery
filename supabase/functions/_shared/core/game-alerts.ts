@@ -1,6 +1,7 @@
 // The text of poll-games' other push notifications, next to bag alerts (bag-alerts.ts): sub alerts
-// (a drafted hitter came off the bench or was replaced) and cut alerts (a team crossed the round's
-// cut line). Pure, so the unit tests can run it without Supabase.
+// (a drafted hitter came off the bench or was replaced), cut alerts (a team crossed the round's cut
+// line) and lineup alerts (a team posted its starting lineup, or dropped a drafted hitter from it).
+// Pure, so the unit tests can run it without Supabase.
 
 import { type Alert, type Owner, teamLabel } from './bag-alerts.ts';
 import { ordinal } from './bag-celebration.ts';
@@ -76,4 +77,54 @@ export function cutAlert(spot: CutSpot & Owner & { survivors: number }): Alert {
     ? spot.danger ? `Tied for ${place} at the cut: a drink-off if it ends this way.` : `Tied for ${place}. ${cut}`
     : `${spot.danger ? 'Down' : 'Up'} to ${place}. ${cut}`;
   return { title, body };
+}
+
+/**
+ * What a team's starting lineup says that's new: `posted` the first time it's seen, and after that
+ * who was in it and no longer is (`scratched`). `before` is the lineup as last seen, if any.
+ */
+export function lineupNews(before: number[] | undefined, lineup: number[]): { posted: boolean; scratched: number[] } {
+  if (!before) return { posted: true, scratched: [] };
+  return { posted: false, scratched: before.filter((id) => !lineup.includes(id)) };
+}
+
+/** A drafted hitter in a posted lineup (`spot` 1–9) or not in it (`spot` null). */
+export interface LineupHitter {
+  player: string;
+  spot: number | null;
+  /** On the injured list, as of the draft pool: out of the lineup for that, not on the bench. */
+  injured: boolean;
+  /** Whose hitter, for someone else's: "Mike". Null for the recipient's own. */
+  owner: string | null;
+}
+
+/**
+ * "📋 Los Angeles Dodgers lineup is in" / "Mookie Betts leading off, Freddie Freeman batting 3rd ·
+ * Will Smith on the bench 🪑". Someone else's hitters get their manager: "Freddie Freeman (Mike)
+ * batting 3rd". A hitter out of it who's on the injured list is "on the injured list 🩹".
+ */
+export function lineupAlert(mlbTeam: string, hitters: LineupHitter[]): Alert {
+  const name = (h: LineupHitter) => (h.owner ? `${h.player} (${h.owner})` : h.player);
+  const starting = hitters
+    .filter((h) => h.spot !== null)
+    .sort((a, b) => a.spot! - b.spot!)
+    .map((h) => `${name(h)} ${h.spot === 1 ? 'leading off' : `batting ${ordinal(h.spot!)}`}`);
+  const bench = hitters.filter((h) => h.spot === null && !h.injured).map(name);
+  const injured = hitters.filter((h) => h.spot === null && h.injured).map(name);
+  const parts = [
+    ...(starting.length ? [starting.join(', ')] : []),
+    ...(bench.length ? [`${listText(bench)} on the bench 🪑`] : []),
+    ...(injured.length ? [`${listText(injured)} on the injured list 🩹`] : []),
+  ];
+  return { title: `📋 ${mlbTeam} lineup is in`, body: parts.join(' · ') };
+}
+
+/** "🪑 Freddie Freeman is out of the lineup" / "A late change for the Los Angeles Dodgers · Bag Boys (Mike)". */
+export function scratchAlert(player: string, mlbTeam: string, owner: Owner): Alert {
+  return { title: `🪑 ${player} is out of the lineup`, body: `A late change for the ${mlbTeam} · ${teamLabel(owner)}` };
+}
+
+/** "A", "A and B", "A, B and C". */
+function listText(items: string[]): string {
+  return items.length === 1 ? items[0] : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }

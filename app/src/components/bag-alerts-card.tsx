@@ -71,7 +71,8 @@ function reachWarning(standing: Standing, scope: Scope | 'off', email: string | 
 /**
  * Alerts on this device: a notification ("👜 Shohei Ohtani got a bag") when your hitters, or
  * anyone's, get a bag, and with them sub alerts (👀 off the bench, 😠 replaced) and cut alerts (🥵 on
- * the hot seat, 😮‍💨 off the chopping block), each of which can be turned off. Web push, so web only
+ * the hot seat, 😮‍💨 off the chopping block), each of which can be turned off, and lineup alerts (📋
+ * a starting lineup is posted), which are off unless turned on. Web push, so web only
  * for now; on iPhone it takes the Home Screen app.
  */
 export function BagAlertsCard() {
@@ -115,7 +116,13 @@ export function BagAlertsCard() {
   }
 
   const on = state.kind === 'on' ? state : null;
-  const prefs: Prefs | null = on && { scope: on.scope, delaySeconds: on.delaySeconds, subs: on.subs, cut: on.cut };
+  const prefs: Prefs | null = on && {
+    scope: on.scope,
+    delaySeconds: on.delaySeconds,
+    subs: on.subs,
+    cut: on.cut,
+    lineups: on.lineups,
+  };
   const warning = reachWarning(standing, on?.scope ?? 'off', session?.user.email);
 
   return (
@@ -146,7 +153,15 @@ export function BagAlertsCard() {
               onChange={(v) => {
                 if (busy) return;
                 if (v === 'off') run(turnOffPush, { kind: 'off' }, 'Off on this device.');
-                else choose({ scope: v, delaySeconds: on?.delaySeconds ?? 0, subs: on?.subs ?? true, cut: on?.cut ?? true });
+                else {
+                  choose({
+                    scope: v,
+                    delaySeconds: on?.delaySeconds ?? 0,
+                    subs: on?.subs ?? true,
+                    cut: on?.cut ?? true,
+                    lineups: on?.lineups ?? false,
+                  });
+                }
               }}
             />
           </View>
@@ -177,6 +192,14 @@ export function BagAlertsCard() {
               </View>
               <ThemedText type="small" themeColor="textSecondary">
                 🥵 when a team drops below the cut, 😮‍💨 when it climbs back above. Checked after each game ends.
+              </ThemedText>
+              <ThemedText type="smallBold" themeColor="textSecondary">Lineups</ThemedText>
+              <View style={styles.row}>
+                <Toggle options={ON_OFF} value={on.lineups} onChange={(v) => !busy && choose({ ...prefs!, lineups: v })} />
+              </View>
+              <ThemedText type="small" themeColor="textSecondary">
+                📋 when a team posts its starting lineup, usually a few hours before first pitch: where your hitters bat, or
+                that they’re on the bench. 🪑 if a late change drops one.
               </ThemedText>
               <View style={styles.row}>
                 <Button

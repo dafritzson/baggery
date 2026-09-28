@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boxscoreBatting, boxscoreSubs, clipsForHits, highlightClips, linescoreLive, linescoreRuns, playHits, playLines, savantHasVideo, scheduleGames } from '../supabase/functions/poll-games/feed.ts';
+import { boxscoreBatting, boxscoreSubs, clipsForHits, highlightClips, linescoreLive, linescoreRuns, playHits, playLines, savantHasVideo, scheduleGames, scheduleLineups } from '../supabase/functions/poll-games/feed.ts';
 
 const team = (id: number, score?: number) => ({ team: { id }, score });
 
@@ -117,6 +117,19 @@ describe('box score feed', () => {
       pa: 5, ab: 4, h: 2, doubles: 1, triples: 0, hr: 1, bb: 1, hbp: 0, sf: 0, tb: 7, r: 2, rbi: 3,
     });
     expect(rows[1]).toMatchObject({ mlb_player_id: 3, mlb_team_id: 119, pa: 7, ab: 5, hbp: 1, sf: 1, tb: 0 });
+  });
+});
+
+describe('schedule lineups', () => {
+  it("reads each posted lineup, leadoff first, and skips a team that hasn't posted", () => {
+    const g = game(7, { lineups: { homePlayers: [{ id: 5 }, { id: 6 }], awayPlayers: [] } });
+    const games = scheduleGames({ dates: [{ games: [g] }] }, 2025, new Set([141, 119]));
+    expect(scheduleLineups({ dates: [{ games: [g] }] }, games)).toEqual([{ game_pk: 7, mlb_team_id: 119, player_ids: [5, 6] }]);
+  });
+
+  it('leaves out games it does not keep', () => {
+    const g = game(8, { lineups: { homePlayers: [{ id: 5 }] } });
+    expect(scheduleLineups({ dates: [{ games: [g] }] }, [])).toEqual([]);
   });
 });
 
