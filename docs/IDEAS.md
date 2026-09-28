@@ -60,6 +60,19 @@ after the CS do the same. Otherwise it's the same as above.
 That's just over the 2–3% target, and holds with only 2012–2025 seasons or each season's real
 bracket (3.0–3.4% and 3.3–3.8%). A pair has no hitter still alive about 0.2% of the time.
 
+### The ghost plays the CS round
+
+Raised 2026-09-27 (`--ghost-in-cs`). The 2 DS-out managers draft 1 undrafted hitter each with
+the last 2 picks of the CS draft, and the ghost plays the CS round with those 2, in the
+standings. It always advances: the bottom 2 of the 5 other teams are still the ones out. The 2
+CS-out managers then join it, and it drafts in the WS snake with the 3 finalists, placed by CS
+bags. Its first 2 turns add hitters to reach 4; later turns redraft like everyone else's, so it
+can replace a CS hitter knocked out.
+
+The ghost wins **6.0%** of the time (5.9% with only 2012–2025 seasons, 6.3% in each season's
+real bracket). With 2 hitters it finishes 4th in the CS bags 99% of the time, so it picks 4th
+and 5th in the WS snake, back to back and ahead of the finalists' later swaps.
+
 Still open:
 
 - What the ghost wins, e.g. a share of the pot.

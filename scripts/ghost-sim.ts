@@ -12,11 +12,17 @@
 // --two-hitters is the same with a ghost of 2: each pair of eliminated managers (the 2 out after
 // the DS, then the 2 out after the CS) gives 1 hitter, the best one still alive on either roster.
 //
+// With --ghost-in-cs, the ghost plays the CS round with its 2 hitters (drafted with the last picks
+// of Draft 3) and always advances; the bottom 2 of the 5 other teams are still the ones out. The 2
+// CS-out managers then join it, and it drafts in the WS snake with the finalists, placed by CS
+// bags: its first 2 turns add hitters (up to 4), later ones redraft like everyone else's.
+//
 //   npx tsx scripts/ghost-sim.ts                          1995–2025, 20,000 runs per season
 //   npx tsx scripts/ghost-sim.ts --from 2012 --runs 5000 --seed 7 --by-year
 //   npx tsx scripts/ghost-sim.ts --real-brackets          each season's real postseason bracket
 //   npx tsx scripts/ghost-sim.ts --own-rosters            Alex's version
 //   npx tsx scripts/ghost-sim.ts --two-hitters            Alex's version with a ghost of 2
+//   npx tsx scripts/ghost-sim.ts --ghost-in-cs            the ghost plays the CS round
 //
 // Each run takes a real season and plays today's 12-team postseason with its teams: in each
 // league the 3 division winners (seeds 1–3, the top 2 with byes) and the 3 best other records.
@@ -70,6 +76,7 @@ const REAL_BRACKETS = process.argv.includes('--real-brackets');
 const BY_YEAR = process.argv.includes('--by-year');
 const TWO_HITTERS = process.argv.includes('--two-hitters');
 const OWN_ROSTERS = TWO_HITTERS || process.argv.includes('--own-rosters');
+const GHOST_IN_CS = process.argv.includes('--ghost-in-cs');
 const POSTSEASON_HITTING = arg('postseason-hitting', 0.88);
 const SERIES_SHRINK = arg('series-shrink', 0.5);
 const SWING = arg('swing', 0.14);
@@ -330,6 +337,8 @@ interface Run {
    * still alive to give.
    */
   noneAlive: number[];
+  /** With --ghost-in-cs: the ghost's slot in the WS snake (0 = picks first). */
+  ghostSlot: number;
 }
 
 function simulate(ps: Postseason): Run {
@@ -386,18 +395,29 @@ function simulate(ps: Postseason): Run {
     return pick;
   };
   const snake = (order: number[], round: number) => (round % 2 ? [...order].reverse() : order);
-  const redraft = (order: number[], rosters: number[][], drafted: Uint8Array, r: number) => {
+  // A team short of 4 hitters adds instead of swapping. `who` is whose opinions a team drafts by.
+  const redraft = (order: number[], rosters: number[][], drafted: Uint8Array, r: number, who = (m: number) => m) => {
     const yielded = new Set<number>();
     let swaps = 0;
     for (let round = 0; round < 4; round++) {
       for (const m of snake(order, round)) {
         if (yielded.has(m)) continue;
-        const worth = (i: number) => (plays(r, i) ? opinion(m, r, i) : 0);
+        const o = who(m);
         const roster = rosters[m];
+        const add = best(o, r, drafted);
+        if (roster.length < 4) {
+          if (add >= 0) {
+            roster.push(add);
+            drafted[add] = 1;
+          } else {
+            yielded.add(m);
+          }
+          continue;
+        }
+        const worth = (i: number) => (plays(r, i) ? opinion(o, r, i) : 0);
         const worst = roster.reduce((w, i, k) => (worth(i) < worth(roster[w]) ? k : w), 0);
-        const add = best(m, r, drafted);
         const dead = !plays(r, roster[worst]);
-        if (add >= 0 && (dead || opinion(m, r, add) > worth(roster[worst]) * (1 + UPGRADE))) {
+        if (add >= 0 && (dead || opinion(o, r, add) > worth(roster[worst]) * (1 + UPGRADE))) {
           roster[worst] = add;
           drafted[add] = 1;
           swaps++;
@@ -480,7 +500,7 @@ function simulate(ps: Postseason): Run {
   const csOut = ranked2.slice(3).reverse();
   const sum = (ms: number[]) => ms.reduce((s, m) => s + total[m], 0);
   const ghostCSBags = ghostCS.reduce((s, g) => s + bags(L, g.i), 0);
-  const trigger = !OWN_ROSTERS && sum(dsOut) + ghostCSBags + sum(csOut) > sum(finalists);
+  const trigger = !OWN_ROSTERS && !GHOST_IN_CS && sum(dsOut) + ghostCSBags + sum(csOut) > sum(finalists);
   if (OWN_ROSTERS) noneAlive[1] = givers(csOut).filter((ms) => !give(ms, W)).length;
 
   // Draft 4 and the WS round, with the ghost picking last or first, with or without redrafting
@@ -523,9 +543,31 @@ function simulate(ps: Postseason): Run {
     return { win: g > top ? 1 : g === top ? 1 / (tied + 1) : 0, top, swaps, left };
   };
   const plain = wsRound(false, false);
+
+  // With --ghost-in-cs: the ghost (slot G) drafts in the WS snake by its CS bags, by the opinions
+  // of the first CS-out manager to join it.
+  let ghostSlot = -1;
+  let inCSWin = 0;
+  if (GHOST_IN_CS) {
+    const G = MANAGERS;
+    const rs = [...rosters.map((r) => [...r]), ghostCS.map((g) => g.i)];
+    const order = rank([...finalists, G], (m) => (m === G ? ghostCSBags : round2.get(m)!));
+    ghostSlot = order.indexOf(G);
+    redraft(order, rs, drafted.slice(), W, (m) => (m === G ? csOut[0] : m));
+    const top = Math.max(...finalists.map((m) => rosterBags(W, rs[m])));
+    const tied = finalists.filter((m) => rosterBags(W, rs[m]) === top).length;
+    const g = rosterBags(W, rs[G]);
+    inCSWin = g > top ? 1 : g === top ? 1 / (tied + 1) : 0;
+  }
+
   // With --own-rosters the ghost's draft picks always come last, so "first" is the same as "last".
   const redrafted = wsRound(true, false).win;
-  const win = OWN_ROSTERS
+  const win = GHOST_IN_CS
+    ? [
+        [inCSWin, inCSWin],
+        [inCSWin, inCSWin],
+      ]
+    : OWN_ROSTERS
     ? [
         [plain.win, plain.win],
         [redrafted, redrafted],
@@ -544,6 +586,7 @@ function simulate(ps: Postseason): Run {
     regularsLeft: [regularsBefore, plain.left],
     bagsToCS: [sum(finalists), sum(dsOut) + sum(csOut)],
     noneAlive,
+    ghostSlot,
   };
 }
 
@@ -638,6 +681,7 @@ interface Tally {
   regularsLeft: number[];
   bagsToCS: number[];
   noneAlive: number[];
+  ghostSlots: number[];
 }
 const tally = (): Tally => ({
   runs: 0,
@@ -654,6 +698,7 @@ const tally = (): Tally => ({
   regularsLeft: [0, 0],
   bagsToCS: [0, 0],
   noneAlive: [0, 0],
+  ghostSlots: [0, 0, 0, 0],
 });
 const all = tally();
 const withReal = tally();
@@ -676,6 +721,7 @@ for (const ps of postseasons) {
       r.regularsLeft.forEach((c, i) => (x.regularsLeft[i] += c));
       r.bagsToCS.forEach((b, i) => (x.bagsToCS[i] += b));
       r.noneAlive.forEach((c, i) => (x.noneAlive[i] += c));
+      if (r.ghostSlot >= 0) x.ghostSlots[r.ghostSlot]++;
     }
   }
 }
@@ -693,7 +739,14 @@ console.log(
     `horizon ${HORIZON}, upgrade ${UPGRADE}, noise ${NOISE}\n`,
 );
 const REDRAFT_LABELS = ['no redraft', 'redraft dead CS picks'];
-if (OWN_ROSTERS) {
+if (GHOST_IN_CS) {
+  const p = all.wins[0][0] / all.runs;
+  console.log(`Chance the ghost wins the WS round (it plays the CS round): ${pct(p)} ${margin(p, all.runs)}`);
+  console.log(
+    `\nThe ghost's slot in the WS snake, by CS bags: ` +
+      all.ghostSlots.map((c, i) => `${['1st', '2nd', '3rd', '4th'][i]} ${pct(c / all.runs, 1)}`).join(', '),
+  );
+} else if (OWN_ROSTERS) {
   const [givers, who] = TWO_HITTERS ? [1, 'pairs'] : [2, 'managers'];
   console.log(
     `Chance the ghost wins the WS round (each eliminated ${TWO_HITTERS ? 'pair' : 'manager'} gives a hitter ` +
@@ -721,7 +774,10 @@ if (OWN_ROSTERS) {
   );
 }
 
-if (BY_YEAR && OWN_ROSTERS) {
+if (BY_YEAR && GHOST_IN_CS) {
+  console.log('\nBy season');
+  for (const [year, t] of byYear) console.log(`  ${year}  ${pct(t.wins[0][0] / t.runs)}`);
+} else if (BY_YEAR && OWN_ROSTERS) {
   console.log('\nBy season');
   console.log(`  year${REDRAFT_LABELS.map((l) => l.padStart(26)).join('')}`);
   for (const [year, t] of byYear) console.log(`  ${year}${t.wins.map((w) => pct(w[0] / t.runs).padStart(26)).join('')}`);
