@@ -362,10 +362,12 @@ function seriesLabel(game: GameInfo): string {
 function statusLine(game: GameInfo): string {
   if (game.status === 'Preview' && game.detailedState !== 'Postponed') {
     if (game.startTimeTbd) return 'Time TBD';
-    // Eastern and Pacific, like a TV listing.
-    const at = (timeZone: string) =>
-      new Date(game.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone });
-    return `${at('America/New_York')} ET · ${at('America/Los_Angeles')} PT`;
+    // In the device's own time zone: "3:00 PM PT".
+    return new Date(game.start).toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'shortGeneric',
+    });
   }
   // "F/10" for extra innings (or a shortened game), like a box score.
   if (game.status === 'Final' && game.detailedState === 'Final' && game.live && game.live.inning !== 9) {
