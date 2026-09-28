@@ -24,7 +24,7 @@ import { type Tx, sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
 import { logCommissioner, playerName, teamLabel } from '../_shared/league-log.ts';
 import { roundRanking } from '../_shared/round-ranking.ts';
-import { type OnTheClock, alertOnTheClock } from './on-the-clock.ts';
+import { type DraftNotice, sendDraftAlerts } from './alerts.ts';
 
 interface Body {
   draftId: string;
@@ -58,6 +58,10 @@ interface Ctx {
   droppable: number[];
   candidates: AutodraftCandidate[];
   teamOwners: Map<string, string | null>;
+  /** The picks and passes autodraft made in this request (advance), for their alerts. */
+  autopicks: { turn: Turn; action: DraftAction }[];
+  /** This request made the draft's last pick. */
+  completed: boolean;
 }
 
 /** Who acts on a turn: the team on the clock, or on a ghost turn the eliminated manager's team making it. */
@@ -124,6 +128,8 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
       injured: p.injured_list !== null,
     })),
     teamOwners: new Map(teams.map((t) => [t.id, t.user_id])),
+    autopicks: [],
+    completed: false,
   };
 }
 
@@ -168,10 +174,65 @@ async function advance(tx: Tx, ctx: Ctx) {
     const action = autodraftAction(ctx.state, ctx.candidates, ctx.droppable);
     if (!action) break;
     await commit(tx, ctx, action, null, true);
+    ctx.autopicks.push({ turn, action });
   }
   if (!nextTurn(ctx.state.config, ctx.state.actions)) {
     await tx`update drafts set status = 'complete' where id = ${ctx.draft.id}`;
+    ctx.completed = true;
   }
+}
+
+/**
+ * The alerts a committed action sends (alerts.ts): the manager it put on the clock, everyone when
+ * it started or finished the draft, and whoever autodraft picked for. Not the one who acted, nor
+ * an autodraft team on the clock, whose pick is made for it.
+ */
+function notices(ctx: Ctx, before: Turn | null, userId: string, action: Body['action']): DraftNotice[] {
+  const out: DraftNotice[] = [];
+  const draftNumber = ctx.draft.number;
+  const ownerOf = (turn: Turn) => ctx.teamOwners.get(turnOwner(turn)) ?? null;
+  // An undo's action was loaded before it was deleted.
+  const next = nextTurn(ctx.state.config, action === 'undo' ? ctx.state.actions.slice(0, -1) : ctx.state.actions);
+  let onClock: string | null = null;
+  if (next) {
+    const owner = ownerOf(next);
+    const changed = action === 'start' || action === 'undo' || !before || turnOwner(next) !== turnOwner(before);
+    if (owner && owner !== userId && changed && !ctx.autodraftTeams.has(turnOwner(next))) {
+      onClock = owner;
+      out.push({ type: 'on-the-clock', userId: owner, draftNumber, kind: ctx.draft.kind, turn: next });
+    }
+  }
+  if (action === 'start') {
+    const slots = ctx.state.config.order.flatMap((teamId, i): [string, number][] => {
+      const owner = ctx.teamOwners.get(teamId);
+      return owner ? [[owner, i + 1]] : [];
+    });
+    out.push({ type: 'started', seasonId: ctx.draft.season_id, draftNumber, slots, skip: userId, onClock });
+  }
+  for (const { turn, action: pick } of ctx.autopicks) {
+    const owner = ownerOf(turn);
+    if (!owner || owner === userId) continue;
+    out.push({
+      type: 'autopick',
+      userId: owner,
+      draftNumber,
+      round: turn.round,
+      ghostTeamId: turn.ghost ? turn.teamId : null,
+      addPlayerId: pick.type === 'pick' ? pick.addPlayerId : null,
+      dropPlayerId: pick.type === 'pick' ? pick.dropPlayerId ?? null : null,
+    });
+  }
+  if (ctx.completed) out.push({ type: 'done', seasonId: ctx.draft.season_id, draftNumber, skip: userId });
+  return out;
+}
+
+/** Sends alerts after the response, so the action doesn't wait on push services. */
+async function alert(notices: DraftNotice[]) {
+  if (!notices.length) return;
+  const sending = sendDraftAlerts(notices).catch((e) => console.error('draft alerts failed', e));
+  const runtime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime;
+  if (runtime) runtime.waitUntil(sending);
+  else await sending;
 }
 
 /** Logs a pick the commissioner made for someone else's team. */
@@ -209,11 +270,11 @@ async function requireLive(ctx: Ctx) {
  * draft row, and loads the full draft (players, rosters, the pool) only when switching on for
  * the team that's on the clock, which is the one case where it has to pick right away.
  */
-async function setAutodraft(body: Body, userId: string) {
+async function setAutodraft(body: Body, userId: string): Promise<DraftNotice[]> {
   const teamId = body.teamId;
   if (!teamId) throw new UserError('teamId is required.');
   const on = !!body.autodraft;
-  await sql.begin(async (tx) => {
+  return await sql.begin(async (tx): Promise<DraftNotice[]> => {
     const [draft] = await tx<DraftRow[]>`
       select id, season_id, kind, status, pick_order, rounds, ghost_turns from drafts where id = ${body.draftId} for update`;
     if (!draft) throw new UserError('Draft not found.', 404);
@@ -232,7 +293,7 @@ async function setAutodraft(body: Body, userId: string) {
         details: { draftId: draft.id, teamId, autodraft: on },
       });
     }
-    if (!on || draft.status !== 'live') return;
+    if (!on || draft.status !== 'live') return [];
 
     const actions = await tx`
       select type, fantasy_team_id from draft_actions where draft_id = ${draft.id} order by action_number`;
@@ -250,8 +311,10 @@ async function setAutodraft(body: Body, userId: string) {
         a.type === 'yield' ? { type: 'yield', teamId: a.fantasy_team_id } : { type: 'pick', teamId: a.fantasy_team_id, addPlayerId: 0 },
       ),
     );
-    if (!turn || turnOwner(turn) !== teamId) return;
-    await advance(tx, await load(tx, draft.id));
+    if (!turn || turnOwner(turn) !== teamId) return [];
+    const ctx = await load(tx, draft.id);
+    await advance(tx, ctx);
+    return notices(ctx, turn, userId, 'set-autodraft');
   });
 }
 
@@ -262,13 +325,13 @@ serve(async (req) => {
   if (!body.draftId) throw new UserError('draftId is required.');
 
   if (body.action === 'set-autodraft') {
-    await setAutodraft(body, userId);
+    await alert(await setAutodraft(body, userId));
     // Visible in the function's logs, to see where a slow toggle spends its time.
     console.log(JSON.stringify({ action: body.action, ms: Date.now() - started }));
     return json({ ok: true });
   }
 
-  const onTheClock = await sql.begin(async (tx): Promise<OnTheClock | null> => {
+  const sent = await sql.begin(async (tx): Promise<DraftNotice[]> => {
     const ctx = await load(tx, body.draftId);
     const commissioner = await isCommissioner(ctx.draft.season_id, userId);
     const commissionerOnly = () => {
@@ -427,23 +490,9 @@ serve(async (req) => {
         throw new UserError('Unknown action.');
     }
 
-    // Whoever the action put on the clock hears about it: not autodraft teams, whose pick is made
-    // for them, nor the one who acted (a commissioner's undo of their own pick, say).
-    const next = nextTurn(ctx.state.config, body.action === 'undo' ? ctx.state.actions.slice(0, -1) : ctx.state.actions);
-    if (!next) return null;
-    const owner = ctx.teamOwners.get(turnOwner(next));
-    const changed = body.action === 'start' || body.action === 'undo' || !turn || turnOwner(next) !== turnOwner(turn);
-    if (!owner || owner === userId || !changed || ctx.autodraftTeams.has(turnOwner(next))) return null;
-    return { userId: owner, draftNumber: ctx.draft.number, kind: ctx.draft.kind, turn: next };
+    return notices(ctx, turn, userId, body.action);
   });
-
-  if (onTheClock) {
-    // Sent after the response, so the pick doesn't wait on push services.
-    const sending = alertOnTheClock(onTheClock).catch((e) => console.error('draft alert failed', e));
-    const runtime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime;
-    if (runtime) runtime.waitUntil(sending);
-    else await sending;
-  }
+  await alert(sent);
 
   console.log(JSON.stringify({ action: body.action, ms: Date.now() - started }));
   return json({ ok: true });

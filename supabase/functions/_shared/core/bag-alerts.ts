@@ -79,7 +79,7 @@ export function testAlert(scope: 'off' | 'mine' | 'league'): Alert {
         ? "You'll get one when one of your hitters gets a bag."
         : scope === 'league'
           ? "You'll get one when anyone's hitter gets a bag."
-          : "You'll get one when you're on the clock in a draft.",
+          : "You'll get your draft alerts here.",
   };
 }
 

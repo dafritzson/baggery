@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { onTheClockAlert } from '../supabase/functions/_shared/core/draft-alerts.ts';
+import { autopickAlert, draftDoneAlert, draftStartedAlert, onTheClockAlert } from '../supabase/functions/_shared/core/draft-alerts.ts';
 
 describe('onTheClockAlert', () => {
   it('asks for a pick in the initial draft', () => {
@@ -20,5 +20,40 @@ describe('onTheClockAlert', () => {
     expect(onTheClockAlert({ draftNumber: 4, kind: 'redraft', round: 1, ghost: { ...ghost, kind: 'redraft' } }).body).toBe(
       'Draft 4: pick a hitter for 👻 Ghost, or pass',
     );
+  });
+});
+
+describe('draftStartedAlert', () => {
+  it('says where you pick', () => {
+    expect(draftStartedAlert(2, 5)).toEqual({ title: '📣 Draft 2 is live', body: 'You pick 5th in round 1' });
+    expect(draftStartedAlert(1, 1).body).toBe('You pick 1st in round 1');
+  });
+
+  it('points a manager without a spot at the draft room', () => {
+    expect(draftStartedAlert(3, null).body).toBe('Follow the picks in the draft room');
+  });
+});
+
+describe('autopickAlert', () => {
+  const pick = { draftNumber: 2, round: 3, player: 'Juan Soto', dropped: null };
+
+  it('names the hitter taken, and the one dropped', () => {
+    expect(autopickAlert(pick)).toEqual({ title: '🤖 Autodraft took Juan Soto', body: 'Draft 2, round 3' });
+    expect(autopickAlert({ ...pick, dropped: 'Aaron Judge' }).body).toBe('Draft 2, round 3, dropping Aaron Judge');
+  });
+
+  it('says when it passed', () => {
+    expect(autopickAlert({ ...pick, player: null }).title).toBe('🤖 Autodraft passed for you');
+  });
+
+  it('names the ghost on a ghost turn', () => {
+    expect(autopickAlert({ ...pick, ghost: '👻 Ghost' }).title).toBe('🤖 Autodraft took Juan Soto for 👻 Ghost');
+    expect(autopickAlert({ ...pick, player: null, ghost: '👻 Ghost' }).title).toBe('🤖 Autodraft passed for 👻 Ghost');
+  });
+});
+
+describe('draftDoneAlert', () => {
+  it('names the draft', () => {
+    expect(draftDoneAlert(4).title).toBe('✅ Draft 4 is done');
   });
 });

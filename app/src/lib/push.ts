@@ -17,6 +17,12 @@ export interface Prefs {
   lineups: boolean;
   /** Draft alerts (on unless turned off): ⏰ your team is on the clock. */
   draft: boolean;
+  /** 📣 a draft started (on unless turned off). */
+  draftStarted: boolean;
+  /** 🤖 autodraft picked for your team (off unless turned on). */
+  autopicks: boolean;
+  /** ✅ a draft is done (on unless turned off). */
+  draftDone: boolean;
 }
 
 /**

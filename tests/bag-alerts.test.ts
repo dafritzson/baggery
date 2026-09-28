@@ -71,6 +71,6 @@ describe('testAlert', () => {
   it('matches the chosen scope', () => {
     expect(testAlert('mine').body).toContain('your hitters');
     expect(testAlert('league').body).toContain("anyone's");
-    expect(testAlert('off').body).toContain('on the clock');
+    expect(testAlert('off').body).toContain('draft alerts');
   });
 });

@@ -24,8 +24,22 @@ const DELAYS = [
   { value: 120, label: '2m' },
 ];
 
-/** A device's choices before it has any: what turning one alert on starts from. */
-const DEFAULTS: Prefs = { scope: 'off', delaySeconds: 0, bags: true, subs: true, cut: true, lineups: false, draft: false };
+/** What turning the first alert on starts from: every draft alert but autodraft's, and game alerts off. */
+const DEFAULTS: Prefs = {
+  scope: 'off',
+  delaySeconds: 0,
+  bags: true,
+  subs: true,
+  cut: true,
+  lineups: false,
+  draft: true,
+  draftStarted: true,
+  autopicks: false,
+  draftDone: true,
+};
+
+/** With alerts off on this device, every switch shows off. */
+const OFF: Prefs = { ...DEFAULTS, draft: false, draftStarted: false, draftDone: false };
 
 /** Where the signed-in account stands in the season being played, which is what alerts follow. */
 type Standing = 'none' | 'not-member' | 'no-team' | 'out' | 'playing';
@@ -68,7 +82,8 @@ function reachWarning(standing: Standing, scope: Scope, email: string | undefine
 }
 
 /**
- * Alerts on this device, in two cards. Draft alerts: ⏰ you're on the clock. Game alerts, for your
+ * Alerts on this device, in two cards. Draft alerts: ⏰ you're on the clock, 📣 a draft started, 🤖
+ * autodraft picked for you (off unless turned on), ✅ a draft is done. Game alerts, for your
  * hitters or everyone's: bags, subs, the cut line and lineups (off unless turned on), each with its
  * own switch, and a spoiler delay. Turning the first one on asks for permission and subscribes
  * this browser; turning the last one off unsubscribes it. Web push, so web only for now; on iPhone
@@ -124,12 +139,12 @@ export function AlertsSettings() {
   }
 
   const on = state.kind === 'on' ? state : null;
-  const prefs: Prefs = on ?? DEFAULTS;
+  const prefs: Prefs = on ?? OFF;
 
   function save(change: Partial<Prefs>) {
     if (busy) return;
-    const next = { ...prefs, ...change };
-    if (next.scope === 'off' && !next.draft) {
+    const next = { ...(on ?? DEFAULTS), ...change };
+    if (next.scope === 'off' && !next.draft && !next.draftStarted && !next.autopicks && !next.draftDone) {
       run(turnOffPush, { kind: 'off' }, 'Alerts are off on this device.');
     } else {
       run(() => savePush(next), { kind: 'on', ...next }, on ? undefined : 'On. Send a test to check it works.');
@@ -142,7 +157,15 @@ export function AlertsSettings() {
   return (
     <>
       <Card title="Draft alerts">
-        <AlertRow icon="⏰" name="On the clock" detail="When it’s your turn to pick" value={prefs.draft} onChange={(v) => save({ draft: v })} />
+        <View>
+          <AlertRow icon="⏰" name="On the clock" detail="When it’s your turn to pick" value={prefs.draft} onChange={(v) => save({ draft: v })} />
+          <Divider />
+          <AlertRow icon="📣" name="Draft started" detail="When the commissioner starts a draft" value={prefs.draftStarted} onChange={(v) => save({ draftStarted: v })} />
+          <Divider />
+          <AlertRow icon="🤖" name="Autodraft picks" detail="When autodraft picks for you" value={prefs.autopicks} onChange={(v) => save({ autopicks: v })} />
+          <Divider />
+          <AlertRow icon="✅" name="Draft done" detail="When the last pick is made" value={prefs.draftDone} onChange={(v) => save({ draftDone: v })} />
+        </View>
       </Card>
       <Card
         title="Game alerts"
