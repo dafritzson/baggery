@@ -157,8 +157,18 @@ export interface AutodraftCandidate {
   injured?: boolean;
 }
 
+/** A player a manager queued up for autodraft, and in a redraft who to drop for him. */
+export interface QueueEntry {
+  playerId: PlayerId;
+  /** Unset: whoever autodraft would drop (MLB team eliminated). */
+  dropPlayerId?: PlayerId;
+}
+
 /**
- * The action autodraft takes for the team on the clock.
+ * The action autodraft takes for the team on the clock. First the manager's queue (whoever makes
+ * the turn), top to bottom: the first queued player still available, dropping the player queued
+ * with him (if he's still on the roster) or else a droppable one; entries that can't be made are
+ * skipped. The queue may hold injured players: that's the manager's call. Then, as without one:
  * - Initial draft: the available player with the most regular-season TB, passing over injured ones.
  * - Redraft: drop the first droppable player (MLB team eliminated, or an injury the group
  *   voted on) and add the best available player; yield when nothing needs replacing.
@@ -167,23 +177,31 @@ export function autodraftAction(
   state: DraftState,
   candidates: AutodraftCandidate[],
   droppable: PlayerId[],
+  queue: QueueEntry[] = [],
 ): DraftAction | null {
   const turn = nextTurn(state.config, state.actions);
   if (!turn) return null;
   const teamId = turn.teamId;
-
-  const best = candidates
-    .filter((c) => !c.injured && state.eligible.has(c.playerId) && !state.everRostered.has(c.playerId))
-    .sort((a, b) => b.regularSeasonTb - a.regularSeasonTb || a.playerId - b.playerId)[0];
+  const available = (id: PlayerId) => state.eligible.has(id) && !state.everRostered.has(id);
 
   const roster = state.rosters.get(teamId) ?? [];
-  if (state.config.kind === 'initial' || turn.ghost?.kind === 'add' || (turn.ghost && roster.length < ROSTER_SIZE)) {
-    return best ? { type: 'pick', teamId, addPlayerId: best.playerId } : null;
+  const filling = state.config.kind === 'initial' || turn.ghost?.kind === 'add' || (turn.ghost && roster.length < ROSTER_SIZE);
+  const autoDrop = droppable.find((p) => roster.includes(p));
+
+  for (const entry of queue) {
+    if (!available(entry.playerId)) continue;
+    if (filling) return { type: 'pick', teamId, addPlayerId: entry.playerId };
+    const drop = entry.dropPlayerId !== undefined && roster.includes(entry.dropPlayerId) ? entry.dropPlayerId : autoDrop;
+    if (drop !== undefined) return { type: 'pick', teamId, addPlayerId: entry.playerId, dropPlayerId: drop };
   }
 
-  const drop = droppable.find((p) => roster.includes(p));
-  if (drop === undefined || !best) return { type: 'yield', teamId };
-  return { type: 'pick', teamId, addPlayerId: best.playerId, dropPlayerId: drop };
+  const best = candidates
+    .filter((c) => !c.injured && available(c.playerId))
+    .sort((a, b) => b.regularSeasonTb - a.regularSeasonTb || a.playerId - b.playerId)[0];
+
+  if (filling) return best ? { type: 'pick', teamId, addPlayerId: best.playerId } : null;
+  if (autoDrop === undefined || !best) return { type: 'yield', teamId };
+  return { type: 'pick', teamId, addPlayerId: best.playerId, dropPlayerId: autoDrop };
 }
 
 /**

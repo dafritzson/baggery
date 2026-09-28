@@ -91,6 +91,8 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
   takes his team's expected games less the same missed ones. Which table columns show is each person's choice, saved in their browser. `season_mlb_teams` holds each team's wins and Wild Card bye.
 - `drafts`, `draft_actions`: every pick or yield, numbered. `unique(draft_id, action_number)`
   prevents double picks.
+- `draft_queue`: each manager's ranked players for a draft, which autodraft takes first (and in a
+  redraft who each replaces). Readable only by its manager; saved through the `draft` function.
 - `roster_spells`: (team, player, from, to) intervals. `unique(season_id, mlb_player_id)`
   enforces "one roster ever". Stats count when `game.start_time` falls inside a spell.
 

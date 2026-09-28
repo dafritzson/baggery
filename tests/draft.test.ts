@@ -164,6 +164,46 @@ describe('autodraftAction', () => {
     const s = state(redraft, { rosters: new Map([['A', [10, 11, 12, 13]]]) });
     expect(autodraftAction(s, candidates, [99])).toEqual(yieldTurn('A'));
   });
+
+  describe('with a queue', () => {
+    it('initial draft: takes the first queued player still available, however few TB he has', () => {
+      const s = state(initial, { everRostered: new Set([7]) });
+      expect(autodraftAction(s, candidates, [], [{ playerId: 7 }, { playerId: 1 }, { playerId: 2 }])).toEqual(pick('A', 1));
+    });
+
+    it('skips queued players who are taken or not eligible, then falls back to the most TB', () => {
+      const s = state(initial, { everRostered: new Set([7]), eligible: new Set([1, 2, 3]) });
+      expect(autodraftAction(s, candidates, [], [{ playerId: 7 }, { playerId: 50 }])).toEqual(pick('A', 2));
+    });
+
+    it('takes a queued injured player: that was the manager’s call', () => {
+      const s = state(initial);
+      expect(autodraftAction(s, [...candidates, { playerId: 4, regularSeasonTb: 400, injured: true }], [], [{ playerId: 4 }])).toEqual(pick('A', 4));
+    });
+
+    it('redraft: drops the player queued with him, even one whose team is alive', () => {
+      const s = state(redraft, { rosters: new Map([['A', [10, 11, 12, 13]]]) });
+      expect(autodraftAction(s, candidates, [12], [{ playerId: 1, dropPlayerId: 11 }])).toEqual(pick('A', 1, 11));
+    });
+
+    it('redraft: with no drop queued, or one already gone, drops a dead hitter', () => {
+      const s = state(redraft, { rosters: new Map([['A', [10, 11, 12, 13]]]) });
+      expect(autodraftAction(s, candidates, [12], [{ playerId: 1 }])).toEqual(pick('A', 1, 12));
+      expect(autodraftAction(s, candidates, [12], [{ playerId: 1, dropPlayerId: 99 }])).toEqual(pick('A', 1, 12));
+    });
+
+    it('redraft: skips an entry with nobody to drop, and yields when none can be made', () => {
+      const s = state(redraft, { rosters: new Map([['A', [10, 11, 12, 13]]]) });
+      expect(autodraftAction(s, candidates, [], [{ playerId: 1 }, { playerId: 3, dropPlayerId: 13 }])).toEqual(pick('A', 3, 13));
+      expect(autodraftAction(s, candidates, [], [{ playerId: 1 }])).toEqual(yieldTurn('A'));
+    });
+
+    it('every queued pick is legal', () => {
+      const s = state(redraft, { rosters: new Map([['A', [10, 11, 12, 13]]]) });
+      const action = autodraftAction(s, candidates, [], [{ playerId: 3, dropPlayerId: 13 }])!;
+      expect(validateAction(s, action)).toBeNull();
+    });
+  });
 });
 
 describe('draftable', () => {
@@ -305,5 +345,10 @@ describe('ghost turns', () => {
     const redraftTurn = s4([pick('A', 5, 10), pick('B', 6, 20), pick('G', 7), pick('G', 8), pick('B', 9, 21), pick('A', 14, 11), pick('A', 15, 12), pick('B', 16, 22)]);
     expect(autodraftAction(redraftTurn, candidates, [31])).toEqual(pick('G', 2, 31));
     expect(autodraftAction(redraftTurn, candidates, [])).toEqual(yieldTurn('G'));
+  });
+
+  it('a ghost add takes the queued player without a drop', () => {
+    const add = s4([pick('A', 5, 10), pick('B', 6, 20)]);
+    expect(autodraftAction(add, [{ playerId: 2, regularSeasonTb: 350 }], [], [{ playerId: 1, dropPlayerId: 30 }])).toEqual(pick('G', 1));
   });
 });

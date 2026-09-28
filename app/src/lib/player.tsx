@@ -2,12 +2,21 @@ import { createContext, type ReactNode, use, useEffect, useState } from 'react';
 
 import { PlayerPopup } from '@/components/player-popup';
 
-/** Lets the popup draft a player: the draft room provides it while someone can pick. */
+/**
+ * Lets the popup draft a player, or queue him: the draft room provides it while someone can pick
+ * or you can queue.
+ */
 export interface DraftAction {
   /** "Draft", or "Draft for <team>" when the commissioner picks for someone. */
   label: string;
   canDraft: (playerId: number) => boolean;
   draft: (playerId: number) => void;
+  /** Your draft queue (see components/draft-queue), when you have turns in this draft. */
+  queue?: {
+    canQueue: (playerId: number) => boolean;
+    has: (playerId: number) => boolean;
+    toggle: (playerId: number) => void;
+  };
 }
 
 // Two contexts: components that only open the popup (or register the draft action) don't

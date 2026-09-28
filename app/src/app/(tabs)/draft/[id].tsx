@@ -9,6 +9,7 @@ import { type DraftConfig, ROSTER_SIZE, type Turn, draftTurns, nextTurn } from '
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { Columns } from '@/components/columns';
+import { QueueList, queueTarget, useDraftQueue } from '@/components/draft-queue';
 import { injuryText } from '@/components/injury';
 import { Loader } from '@/components/loader';
 import { PlayerName } from '@/components/player-name';
@@ -27,7 +28,7 @@ import { type Draft, type DraftActionRow, type SeasonData, coreActions, currentR
 import { ownerLine, ownerName, teamLabel, teamName } from '@/lib/teams';
 import { callFunction } from '@/lib/supabase';
 
-type Tab = 'players' | 'board' | 'rosters';
+type Tab = 'players' | 'queue' | 'board' | 'rosters';
 
 export default function DraftRoomScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -50,7 +51,7 @@ export default function DraftRoomScreen() {
 
 function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; refetch: () => void }) {
   const wide = useLayout() === 'wide';
-  const [tab, setTab] = useState<Tab>('players');
+  const [chosenTab, setTab] = useState<Tab>('players');
   const [selected, setSelected] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,12 +71,21 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
   // The player popup's Draft button opens the pick sheet, for anyone the drafter can still take.
   const draftable = useMemo(() => new Set(availablePlayers(data).map((p) => p.id)), [data]);
   const board = useDraftBoard(data, draft);
+  // Your queue, for autodraft to pick from while you're away. It also adds and removes from the popup.
+  const target = queueTarget(data, draft);
+  const canQueue = !!target;
+  const queue = useDraftQueue(draft.id, canQueue, draftable);
   const draftAction = useMemo(
     (): DraftAction | null =>
-      canAct
-        ? { label: onBehalfOf ? `Draft for ${onBehalfOf}` : 'Draft', canDraft: (id) => draftable.has(id), draft: setSelected }
+      canAct || canQueue
+        ? {
+            label: onBehalfOf ? `Draft for ${onBehalfOf}` : 'Draft',
+            canDraft: (id) => canAct && draftable.has(id),
+            draft: setSelected,
+            queue: canQueue ? { canQueue: (id) => draftable.has(id), has: queue.has, toggle: queue.toggle } : undefined,
+          }
         : null,
-    [canAct, onBehalfOf, draftable],
+    [canAct, canQueue, onBehalfOf, draftable, queue],
   );
   useDraftAction(draftAction);
 
@@ -97,6 +107,9 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
       onPress={() => run({ action: 'yield' })}
     />
   );
+  // The Queue tab goes away once you have no turns left to queue for.
+  const tab = chosenTab === 'queue' && !target ? 'players' : chosenTab;
+  const queued = queue.entries.filter((e) => draftable.has(e.playerId)).length;
   const autodraft = myTeam && draft.status !== 'complete' && (
     <View style={styles.switchRow}>
       <ThemedText type="small" style={{ flex: 1 }}>Autodraft for me</ThemedText>
@@ -108,8 +121,11 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
   );
   const tabs = (
     <>
-      <Segmented value={tab} onChange={setTab} />
+      <Segmented value={tab} onChange={setTab} queue={target ? (queued ? `Queue · ${queued}` : 'Queue') : null} />
       {tab === 'players' && <PlayersList data={data} board={board} />}
+      {tab === 'queue' && target && (
+        <QueueList data={data} queue={queue} available={draftable} dropFrom={target.dropFrom} autodraft={autodraft} />
+      )}
       {tab === 'board' && <Board data={data} draft={draft} config={config} />}
       {tab === 'rosters' && <Rosters data={data} draft={draft} />}
     </>
@@ -300,10 +316,12 @@ function AutodraftSwitch({ value, onChange }: { value: boolean; onChange: (v: bo
   );
 }
 
-function Segmented({ value, onChange }: { value: Tab; onChange: (t: Tab) => void }) {
+/** The draft room's tabs. `queue` is the Queue tab's label, or null without one. */
+function Segmented({ value, onChange, queue }: { value: Tab; onChange: (t: Tab) => void; queue: string | null }) {
   const theme = useTheme();
   const tabs: [Tab, string][] = [
     ['players', 'Players'],
+    ...(queue ? [['queue', queue] as [Tab, string]] : []),
     ['board', 'Board'],
     ['rosters', 'Rosters'],
   ];
