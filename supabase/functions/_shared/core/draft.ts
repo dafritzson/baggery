@@ -104,14 +104,27 @@ export function applyAction(state: DraftState, action: DraftAction): DraftState 
   return { ...state, actions: [...state.actions, action], rosters, everRostered };
 }
 
+/**
+ * Whether a pool player can be drafted: his MLB team is alive and he's on its active roster, or,
+ * in Draft 1 only (before postseason rosters are set), on its injured list with time to come back.
+ */
+export function draftable(
+  player: { onActiveRoster: boolean; injured: boolean; eliminated: boolean },
+  draftNumber: number,
+): boolean {
+  return !player.eliminated && (player.onActiveRoster || (draftNumber === 1 && player.injured));
+}
+
 export interface AutodraftCandidate {
   playerId: PlayerId;
   regularSeasonTb: number;
+  /** On the injured list: managers may take the gamble, autodraft doesn't. */
+  injured?: boolean;
 }
 
 /**
  * The action autodraft takes for the team on the clock.
- * - Initial draft: the available player with the most regular-season TB.
+ * - Initial draft: the available player with the most regular-season TB, passing over injured ones.
  * - Redraft: drop the first droppable player (MLB team eliminated, or an injury the group
  *   voted on) and add the best available player; yield when nothing needs replacing.
  */
@@ -125,7 +138,7 @@ export function autodraftAction(
   const teamId = turn.teamId;
 
   const best = candidates
-    .filter((c) => state.eligible.has(c.playerId) && !state.everRostered.has(c.playerId))
+    .filter((c) => !c.injured && state.eligible.has(c.playerId) && !state.everRostered.has(c.playerId))
     .sort((a, b) => b.regularSeasonTb - a.regularSeasonTb || a.playerId - b.playerId)[0];
 
   if (state.config.kind === 'initial') {

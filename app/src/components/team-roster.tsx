@@ -5,6 +5,7 @@ import { Pressable, type StyleProp, StyleSheet, View, type ViewStyle } from 'rea
 
 import { ROSTER_SIZE } from '@core/draft.ts';
 
+import { InjuryChip } from '@/components/injury';
 import { CommishTag, OwnerBadge, YouTag } from '@/components/owner-badge';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -173,6 +174,13 @@ function RosterRow({
   const [hovered, setHovered] = useState(false);
   const player = data.players.get(playerId);
   const name = player?.full_name ?? `Player ${playerId}`;
+  const injuredList = data.poolByPlayer.get(playerId)?.injured_list ?? null;
+  const nameLine = (
+    <View style={styles.nameLine}>
+      <ThemedText numberOfLines={1} style={[styles.name, styles.nameText, hovered && { textDecorationLine: 'underline' }]}>{name}</ThemedText>
+      {injuredList !== null && <InjuryChip list={injuredList} />}
+    </View>
+  );
   return (
     <Pressable
       onPress={() => openPlayer(playerId)}
@@ -189,14 +197,14 @@ function RosterRow({
       />
       {stacked ? (
         <View style={styles.stackedName}>
-          <ThemedText numberOfLines={1} style={[styles.name, hovered && { textDecorationLine: 'underline' }]}>{name}</ThemedText>
+          {nameLine}
           <ThemedText numberOfLines={1} themeColor="textSecondary" style={styles.meta}>
             {[player?.primary_position, mlbTeamAbbr(data, playerId)].filter(Boolean).join(' · ')}
           </ThemedText>
         </View>
       ) : (
         <>
-          <ThemedText numberOfLines={1} style={[styles.playerName, hovered && { textDecorationLine: 'underline' }]}>{name}</ThemedText>
+          <View style={styles.stackedName}>{nameLine}</View>
           <ThemedText themeColor="textSecondary" style={styles.position}>{player?.primary_position ?? ''}</ThemedText>
           <ThemedText themeColor="textSecondary" style={styles.mlbTeam}>{mlbTeamAbbr(data, playerId)}</ThemedText>
         </>
@@ -224,6 +232,8 @@ const styles = StyleSheet.create({
   playerName: { flex: 1, minWidth: 0, fontSize: 14, lineHeight: 18, fontWeight: 600 },
   stackedName: { flex: 1, minWidth: 0 },
   name: { fontSize: 14, lineHeight: 18, fontWeight: 600 },
+  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  nameText: { flexShrink: 1, minWidth: 0 },
   meta: { fontSize: 12, lineHeight: 15 },
   position: { width: 30, textAlign: 'right', fontSize: 12, lineHeight: 15 },
   mlbTeam: { width: 36, textAlign: 'right', fontSize: 12, lineHeight: 15, fontWeight: 700 },

@@ -178,6 +178,7 @@ function CommissionerCard({ data }: { data: SeasonData }) {
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const eligible = data.pool.filter((p) => p.on_postseason_roster).length;
+  const injured = data.pool.filter((p) => !p.on_postseason_roster && p.injured_list !== null).length;
 
   async function sync() {
     setSyncing(true);
@@ -194,10 +195,13 @@ function CommissionerCard({ data }: { data: SeasonData }) {
   return (
     <Card title="Commissioner">
       <ThemedText type="small">
-        Player pool: {eligible} hitters from {data.mlbTeams.size} MLB teams.
+        Player pool: {eligible} hitters from {data.mlbTeams.size} MLB teams
+        {injured > 0 && `, plus ${injured} on the injured list`}.
       </ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
-        Pulls every hitter on the active roster of each team that has clinched, plus the Wild Card start time.
+        Pulls every hitter on the active roster of each team that has clinched, the hitters on their injured lists who
+        could come off them before the World Series ends (Draft 1 only), and the Wild Card start time. Sync again once
+        postseason rosters are out to update who’s injured.
       </ThemedText>
       <Button label="Sync player pool from MLB" onPress={sync} loading={syncing} />
       {message && <ThemedText type="small">{message}</ThemedText>}

@@ -113,6 +113,13 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   person` (a few KB more from MLB) and writes `mlb_probables` only when a starter changes. No new
   Edge Function calls, polling or realtime channels. Re-syncing the pool updates ~170 pool rows,
   whose Postgres Changes now carry the platoon record too (~0.3 KB more each), a few times a season.
+- **Injured hitters in the pool.** `sync-pool` also reads each playoff team's 40-man roster (12
+  more MLB responses) and one `/transactions` list per injured hitter (~25), plus the postseason
+  schedule: downloads into the function, only when the commissioner syncs. The pool gains ~25
+  rows (~195 instead of ~170) and three small columns, so the season load (mostly the pool) grows
+  by an estimated ~15 KB: up to ~0.15 GB more a month at the reload rate under Egress, less with
+  compression. The platoon load and a re-sync's Postgres Changes grow by the same ~15%. No new Edge
+  Function calls, polling or realtime channels.
 - **The player popup's Baggery section.** Each time the popup opens it loads the player's MLB
   team's postseason games (up to ~20 rows) and his TB in them, straight from the tables: ~5 KB. At
   ~15 people opening ~20 popups a day, that's ~45 MB a month. It doesn't follow live games (no

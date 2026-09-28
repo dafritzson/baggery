@@ -9,6 +9,7 @@ import { type DraftConfig, ROSTER_SIZE, type Turn, nextTurn } from '@core/draft.
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { Columns } from '@/components/columns';
+import { injuryText } from '@/components/injury';
 import { Loader } from '@/components/loader';
 import { PlayerName } from '@/components/player-name';
 import { PlayersList, availablePlayers, useDraftBoard } from '@/components/players-list';
@@ -549,6 +550,7 @@ function PickSheet({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const needsDrop = draft.kind === 'redraft';
+  const injury = playerId !== null ? injuryText(data.poolByPlayer.get(playerId)) : null;
 
   async function confirm() {
     setSaving(true);
@@ -566,6 +568,11 @@ function PickSheet({
   return (
     <Sheet visible={playerId !== null} title={playerId ? `Draft ${playerName(data, playerId)}?` : ''} onClose={close}>
       {playerId && <ThemedText themeColor="textSecondary">{playerLine(data, playerId)}</ThemedText>}
+      {injury && (
+        <ThemedText type="smallBold" themeColor="danger">
+          {injury} He scores nothing while he’s off the postseason roster, and you can replace him in Draft 2.
+        </ThemedText>
+      )}
       {onBehalfOf && <ThemedText type="smallBold">Picking for {onBehalfOf} (commissioner)</ThemedText>}
       {needsDrop && (
         <View style={{ gap: Spacing.one }}>

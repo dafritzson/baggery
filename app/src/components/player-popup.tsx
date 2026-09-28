@@ -27,6 +27,7 @@ import {
 import { playerSeries } from '@core/scoreboard.ts';
 import { type GameType, ROUND_FOR_GAME_TYPE } from '@core/types.ts';
 
+import { injuryText } from '@/components/injury';
 import { MatchupStrip, PlatoonSplitTable } from '@/components/platoon';
 import { type GridRow, ScoreGrid } from '@/components/score-grid';
 import { StatChart } from '@/components/stat-chart';
@@ -40,7 +41,7 @@ import type { DraftAction } from '@/lib/player';
 import { matchupsByTeam, playerPlatoon, usePlatoons } from '@/lib/platoon';
 import { type Projection, projection, teamOdds } from '@/lib/projections';
 import { coreSpells, usePlayerScores, useScores } from '@/lib/scores';
-import { type SeasonData, useSeason } from '@/lib/season';
+import { type SeasonData, injuredDraftable, useSeason } from '@/lib/season';
 import { supabase } from '@/lib/supabase';
 import { ownerName, teamName } from '@/lib/teams';
 
@@ -283,6 +284,7 @@ function Header({
     .filter(Boolean)
     .join(' · ');
   const status = data ? leagueStatus(data, playerId) : null;
+  const injury = data ? injuryText(data.poolByPlayer.get(playerId)) : null;
 
   return (
     <View
@@ -298,6 +300,7 @@ function Header({
       <View style={styles.headerText}>
         <ThemedText type="default" style={styles.name} numberOfLines={1}>{name}</ThemedText>
         {bio !== '' && <ThemedText type="small" themeColor="textSecondary">{bio}</ThemedText>}
+        {injury && <ThemedText type="smallBold" style={{ color: theme.danger }}>{injury}</ThemedText>}
         {(status || draft) && (
           <View style={styles.statusRow}>
             {status && (
@@ -346,7 +349,9 @@ function leagueStatus(data: SeasonData, playerId: number): { label: string; avai
   const entry = data.poolByPlayer.get(playerId);
   if (!entry) return null;
   if (data.mlbTeams.get(entry.mlb_team_id)?.eliminated) return { label: 'Team eliminated', available: false };
-  if (!entry.on_postseason_roster) return { label: 'Not on the postseason roster', available: false };
+  if (!entry.on_postseason_roster && !(entry.injured_list !== null && injuredDraftable(data))) {
+    return { label: 'Not on the postseason roster', available: false };
+  }
   return { label: 'Available', available: true };
 }
 

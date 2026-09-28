@@ -5,6 +5,7 @@ import {
   type DraftState,
   applyAction,
   autodraftAction,
+  draftable,
   nextTurn,
   randomOrder,
   redraftOrder,
@@ -148,6 +149,11 @@ describe('autodraftAction', () => {
     expect(autodraftAction(s, candidates, [])).toEqual(pick('A', 3));
   });
 
+  it('initial draft: passes over injured players, however many TB they have', () => {
+    const s = state(initial);
+    expect(autodraftAction(s, [...candidates, { playerId: 4, regularSeasonTb: 400, injured: true }], [])).toEqual(pick('A', 2));
+  });
+
   it('redraft: replaces a droppable player with the best available', () => {
     const s = state(redraft, { rosters: new Map([['A', [10, 11, 12, 13]]]) });
     expect(autodraftAction(s, candidates, [12])).toEqual(pick('A', 2, 12));
@@ -156,6 +162,25 @@ describe('autodraftAction', () => {
   it('redraft: yields when nothing needs replacing', () => {
     const s = state(redraft, { rosters: new Map([['A', [10, 11, 12, 13]]]) });
     expect(autodraftAction(s, candidates, [99])).toEqual(yieldTurn('A'));
+  });
+});
+
+describe('draftable', () => {
+  const active = { onActiveRoster: true, injured: false, eliminated: false };
+  const injured = { onActiveRoster: false, injured: true, eliminated: false };
+
+  it('takes active hitters in every draft', () => {
+    expect([1, 2, 3, 4].map((n) => draftable(active, n))).toEqual([true, true, true, true]);
+  });
+
+  it('takes hitters on the injured list in Draft 1 only', () => {
+    expect([1, 2, 3, 4].map((n) => draftable(injured, n))).toEqual([true, false, false, false]);
+  });
+
+  it('never takes a hitter off the roster, or on an eliminated team', () => {
+    expect(draftable({ onActiveRoster: false, injured: false, eliminated: false }, 1)).toBe(false);
+    expect(draftable({ ...active, eliminated: true }, 2)).toBe(false);
+    expect(draftable({ ...injured, eliminated: true }, 1)).toBe(false);
   });
 });
 

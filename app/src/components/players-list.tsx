@@ -18,7 +18,7 @@ import { usePlayerColumns } from '@/lib/player-columns';
 import { type PlatoonData, matchupsByTeam, playerPlatoon, usePlatoons } from '@/lib/platoon';
 import { projection, teamOdds } from '@/lib/projections';
 import { useScores } from '@/lib/scores';
-import type { Draft, SeasonData } from '@/lib/season';
+import { type Draft, type SeasonData, injuredDraftable } from '@/lib/season';
 import { supabase } from '@/lib/supabase';
 
 /** Which players a list shows. */
@@ -29,6 +29,8 @@ export interface Board {
   teamIds: Set<number>;
   /** Only players on their team's postseason roster. */
   rosterOnly: boolean;
+  /** With `rosterOnly`, hitters on the injured list too (Draft 1). */
+  injured: boolean;
   /** Postseason stats count games that started before this (a finished draft's lock); all when not set. */
   statsBefore?: string | null;
 }
@@ -61,12 +63,13 @@ export function usePostseasonTotals(year: number, before?: string | null): Posts
  */
 export function currentBoard(data: SeasonData): Board {
   if (data.season.status === 'complete') {
-    return { taken: new Set(), teamIds: new Set(data.mlbTeams.keys()), rosterOnly: false };
+    return { taken: new Set(), teamIds: new Set(data.mlbTeams.keys()), rosterOnly: false, injured: true };
   }
   return {
     taken: new Set(data.spells.map((s) => s.mlb_player_id)),
     teamIds: new Set([...data.mlbTeams.values()].filter((t) => !t.eliminated).map((t) => t.id)),
     rosterOnly: true,
+    injured: injuredDraftable(data),
   };
 }
 
@@ -102,6 +105,7 @@ export function useDraftBoard(data: SeasonData, draft: Draft): Board {
       taken: new Set(data.spells.filter((s) => Date.parse(s.from_at) <= locks).map((s) => s.mlb_player_id)),
       teamIds: (done && seriesTeams) || new Set(data.mlbTeams.keys()),
       rosterOnly: true,
+      injured: draft.number === 1,
       statsBefore: draft.locks_at,
     };
   }, [data, draft, done, seriesTeams]);
@@ -126,7 +130,9 @@ export function availablePlayers(
   return data.pool
     .filter(
       (p) =>
-        (!board.rosterOnly || p.on_postseason_roster) && !board.taken.has(p.mlb_player_id) && board.teamIds.has(p.mlb_team_id),
+        (!board.rosterOnly || p.on_postseason_roster || (board.injured && p.injured_list !== null)) &&
+        !board.taken.has(p.mlb_player_id) &&
+        board.teamIds.has(p.mlb_team_id),
     )
     .map((p) => {
       const team = data.mlbTeams.get(p.mlb_team_id);
@@ -143,6 +149,7 @@ export function availablePlayers(
         mlbTeamId: p.mlb_team_id,
         name: data.players.get(p.mlb_player_id)?.full_name ?? `Player ${p.mlb_player_id}`,
         team: team?.abbreviation ?? '',
+        injuredList: p.injured_list,
         wins: team?.wins ?? null,
         adv: teamOdd ? 100 * teamOdd.advance : null,
         // From his starts and lineup spots against each hand when the pool has them.

@@ -6,10 +6,12 @@
 import { isCommissioner, requireUser } from '../_shared/auth.ts';
 import { logCommissioner, playerName, teamLabel } from '../_shared/commissioner-log.ts';
 import {
+  type AutodraftCandidate,
   type DraftAction,
   type DraftState,
   applyAction,
   autodraftAction,
+  draftable,
   nextTurn,
   randomOrder,
   redraftOrder,
@@ -49,7 +51,7 @@ interface Ctx {
   autodraftTeams: Set<string>;
   /** Rostered players autodraft may replace: MLB team eliminated or not on the active roster. */
   droppable: number[];
-  candidates: { playerId: number; regularSeasonTb: number }[];
+  candidates: AutodraftCandidate[];
   teamOwners: Map<string, string | null>;
 }
 
@@ -66,7 +68,7 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
        from draft_actions where draft_id = ${draftId} order by action_number`,
     tx`select fantasy_team_id, mlb_player_id, dropped_by_draft_id
        from roster_spells where season_id = ${draft.season_id}`,
-    tx`select p.mlb_player_id, p.regular_season_tb, p.on_postseason_roster, t.eliminated
+    tx`select p.mlb_player_id, p.regular_season_tb, p.on_postseason_roster, p.injured_list, t.eliminated
        from season_player_pool p
        join season_mlb_teams t on t.season_id = p.season_id and t.mlb_team_id = p.mlb_team_id
        where p.season_id = ${draft.season_id}`,
@@ -79,8 +81,11 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
       rosters.set(s.fantasy_team_id, [...(rosters.get(s.fantasy_team_id) ?? []), s.mlb_player_id]);
     }
   }
-  const available = pool.filter((p) => p.on_postseason_roster && !p.eliminated);
-  const unavailable = new Set(pool.filter((p) => !p.on_postseason_roster || p.eliminated).map((p) => p.mlb_player_id));
+  // Draft 1 also takes hitters on the injured list; later drafts only the postseason roster.
+  const canDraft = (p: (typeof pool)[number]) =>
+    draftable({ onActiveRoster: p.on_postseason_roster, injured: p.injured_list !== null, eliminated: p.eliminated }, draft.number);
+  const available = pool.filter(canDraft);
+  const unavailable = new Set(pool.filter((p) => !canDraft(p)).map((p) => p.mlb_player_id));
 
   return {
     draft,
@@ -103,7 +108,11 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
     },
     autodraftTeams: new Set(teams.filter((t) => t.autodraft).map((t) => t.id)),
     droppable: spells.filter((s) => s.dropped_by_draft_id === null && unavailable.has(s.mlb_player_id)).map((s) => s.mlb_player_id),
-    candidates: available.map((p) => ({ playerId: p.mlb_player_id, regularSeasonTb: p.regular_season_tb })),
+    candidates: available.map((p) => ({
+      playerId: p.mlb_player_id,
+      regularSeasonTb: p.regular_season_tb,
+      injured: p.injured_list !== null,
+    })),
     teamOwners: new Map(teams.map((t) => [t.id, t.user_id])),
   };
 }

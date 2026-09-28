@@ -218,6 +218,26 @@ describe('draft 1', () => {
     expect(await count()).toBe(0);
   });
 
+  it('lets a manager take a hitter on the injured list, but autodraft passes him over', async () => {
+    const count = async () => (await admin.from('draft_actions').select('*', { count: 'exact', head: true }).eq('draft_id', draftId)).count!;
+    const before = await count();
+    // The best hitter left goes on the 10-day injured list, off the active roster.
+    const injured = await bestAvailable();
+    const pool = () => admin.from('season_player_pool');
+    await pool().update({ on_postseason_roster: false, injured_list: 10 }).eq('season_id', SEASON_ID).eq('mlb_player_id', injured);
+
+    expect((await call('Daniel', 'draft', { draftId, action: 'autopick' })).ok).toBe(true);
+    const { data: auto } = await admin.from('draft_actions').select('add_player_id').eq('draft_id', draftId).eq('action_number', before).single();
+    expect(auto!.add_player_id).not.toBe(injured);
+
+    expect((await call(await onTheClock(), 'draft', { draftId, action: 'pick', addPlayerId: injured })).ok).toBe(true);
+
+    // Back to the draft and pool as they were.
+    for (let n = 0; n < 2; n++) expect((await call('Daniel', 'draft', { draftId, action: 'undo' })).ok).toBe(true);
+    expect(await count()).toBe(before);
+    await pool().update({ on_postseason_roster: true, injured_list: null }).eq('season_id', SEASON_ID).eq('mlb_player_id', injured);
+  });
+
   it("only lets a manager flip their own team's autodraft, and picks at once when they're on the clock", async () => {
     const up = await onTheClock();
     const upTeam = teamIdByManager.get(up)!;

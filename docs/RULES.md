@@ -68,8 +68,9 @@ xSLG, xwOBA, WAR and age were dropped as tiebreakers. They may come back later, 
   after he's dropped (e.g. Wild Card TB still count in round 1 after a DS redraft).
 - **Draft pool**:
   - Draft 1: players on the active roster of a playoff team (postseason rosters aren't
-    set yet). A drafted player left off the postseason roster scores 0 and can be
-    replaced in the next redraft.
+    set yet), plus hitters on a playoff team's injured list (7, 10, 15 or 60-day) who could
+    come off it before the postseason ends. They're marked as injured. A drafted player left
+    off the postseason roster scores 0 and can be replaced in the next redraft.
   - Redrafts: players on the postseason roster of an MLB team still alive, never
     previously drafted.
 - **Pick lock**: picks lock at the first pitch of the first game of the next series.
@@ -79,7 +80,8 @@ xSLG, xwOBA, WAR and age were dropped as tiebreakers. They may come back later, 
 ## Autodraft
 
 - Available to any manager (and famously to Daniel Fritzson).
-- Initial draft: picks the available player with the most regular-season TB.
+- Initial draft: picks the available player with the most regular-season TB, passing over
+  players on the injured list.
 - Redraft: drops the manager's players whose MLB team is eliminated and replaces each
   with the available player with the most regular-season TB. Yields when there's
   nothing left to replace. Replacing an injured player through autodraft needs a group
