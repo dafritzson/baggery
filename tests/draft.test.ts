@@ -287,9 +287,12 @@ describe('ghost turns', () => {
     expect(validateAction(s, pick('G', 9))).toMatch(/must drop/);
     expect(validateAction(s, pick('G', 9, 10))).toMatch(/not on your roster/);
     expect(validateAction(s, yieldTurn('G'))).toBeNull();
-    // A ghost yield skips its last turn too (round 4 opens G, B, A).
+    // A pass on a ghost turn passes only that turn: Y still gets the ghost's last (round 4 opens G, B, A).
     const after = applyAction(s, yieldTurn('G'));
-    expect(nextTurn(after.config, after.actions)).toEqual({ teamId: 'B', round: 4, slot: 10 });
+    expect(nextTurn(after.config, after.actions)).toEqual({ teamId: 'G', round: 4, slot: 9, ghost: { by: 'Y', kind: 'redraft' } });
+    // Another team's yield still ends its draft.
+    const bYields = applyAction(applyAction(after, pick('G', 9, 30)), yieldTurn('B'));
+    expect(nextTurn(bYields.config, bYields.actions)).toEqual({ teamId: 'A', round: 4, slot: 11 });
   });
 
   it('autodraft fills an add with the best hitter and redrafts only dead hitters', () => {

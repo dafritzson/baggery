@@ -80,7 +80,8 @@ export function draftTurns(config: DraftConfig): Turn[] {
 
 /**
  * Whose turn it is, or null when the draft is complete. Teams that have yielded are
- * skipped for the rest of the draft.
+ * skipped for the rest of the draft, except the ghost: a pass on a ghost turn passes only that
+ * turn, so one eliminated manager never costs another theirs.
  */
 export function nextTurn(config: DraftConfig, actions: DraftAction[]): Turn | null {
   const yielded = new Set<TeamId>();
@@ -88,7 +89,7 @@ export function nextTurn(config: DraftConfig, actions: DraftAction[]): Turn | nu
   for (const turn of draftTurns(config)) {
     if (yielded.has(turn.teamId)) continue;
     if (next < actions.length) {
-      if (actions[next].type === 'yield') yielded.add(turn.teamId);
+      if (actions[next].type === 'yield' && !turn.ghost) yielded.add(turn.teamId);
       next++;
       continue;
     }

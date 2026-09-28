@@ -186,8 +186,8 @@ async function logPick(tx: Tx, ctx: Ctx, userId: string, action: 'pick' | 'autop
 }
 
 /**
- * The season's ghost team, created on first use: the spot after the managers'. Its name has the
- * emoji so it can't collide with a manager's team name (names are unique in a season).
+ * The season's ghost team, created on first use: the spot after the managers'. Its name is
+ * reserved for it and doesn't count toward unique team names (see the ghost_team migration).
  */
 async function ghostTeam(tx: Tx, seasonId: string): Promise<string> {
   const [existing] = await tx`select id from fantasy_teams where season_id = ${seasonId} and is_ghost`;

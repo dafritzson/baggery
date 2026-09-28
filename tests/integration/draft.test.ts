@@ -613,6 +613,12 @@ describe('ghost team', () => {
     // Nobody manages it: it can't be renamed (or claimed or assigned).
     const { error } = await clients.get('Daniel')!.rpc('rename_team', { p_team_id: ghostId, p_name: 'Casper' });
     expect(error?.message).toMatch(/ghost/);
+    // And no manager's team can take its name.
+    const own = { p_team_id: teamIdByManager.get('Daniel') };
+    for (const name of ['👻 ghost', '👻\uFE0F  GHOST']) {
+      const { error: taken } = await clients.get('Daniel')!.rpc('rename_team', { ...own, p_name: name });
+      expect(taken?.message).toMatch(/belongs to the ghost/);
+    }
   });
 
   it('lets only the manager whose turn it is make a ghost pick, which fills a spot', async () => {
@@ -660,8 +666,9 @@ describe('ghost team', () => {
     expect(turns.slice(0, 2).map((g) => managerByTeamId.get(g.by)).sort()).toEqual([...OUT_2].sort());
     expect(turns.slice(2).map((g) => managerByTeamId.get(g.by)).sort()).toEqual([...OUT_1].sort());
 
-    // The finalists stand pat; the ghost fills its spots, redrafts once, then passes.
-    let redrafted = false;
+    // The finalists stand pat; the ghost fills its spots, then its first redraft turn passes and
+    // the second manager still gets theirs.
+    let passed = false;
     for (let turn = await turnIn(draft4), i = 0; turn && i < 20; turn = await turnIn(draft4), i++) {
       if (!turn.ghost) {
         expect((await call(managerByTeamId.get(turn.teamId)!, 'draft', { draftId: draft4, action: 'yield' })).ok).toBe(true);
@@ -670,13 +677,13 @@ describe('ghost team', () => {
       const by = managerByTeamId.get(turn.ghost.by)!;
       if (turn.ghost.kind === 'add') {
         expect((await call(by, 'draft', { draftId: draft4, action: 'pick', addPlayerId: await bestAvailable() })).ok).toBe(true);
-      } else if (!redrafted) {
+      } else if (!passed) {
+        expect((await call(by, 'draft', { draftId: draft4, action: 'yield' })).ok).toBe(true);
+        passed = true;
+      } else {
         const drop = (await ghostRoster())[0];
         expect((await call(by, 'draft', { draftId: draft4, action: 'pick', addPlayerId: await bestAvailable() })).error).toMatch(/must drop/);
         expect((await call(by, 'draft', { draftId: draft4, action: 'pick', addPlayerId: await bestAvailable(), dropPlayerId: drop })).ok).toBe(true);
-        redrafted = true;
-      } else {
-        expect((await call(by, 'draft', { draftId: draft4, action: 'yield' })).ok).toBe(true);
       }
     }
     expect((await admin.from('drafts').select('status').eq('id', draft4).single()).data!.status).toBe('complete');

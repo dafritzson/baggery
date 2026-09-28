@@ -88,13 +88,15 @@ The eliminated managers' team, so they keep following along. It's in the Standin
 - **Draft 4**: the ghost is in the snake with the 3 finalists, placed by round 2 bags like everyone.
   Its first 2 turns fill its empty spots (no drop, no yield), made by the 2 managers out after
   round 2. Its last 2 are ordinary redraft picks, made by the 2 managers out after round 1. Each
-  pair goes higher-ranked first, so each of the 4 managers makes one turn. A yield skips the
-  ghost for the rest of the draft, as for anyone.
+  pair goes higher-ranked first, so each of the 4 managers makes one turn. Unlike a manager's
+  yield, a pass on a ghost turn (by the manager or autodraft) passes only that turn: the other
+  manager still gets theirs.
 - **Round 3**: the ghost is ranked with the finalists. If it ranks first, it's the champion and
   its 4 managers share the title. A full tie with the top finalist is a drink-off (one of its
   managers drinks).
 - A ghost pick its manager doesn't make is autodrafted (their autodraft switch, or the
   commissioner's autopick).
+- No manager's team can be named "👻 Ghost".
 - The ghost wins about 6% of seasons (`scripts/ghost-sim.ts --ghost-in-cs`): with 2 hitters it
   finishes last in the CS 99% of the time, so it nearly always picks 4th and 5th in Draft 4.
 

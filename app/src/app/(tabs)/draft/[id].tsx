@@ -92,7 +92,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
   const commissioner = useCommissionerActions(data, draft, turn, run);
   const yieldButton = myTurn && draft.kind === 'redraft' && !filling && (
     <Button
-      label={turn?.ghost ? 'Pass: the ghost keeps its hitters' : "I'm done: yield my remaining picks"}
+      label={turn?.ghost ? 'Pass this ghost turn' : "I'm done: yield my remaining picks"}
       variant="secondary"
       onPress={() => run({ action: 'yield' })}
     />

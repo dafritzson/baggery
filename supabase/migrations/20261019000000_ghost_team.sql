@@ -6,6 +6,12 @@
 alter table public.fantasy_teams add column is_ghost boolean not null default false;
 create unique index fantasy_teams_one_ghost on public.fantasy_teams (season_id) where is_ghost;
 
+-- Its name ("👻 Ghost", set by the draft function) doesn't count toward unique team names, so
+-- creating it can never fail on a manager's team name; the trigger below keeps managers off it.
+drop index public.fantasy_teams_unique_name;
+create unique index fantasy_teams_unique_name on public.fantasy_teams (season_id, lower(name))
+  where name is not null and not is_ghost;
+
 -- The ghost's turns in a draft, set when it starts: [{ "by": <manager's team id>, "kind": "add" | "redraft" }].
 alter table public.drafts add column ghost_turns jsonb not null default '[]';
 
@@ -27,3 +33,21 @@ create trigger fantasy_teams_ghost_unmanaged
   before update on public.fantasy_teams
   for each row when (old.is_ghost)
   execute function private.ghost_team_unmanaged();
+
+-- No manager's team can take the ghost's name (ignoring case and the emoji's invisible variation
+-- selector; claiming and renaming already trim and collapse spaces), so none can pass for it.
+create function private.ghost_name_reserved() returns trigger
+language plpgsql set search_path = ''
+as $$
+begin
+  if lower(replace(new.name, U&'\FE0F', '')) = lower('👻 Ghost') then
+    raise exception 'That name belongs to the ghost team';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger fantasy_teams_ghost_name_reserved
+  before insert or update of name on public.fantasy_teams
+  for each row when (not new.is_ghost and new.name is not null)
+  execute function private.ghost_name_reserved();
