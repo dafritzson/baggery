@@ -78,7 +78,17 @@ export interface PoolEntry {
   /** Null with no at-bats. */
   slg: number | null;
   ops_plus: number | null;
+  /** On his team's active roster (its postseason roster, once the postseason starts). */
   on_postseason_roster: boolean;
+  /**
+   * The injured list he's on (7, 10, 15 or 60 days), if he could come off it before the
+   * postseason ends; null otherwise. Draft 1 lets managers take him.
+   */
+  injured_list: number | null;
+  /** MLB's note, like "Right calf strain." */
+  injury: string | null;
+  /** The first day he can come off the list (YYYY-MM-DD), when known. */
+  injury_return: string | null;
 }
 
 export interface MlbTeam {
@@ -156,7 +166,7 @@ async function fetchSeason(
     supabase
       .from('season_player_pool')
       .select(
-        'mlb_player_id, mlb_team_id, regular_season_tb, plate_appearances, at_bats, games_played, hits, doubles, triples, home_runs, runs, rbi, walks, strikeouts, hit_by_pitch, sac_flies, slg, ops_plus, on_postseason_roster, player:mlb_players(id, full_name, primary_position)',
+        'mlb_player_id, mlb_team_id, regular_season_tb, plate_appearances, at_bats, games_played, hits, doubles, triples, home_runs, runs, rbi, walks, strikeouts, hit_by_pitch, sac_flies, slg, ops_plus, on_postseason_roster, injured_list, injury, injury_return, player:mlb_players(id, full_name, primary_position)',
       )
       .eq('season_id', season.id),
     supabase
@@ -201,6 +211,9 @@ async function fetchSeason(
       slg: row.slg === null ? null : Number(row.slg),
       ops_plus: row.ops_plus,
       on_postseason_roster: row.on_postseason_roster,
+      injured_list: row.injured_list,
+      injury: row.injury,
+      injury_return: row.injury_return,
     });
   }
   const mlbTeams = new Map<number, MlbTeam>();
@@ -360,4 +373,9 @@ export function currentRosters(data: SeasonData): Map<string, number[]> {
     if (s.dropped_by_draft_id === null) rosters.get(s.fantasy_team_id)?.push(s.mlb_player_id);
   }
   return rosters;
+}
+
+/** Whether hitters on the injured list can be drafted now: until Draft 1 is done. */
+export function injuredDraftable(data: SeasonData): boolean {
+  return data.drafts.some((d) => d.number === 1 && d.status !== 'complete');
 }

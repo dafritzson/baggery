@@ -1,6 +1,8 @@
 // Rebuilds a season's draft pool from the MLB Stats API: every hitter on the active
 // roster of a postseason team, with regular-season stats (TB for autodraft; PA, AB, games, SLG,
 // OPS+ and the other counts for the draft room) and each team's wins, Wild Card bye and seed.
+// Also the hitters on those teams' injured lists who could come off them before the postseason
+// ends, marked as injured: Draft 1 lets managers take them.
 // Also platoons and batting order (core/platoon.ts): each hitter's starts and lineup spots against
 // each hand's starters and his splits against each hand, and each team's likely rotation.
 // Commissioner only. For an imported past season it fills the pool for the Draft and Research
@@ -9,6 +11,7 @@
 // POST { seasonId, teamIds?: number[] }  (teamIds overrides the clinched-teams lookup)
 
 import { requireCommissioner, requireUser } from '../_shared/auth.ts';
+import { INJURED_LISTS, injuredListReturn, injuredSince } from '../_shared/core/injured-list.ts';
 import type { Hand } from '../_shared/core/platoon.ts';
 import { type Counts, sumCounts } from '../_shared/core/player-stats.ts';
 import {
@@ -119,29 +122,61 @@ interface PoolPlayer {
   birthDate: string | null;
   teamId: number;
   season: Counts;
+  /** Null for a hitter on the active roster. */
+  injured: { list: number; injury: string | null; returnOn: string | null } | null;
 }
 
 /**
- * A team's active hitters, today or on `date` (YYYY-MM-DD). Without a date, a past season's
- * "active" roster is everyone who was active at any point that year, so past seasons pass one.
+ * A team's hitters on a roster, today or on `date` (YYYY-MM-DD), with each one's roster status
+ * (like 'A', active, or 'D10', the 10-day injured list) and MLB's note (the injury). Without a
+ * date, a past season's "active" roster is everyone who was active at any point that year, so past
+ * seasons pass one.
  */
-async function activeHitters(teamId: number, year: number, date: string | null): Promise<PoolPlayer[]> {
+async function rosterHitters(
+  teamId: number,
+  year: number,
+  rosterType: 'active' | '40Man',
+  date: string | null,
+): Promise<{ player: PoolPlayer; status: string; note: string | null }[]> {
   const data = await mlb(
-    `/teams/${teamId}/roster?rosterType=active&season=${year}${date ? `&date=${date}` : ''}` +
+    `/teams/${teamId}/roster?rosterType=${rosterType}&season=${year}${date ? `&date=${date}` : ''}` +
       `&hydrate=person(stats(type=season,season=${year},group=hitting))`,
   );
   // deno-lint-ignore no-explicit-any
   return data.roster
     .filter((r: any) => r.position.type !== 'Pitcher') // two-way players stay in
     // deno-lint-ignore no-explicit-any
-    .map((r: any): PoolPlayer => ({
-      id: r.person.id,
-      fullName: r.person.fullName,
-      position: r.position.abbreviation,
-      birthDate: r.person.birthDate ?? null,
-      teamId,
-      season: seasonLine(r.person.stats?.[0]?.splits),
+    .map((r: any) => ({
+      player: {
+        id: r.person.id,
+        fullName: r.person.fullName,
+        position: r.position.abbreviation,
+        birthDate: r.person.birthDate ?? null,
+        teamId,
+        season: seasonLine(r.person.stats?.[0]?.splits),
+        injured: null,
+      },
+      status: r.status?.code ?? '',
+      note: r.note ?? null,
     }));
+}
+
+/**
+ * A team's hitters on the injured list (7, 10, 15 or 60 days) who could come off it by `lastDay`,
+ * the postseason's last scheduled day. His placement (one `/transactions` read each) says when
+ * his time on the list started.
+ */
+async function injuredHitters(teamId: number, year: number, today: string, lastDay: string | null): Promise<PoolPlayer[]> {
+  const injured = (await rosterHitters(teamId, year, '40Man', null)).filter((r) => INJURED_LISTS[r.status]);
+  const players = await Promise.all(
+    injured.map(async ({ player, status, note }): Promise<PoolPlayer | null> => {
+      const days = INJURED_LISTS[status];
+      const { transactions } = await mlb(`/transactions?playerId=${player.id}&startDate=${year}-01-01&endDate=${today}`);
+      const { returnOn, inTime } = injuredListReturn(days, injuredSince(transactions ?? []), today, lastDay);
+      return inTime ? { ...player, injured: { list: days, injury: note, returnOn } } : null;
+    }),
+  );
+  return players.filter((p) => p !== null);
 }
 
 /** A jsonb value for an insert, or null. */
@@ -221,6 +256,12 @@ async function firstPitch(year: number, gameType: string): Promise<Date | null> 
   return times.length ? new Date(Math.min(...times)) : null;
 }
 
+/** The postseason's last scheduled day (a World Series Game 7), or null before the schedule is out. */
+async function lastPostseasonDay(year: number): Promise<string | null> {
+  const data = await mlb(`/schedule?sportId=1&season=${year}&gameTypes=F,D,L,W`);
+  return data.dates.map((d: { date: string }) => d.date).sort().at(-1) ?? null;
+}
+
 serve(async (req) => {
   const userId = await requireUser(req);
   const { seasonId, teamIds } = (await req.json()) as { seasonId: string; teamIds?: number[] };
@@ -264,11 +305,20 @@ serve(async (req) => {
   const seeds = playoffSeeds(table, playoffTeamIds);
 
   // One entry per player, in case a player turns up on two teams' rosters.
-  const players = [
-    ...new Map(
-      (await Promise.all(playoffTeamIds.map((id) => activeHitters(id, year, rosterDate)))).flat().map((p) => [p.id, p]),
-    ).values(),
-  ];
+  const byId = new Map(
+    (await Promise.all(playoffTeamIds.map((id) => rosterHitters(id, year, 'active', rosterDate))))
+      .flat()
+      .map(({ player }) => [player.id, player]),
+  );
+  // An imported season's drafts are over, so its injured lists don't matter.
+  if (!season.imported_at) {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    const lastDay = await lastPostseasonDay(year);
+    for (const p of (await Promise.all(playoffTeamIds.map((id) => injuredHitters(id, year, today, lastDay)))).flat()) {
+      if (!byId.has(p.id)) byId.set(p.id, p);
+    }
+  }
+  const players = [...byId.values()];
   const leagues = await leagueLines(year, leagueOf);
   const leagueTotals = (teamId: number) => {
     const league = leagueOf.get(teamId);
@@ -316,8 +366,11 @@ serve(async (req) => {
         on conflict (id) do update set full_name = excluded.full_name, primary_position = excluded.primary_position,
           birth_date = excluded.birth_date, updated_at = now()`;
 
-      // Players who left an active roster stay in the pool table (for history) but become ineligible.
-      await tx`update season_player_pool set on_postseason_roster = false where season_id = ${seasonId}`;
+      // Players who left an active roster (or the injured list) stay in the pool table (for
+      // history) but become ineligible.
+      await tx`
+        update season_player_pool set on_postseason_roster = false, injured_list = null, injury = null, injury_return = null
+        where season_id = ${seasonId}`;
       await tx`
         insert into season_player_pool ${tx(
           players.map((p) => ({
@@ -342,7 +395,10 @@ serve(async (req) => {
             ops_plus: opsPlus(p.season, leagueTotals(p.teamId)),
             bat_side: platoon?.players.get(p.id)?.batSide ?? null,
             platoon: jsonOrNull(tx, platoon?.players.get(p.id)?.platoon),
-            on_postseason_roster: true,
+            on_postseason_roster: !p.injured,
+            injured_list: p.injured?.list ?? null,
+            injury: p.injured?.injury ?? null,
+            injury_return: p.injured?.returnOn ?? null,
           })),
         )}
         on conflict (season_id, mlb_player_id) do update set mlb_team_id = excluded.mlb_team_id,
@@ -352,10 +408,11 @@ serve(async (req) => {
           rbi = excluded.rbi, walks = excluded.walks, strikeouts = excluded.strikeouts,
           hit_by_pitch = excluded.hit_by_pitch, sac_flies = excluded.sac_flies, slg = excluded.slg,
           ops_plus = excluded.ops_plus, bat_side = coalesce(excluded.bat_side, season_player_pool.bat_side),
-          platoon = coalesce(excluded.platoon, season_player_pool.platoon), on_postseason_roster = true`;
+          platoon = coalesce(excluded.platoon, season_player_pool.platoon), on_postseason_roster = excluded.on_postseason_roster,
+          injured_list = excluded.injured_list, injury = excluded.injury, injury_return = excluded.injury_return`;
     }
     if (season.status === 'setup') {
-      await tx`delete from season_player_pool where season_id = ${seasonId} and not on_postseason_roster`;
+      await tx`delete from season_player_pool where season_id = ${seasonId} and not on_postseason_roster and injured_list is null`;
     }
 
     if (wildCardStart) {
@@ -365,5 +422,12 @@ serve(async (req) => {
     }
   });
 
-  return json({ ok: true, teams: playoffTeamIds.length, players: players.length, draft1LocksAt: wildCardStart, platoons: !!platoon });
+  return json({
+    ok: true,
+    teams: playoffTeamIds.length,
+    players: players.length,
+    injured: players.filter((p) => p.injured).length,
+    draft1LocksAt: wildCardStart,
+    platoons: !!platoon,
+  });
 });

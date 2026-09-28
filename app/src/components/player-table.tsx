@@ -4,6 +4,7 @@ import Svg, { Path } from 'react-native-svg';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { FilterSheet } from '@/components/filter-sheet';
+import { InjuryChip } from '@/components/injury';
 import { PlatoonChip } from '@/components/platoon';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -16,6 +17,8 @@ export interface PlayerRow {
   id: number;
   name: string;
   team: string;
+  /** The injured list he's on (7, 10, 15 or 60 days), or null. */
+  injuredList: number | null;
   wins: number | null;
   /** His team's chance (0–100) to get through the current fantasy round; null without seeds. */
   adv: number | null;
@@ -54,7 +57,7 @@ export interface PlayerRow {
   platoon: PlayerPlatoon | null;
 }
 
-export type ColumnKey = Exclude<keyof PlayerRow, 'id' | 'name' | 'team' | 'platoon'>;
+export type ColumnKey = Exclude<keyof PlayerRow, 'id' | 'name' | 'team' | 'injuredList' | 'platoon'>;
 type SortKey = 'name' | ColumnKey;
 
 export interface Column {
@@ -364,6 +367,7 @@ export function PlayerTable({
           <Pressable key={r.id} {...rowPress(r.id)} style={[rowStyle(r.id, i), styles.nameCell, styles.nameRow]}>
             <ThemedText type="smallBold" numberOfLines={1} style={styles.name}>{r.name}</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">{r.team}</ThemedText>
+            {r.injuredList !== null && <InjuryChip list={r.injuredList} />}
             {r.platoon?.side && <PlatoonChip platoon={r.platoon} name={r.name} />}
           </Pressable>
         ))}
