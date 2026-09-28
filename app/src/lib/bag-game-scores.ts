@@ -48,7 +48,7 @@ async function fetchScores(userId: string | undefined): Promise<BagGameScores | 
       .from('bag_game_bests')
       .select('user_id, score, profile:profiles(display_name)')
       .order('score', { ascending: false })
-      .order('scored_at', { ascending: true }),
+      .order('scored_at', { ascending: false }), // the last to reach a tied record holds it
     supabase.from('profiles').select('display_name').eq('id', userId ?? '').maybeSingle(),
   ]);
   if (bests.error) return undefined;
