@@ -1,6 +1,6 @@
 import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
-import { type GestureResponderEvent, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { type GestureResponderEvent, Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 import { SERIES, type ScoreStat } from '@core/scoreboard.ts';
@@ -19,7 +19,7 @@ import {
 } from '@core/timeline.ts';
 import type { FantasyRound } from '@core/types.ts';
 
-import { HitVideosSheet } from '@/components/hit-videos';
+import { clipUrl, savantUrl } from '@/components/hit-videos';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
@@ -27,6 +27,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { playerName, shortDate } from '@/lib/format';
 import { type GameInfo, coreSpells } from '@/lib/scores';
 import type { SeasonData } from '@/lib/season';
+import { supabase } from '@/lib/supabase';
 import { teamName } from '@/lib/teams';
 
 const CHART_H = 120;
@@ -49,7 +50,7 @@ export function roundTeamIds(data: SeasonData, round: FantasyRound): string[] {
  * bag) with a slider under it that moves the standings to any moment. Zoomed out it stops at the
  * end of each game day; zoomed in on a round or a day, at every bag. Drag or tap anywhere on the
  * chart or the bar, or play it: play, pause, go one bag on, or fast forward (2×, 4×, back to 1×).
- * On a bag, ▶ opens its videos (MLB's clip and Savant's).
+ * Paused on a bag, its videos (MLB's clip and Savant's) are a tap away under the readout.
  */
 export function SeasonScrubber({
   data,
@@ -89,8 +90,6 @@ export function SeasonScrubber({
   const theme = useTheme();
   const [width, setWidth] = useState(0);
   const [origin, setOrigin] = useState(0);
-  // The bag whose videos are open.
-  const [videos, setVideos] = useState<Bag | null>(null);
   const spells = coreSpells(data);
   const days = timeline.days;
   const day = days[stop.day];
@@ -224,22 +223,9 @@ export function SeasonScrubber({
     <ThemedView type="backgroundElement" style={[styles.card, { boxShadow: theme.raised }]}>
       <View style={styles.head}>
         <View style={styles.readout}>
-          <View style={styles.mainLine}>
-            <ThemedText type="smallBold" numberOfLines={2} style={styles.main}>{main}</ThemedText>
-            {bag && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Videos of ${main}`}
-                hitSlop={8}
-                onPress={() => {
-                  onStop(stop);
-                  setVideos(bag);
-                }}>
-                <ThemedText type="smallBold" themeColor="accent">▶</ThemedText>
-              </Pressable>
-            )}
-          </View>
+          <ThemedText type="smallBold" numberOfLines={2}>{main}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={2} style={styles.sub}>{sub}</ThemedText>
+          {bag && !playing && <BagVideos bag={bag} />}
         </View>
         <View accessibilityRole="tablist" accessibilityLabel="Zoom" style={[styles.zoom, { backgroundColor: theme.backgroundSelected, boxShadow: theme.sunken }]}>
           {ZOOMS.map((z) => {
@@ -370,16 +356,61 @@ export function SeasonScrubber({
           {zoom === 'season' ? 'Per day' : 'Per bag'}
         </ThemedText>
       </View>
-      {videos && (
-        <HitVideosSheet
-          gamePk={videos.gamePk}
-          playerId={videos.playerId}
-          playId={videos.playId}
-          title={`${playerName(data, videos.playerId)} · ${EVENTS[videos.event]}`}
-          onClose={() => setVideos(null)}
-        />
-      )}
     </ThemedView>
+  );
+}
+
+/**
+ * A bag's videos, as links: MLB's clip once one is posted and Savant's, which comes the day after
+ * the game. Loaded when playback stops on the bag (one hit, well under 1 KB), never while playing.
+ * The row keeps its height while loading, so the card doesn't jump.
+ */
+function BagVideos({ bag }: { bag: Bag }) {
+  const theme = useTheme();
+  const [hit, setHit] = useState<{ playId: string; clip: string | null; savant: boolean; soon: boolean } | null>(null);
+  useEffect(() => {
+    let stale = false;
+    supabase
+      .from('mlb_hits')
+      .select('clip_slug, savant_ready')
+      .eq('play_id', bag.playId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (stale) return;
+        setHit({
+          playId: bag.playId,
+          clip: data?.clip_slug ?? null,
+          savant: data?.savant_ready ?? false,
+          // Savant posts a game's videos the next day; after that a missing one isn't coming.
+          soon: Date.now() - new Date(bag.endedAt).getTime() < 36 * 3600_000,
+        });
+      });
+    return () => {
+      stale = true;
+    };
+  }, [bag.playId, bag.endedAt]);
+  const loaded = hit?.playId === bag.playId ? hit : null;
+  const chip = (label: string, url: string) => (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={`${label} video`}
+      hitSlop={{ top: 10, bottom: 10, left: 2, right: 2 }}
+      onPress={() => Linking.openURL(url)}
+      style={[styles.chip, { backgroundColor: theme.tint }]}>
+      <SymbolView name={{ ios: 'play.fill', android: 'play_arrow', web: 'play_arrow' }} size={12} tintColor={theme.accent} />
+      <ThemedText type="smallBold" themeColor="accent" style={styles.chipText}>{label}</ThemedText>
+    </Pressable>
+  );
+  return (
+    <View style={styles.videos}>
+      {loaded?.clip && chip('MLB clip', clipUrl(loaded.clip))}
+      {loaded?.savant && chip('Savant', savantUrl(bag.playId))}
+      {loaded && !loaded.savant && loaded.soon && (
+        <View style={[styles.chip, styles.pending, { borderColor: theme.textSecondary }]}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.chipText}>Savant video tomorrow</ThemedText>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -398,9 +429,11 @@ const styles = StyleSheet.create({
   card: { borderRadius: Radius.lg, padding: Spacing.two + 4, gap: Spacing.two },
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two },
   readout: { flex: 1, minWidth: 0 },
-  mainLine: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.one + 2 },
-  main: { flexShrink: 1 },
   sub: { fontSize: 12, lineHeight: 15 },
+  videos: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.one + 2, minHeight: 24, marginTop: Spacing.one + 2 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, height: 24, paddingHorizontal: 10, borderRadius: 12 },
+  chipText: { fontSize: 12, lineHeight: 16 },
+  pending: { borderWidth: 1, borderStyle: 'dashed' },
   zoom: { flexDirection: 'row', alignItems: 'center', height: 22, padding: 2, borderRadius: Radius.md },
   zoomButton: { height: 18, paddingHorizontal: 6, borderRadius: Radius.sm, justifyContent: 'center' },
   zoomLabel: { fontSize: 10, lineHeight: 12 },
