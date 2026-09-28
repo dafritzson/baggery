@@ -34,8 +34,11 @@ import { type Scores, coreSpells, useScores, useSeasonPlayLines } from '@/lib/sc
 import { type SeasonData, useSeason } from '@/lib/season';
 import { teamName } from '@/lib/teams';
 
-/** How long each bag of playback takes, by zoom: a whole season, a round, a day. */
-const PLAY_MS: Record<Zoom, number> = { season: 100, round: 140, day: 450 };
+/** How long each bag of playback takes at normal speed, by zoom: a whole season, a round, a day. */
+const PLAY_MS: Record<Zoom, number> = { season: 250, round: 350, day: 1000 };
+/** Playback speeds; fast forward goes up through them and back to normal. */
+const SPEEDS = [1, 2, 4] as const;
+type Speed = (typeof SPEEDS)[number];
 
 /**
  * Fantasy standings: each round's TB by game, and any team's TB by player. Desktops show both
@@ -65,6 +68,7 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
   const [stop, setStop] = useState<Stop | null>(null);
   const [zoom, setZoom] = useState<Zoom>('season');
   const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState<Speed>(1);
 
   // A link to a team picks it, and on phones shows it. The param is then cleared, so the same link
   // works again after picking another team.
@@ -111,14 +115,23 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
   });
   useEffect(() => {
     if (!playing) return;
-    const id = setInterval(() => step.current(), PLAY_MS[zoom]);
+    const id = setInterval(() => step.current(), PLAY_MS[zoom] / speed);
     return () => clearInterval(id);
-  }, [playing, zoom]);
-  const play = () => {
-    if (playing) return setPlaying(false);
+  }, [playing, zoom, speed]);
+  // Play starts at normal speed, from the start when it's at the end.
+  const start = (s: Speed) => {
     if (!at) return;
     if (!nextPlayStop(timeline, zoom, at)) go(playStops(timeline, zoom, at)[0]);
+    setSpeed(s);
     setPlaying(true);
+  };
+  const play = () => (playing ? setPlaying(false) : start(1));
+  const fastForward = () => (playing ? setSpeed(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]) : start(2));
+  // Frame by frame: pauses and goes one bag on.
+  const nextStop = at ? nextPlayStop(timeline, zoom, at) : null;
+  const stepOne = () => {
+    setPlaying(false);
+    if (nextStop) go(nextStop);
   };
   const zoomTo = (z: Zoom) => {
     setPlaying(false);
@@ -190,7 +203,10 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
           }}
           onZoom={zoomTo}
           playing={playing}
+          speed={speed}
           onPlay={play}
+          onStep={nextStop ? stepOne : undefined}
+          onFastForward={fastForward}
         />
       )}
       {atLatest && <CloseRoundCard data={data} scores={scores} round={round} refetch={refetch} />}

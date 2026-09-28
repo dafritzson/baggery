@@ -45,7 +45,7 @@ export function roundTeamIds(data: SeasonData, round: FantasyRound): string[] {
  * Below the standings: the season as a race (each team's running round total, stepping up bag by
  * bag) with a slider under it that moves the standings to any moment. Zoomed out it stops at the
  * end of each game day; zoomed in on a round or a day, at every bag. Drag or tap anywhere on the
- * chart or the bar, or play it.
+ * chart or the bar, or play it: play, pause, go one bag on, or fast forward (2×, 4×, back to 1×).
  */
 export function SeasonScrubber({
   data,
@@ -58,7 +58,10 @@ export function SeasonScrubber({
   onStop,
   onZoom,
   playing,
+  speed,
   onPlay,
+  onStep,
+  onFastForward,
 }: {
   data: SeasonData;
   timeline: Timeline;
@@ -72,7 +75,12 @@ export function SeasonScrubber({
   onStop: (stop: Stop) => void;
   onZoom: (zoom: Zoom) => void;
   playing: boolean;
+  /** Playback speed: 1, 2 or 4. */
+  speed: number;
   onPlay: () => void;
+  /** Pauses and goes one bag on; undefined at the end. */
+  onStep?: () => void;
+  onFastForward: () => void;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
@@ -227,6 +235,32 @@ export function SeasonScrubber({
             </Svg>
           )}
         </Pressable>
+        <View style={[styles.transport, { backgroundColor: theme.background, boxShadow: theme.raised }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Next bag"
+            hitSlop={4}
+            onPress={onStep}
+            disabled={!onStep}
+            style={[styles.transportButton, !onStep && styles.disabled]}>
+            <Svg width={12} height={12} viewBox="0 0 24 24">
+              <Path d="M4 5v14l11-7zM16 5h3v14h-3z" fill={theme.text} />
+            </Svg>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={playing ? `Fast forward, playing at ${speed}×` : 'Fast forward'}
+            hitSlop={4}
+            onPress={onFastForward}
+            style={[styles.transportButton, styles.fastForward]}>
+            <Svg width={14} height={12} viewBox="0 0 27 24">
+              <Path d="M2 5v14l11-7zM14 5v14l11-7z" fill={playing && speed > 1 ? theme.accent : theme.text} />
+            </Svg>
+            <ThemedText type="smallBold" style={[styles.speed, { color: playing && speed > 1 ? theme.accent : theme.textSecondary }]}>
+              {playing ? `${speed}×` : ''}
+            </ThemedText>
+          </Pressable>
+        </View>
         <View style={styles.readout}>
           <ThemedText type="smallBold" numberOfLines={1}>{main}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.sub}>{sub}</ThemedText>
@@ -346,6 +380,11 @@ const styles = StyleSheet.create({
   card: { borderRadius: Radius.lg, padding: Spacing.two + 4, gap: Spacing.two },
   head: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two + 2, minHeight: 32 },
   play: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  transport: { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.md },
+  transportButton: { height: 30, minWidth: 30, alignItems: 'center', justifyContent: 'center' },
+  fastForward: { flexDirection: 'row', gap: 2, paddingRight: 4, width: 48 },
+  speed: { width: 20, fontSize: 11, lineHeight: 14 },
+  disabled: { opacity: 0.3 },
   readout: { flex: 1, minWidth: 0 },
   sub: { fontSize: 12, lineHeight: 15 },
   zoom: { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.md },
