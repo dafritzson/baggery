@@ -37,7 +37,7 @@ import { teamName } from '@/lib/teams';
 /** How long each bag of playback takes at normal speed, by zoom: a whole season, a round, a day. */
 const PLAY_MS: Record<Zoom, number> = { season: 500, round: 700, day: 2000 };
 /** Playback speeds; fast forward goes up through them and back to normal. */
-const SPEEDS = [1, 2, 4] as const;
+const SPEEDS = [1, 2, 4, 8] as const;
 type Speed = (typeof SPEEDS)[number];
 
 /**
