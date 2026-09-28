@@ -40,6 +40,8 @@ export const Colors = {
     standingOut: '#F3D0D0',
     /** Your own team and players (Standings rows, Games cards): a soft blue-gray. */
     mine: '#DCE5F4',
+    /** An on/off switch's track when off (on, it's the accent). */
+    switchOff: '#C4C6CC',
   },
   dark: {
     text: '#ffffff',
@@ -65,6 +67,7 @@ export const Colors = {
     standingTied: '#30284A',
     standingOut: '#4A2228',
     mine: '#223047',
+    switchOff: '#4A4D52',
   },
 } as const;
 

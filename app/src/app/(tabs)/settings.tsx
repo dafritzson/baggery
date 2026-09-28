@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { BagAlertsCard } from '@/components/bag-alerts-card';
+import { AlertsSettings } from '@/components/alerts-settings';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { ExportSeasonCard } from '@/components/export-season-card';
@@ -13,9 +13,9 @@ import { PastManagersCard } from '@/components/past-managers-card';
 import { OwnerBadge } from '@/components/owner-badge';
 import { ReloadGamesCard } from '@/components/reload-games-card';
 import { Screen } from '@/components/screen';
+import { Switch } from '@/components/switch';
 import { TeamNameField } from '@/components/team-name-sheet';
 import { ThemedText } from '@/components/themed-text';
-import { Toggle } from '@/components/toggle';
 import { Spacing } from '@/constants/theme';
 import { MAX_PHOTO_BYTES, removePhoto, uploadPhoto } from '@/lib/avatars';
 import { useAuth } from '@/lib/auth';
@@ -25,8 +25,8 @@ import { supabase } from '@/lib/supabase';
 import { suggestTeamName, teamName } from '@/lib/teams';
 
 /**
- * Your settings: your photo, your team name for the season being viewed, bag alerts and
- * celebrations on this device, and (commissioner) past seasons, their managers and the league log.
+ * Your settings: your photo, your team name for the season being viewed, draft and game alerts
+ * and bag celebrations on this device, and (commissioner) past seasons, their managers and the league log.
  */
 export default function SettingsScreen() {
   const { data, loading, refetch } = useSeason();
@@ -72,7 +72,7 @@ export default function SettingsScreen() {
           </>
         )}
       </Card>
-      <BagAlertsCard />
+      <AlertsSettings />
       <CelebrationsCard />
       <ExportSeasonCard />
       <ImportSeasonCard />
@@ -138,26 +138,15 @@ function PhotoCard() {
 function CelebrationsCard() {
   const on = useCelebrationsEnabled();
   return (
-    <Card title="Bag celebrations">
-      <ThemedText themeColor="textSecondary">
-        Bags rain down and a popup shows the hit when one of your hitters gets a bag while Baggery is open.
+    <Card title="Bag celebrations" action={<Switch label="Bag celebrations" value={on} onChange={saveCelebrationsEnabled} />}>
+      <ThemedText type="small" themeColor="textSecondary">
+        Bag rain and a popup in the app when your hitter gets a bag
       </ThemedText>
-      <View style={styles.toggleRow}>
-        <Toggle
-          options={[
-            { value: true, label: 'On' },
-            { value: false, label: 'Off' },
-          ]}
-          value={on}
-          onChange={saveCelebrationsEnabled}
-        />
-      </View>
     </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  toggleRow: { flexDirection: 'row' },
   photoRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   photoActions: { flex: 1, gap: Spacing.two, alignItems: 'flex-start' },
 });

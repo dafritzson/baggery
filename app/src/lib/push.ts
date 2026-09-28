@@ -1,11 +1,14 @@
 // Alerts on this device (bag, sub, cut, lineup and draft alerts): web push, so web only (push.web.ts). An
 // iOS app would use expo-notifications; until then Settings doesn't offer them there.
 
-export type Scope = 'mine' | 'league';
+/** Whose game alerts: your team's hitters, every team's, or none (draft alerts only). */
+export type Scope = 'off' | 'mine' | 'league';
 
 export interface Prefs {
   scope: Scope;
   delaySeconds: number;
+  /** Bag alerts: 👜 a hitter got a bag. */
+  bags: boolean;
   /** Sub alerts: 👀 a hitter came off the bench, 😠 one was replaced. */
   subs: boolean;
   /** Cut alerts: 🥵 on the hot seat, 😮‍💨 off the chopping block. */
