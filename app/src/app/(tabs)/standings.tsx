@@ -10,6 +10,7 @@ import {
   nearestStop,
   nextPlayStop,
   playStops,
+  prevPlayStop,
   previousStop,
   sameStop,
   scoresAt,
@@ -34,8 +35,11 @@ import { type Scores, coreSpells, useScores, useSeasonPlayLines } from '@/lib/sc
 import { type SeasonData, useSeason } from '@/lib/season';
 import { teamName } from '@/lib/teams';
 
-/** How long each bag of playback takes, by zoom: a whole season, a round, a day. */
-const PLAY_MS: Record<Zoom, number> = { season: 100, round: 140, day: 450 };
+/** How long each bag of playback takes at normal speed, by zoom: a whole season, a round, a day. */
+const PLAY_MS: Record<Zoom, number> = { season: 500, round: 700, day: 2000 };
+/** Playback speeds; fast forward goes up through them and back to normal. */
+const SPEEDS = [1, 2, 4, 8] as const;
+type Speed = (typeof SPEEDS)[number];
 
 /**
  * Fantasy standings: each round's TB by game, and any team's TB by player. Desktops show both
@@ -65,6 +69,9 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
   const [stop, setStop] = useState<Stop | null>(null);
   const [zoom, setZoom] = useState<Zoom>('season');
   const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState<Speed>(1);
+  // Forward (1) or in reverse (-1).
+  const [direction, setDirection] = useState<1 | -1>(1);
 
   // A link to a team picks it, and on phones shows it. The param is then cleared, so the same link
   // works again after picking another team.
@@ -100,25 +107,41 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
     setStop(latest && sameStop(s, latest) ? null : s);
   };
 
-  // Playback: bag by bag (over the whole season when zoomed out), stopping at the last.
+  // Playback: bag by bag (over the whole season when zoomed out), either way, stopping at the end.
+  const move = direction > 0 ? nextPlayStop : prevPlayStop;
   const step = useRef<() => void>(() => {});
   useEffect(() => {
     step.current = () => {
-      const next = at ? nextPlayStop(timeline, zoom, at) : null;
+      const next = at ? move(timeline, zoom, at) : null;
       if (next) go(next);
-      if (!next || !nextPlayStop(timeline, zoom, next)) setPlaying(false);
+      if (!next || !move(timeline, zoom, next)) setPlaying(false);
     };
   });
   useEffect(() => {
     if (!playing) return;
-    const id = setInterval(() => step.current(), PLAY_MS[zoom]);
+    const id = setInterval(() => step.current(), PLAY_MS[zoom] / speed);
     return () => clearInterval(id);
-  }, [playing, zoom]);
-  const play = () => {
-    if (playing) return setPlaying(false);
+  }, [playing, zoom, speed]);
+  // Starts playing one way, from the other end when it's already at the end that way.
+  const start = (s: Speed, d: 1 | -1) => {
     if (!at) return;
-    if (!nextPlayStop(timeline, zoom, at)) go(playStops(timeline, zoom, at)[0]);
+    const stops = playStops(timeline, zoom, at);
+    if (d > 0 && !nextPlayStop(timeline, zoom, at)) go(stops[0]);
+    if (d < 0 && !prevPlayStop(timeline, zoom, at)) go(stops[stops.length - 1]);
+    setSpeed(s);
+    setDirection(d);
     setPlaying(true);
+  };
+  // Play starts forward at normal speed. Fast forward and rewind start at 2×, and pressed again
+  // while going their way, step through the speeds.
+  const play = () => (playing ? setPlaying(false) : start(1, 1));
+  const shuttle = (d: 1 | -1) => (playing && direction === d ? setSpeed(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]) : start(2, d));
+  // Frame by frame: pauses and goes one bag on or back.
+  const nextStop = at ? nextPlayStop(timeline, zoom, at) : null;
+  const prevStop = at ? prevPlayStop(timeline, zoom, at) : null;
+  const stepTo = (s: Stop | null) => () => {
+    setPlaying(false);
+    if (s) go(s);
   };
   const zoomTo = (z: Zoom) => {
     setPlaying(false);
@@ -191,7 +214,13 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
           }}
           onZoom={zoomTo}
           playing={playing}
+          speed={speed}
+          direction={direction}
           onPlay={play}
+          onStepBack={prevStop ? stepTo(prevStop) : undefined}
+          onStep={nextStop ? stepTo(nextStop) : undefined}
+          onRewind={() => shuttle(-1)}
+          onFastForward={() => shuttle(1)}
         />
       )}
       {atLatest && <CloseRoundCard data={data} scores={scores} round={round} refetch={refetch} />}

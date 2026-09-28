@@ -1,9 +1,11 @@
-import { useState } from 'react';
-import { type GestureResponderEvent, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
+import { useEffect, useState } from 'react';
+import { type GestureResponderEvent, Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 import { SERIES, type ScoreStat } from '@core/scoreboard.ts';
 import {
+  type Bag,
   isDayEnd,
   nearestStop,
   roundLines,
@@ -18,6 +20,7 @@ import {
 import { facesCut, inRound } from '@core/scoring.ts';
 import type { FantasyRound } from '@core/types.ts';
 
+import { clipUrl, savantUrl } from '@/components/hit-videos';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
@@ -25,6 +28,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { playerName, shortDate } from '@/lib/format';
 import { type GameInfo, coreSpells } from '@/lib/scores';
 import type { SeasonData } from '@/lib/season';
+import { supabase } from '@/lib/supabase';
 import { teamName } from '@/lib/teams';
 
 const CHART_H = 120;
@@ -52,7 +56,9 @@ export function rankedTeamIds(data: SeasonData, round: FantasyRound): string[] {
  * Below the standings: the season as a race (each team's running round total, stepping up bag by
  * bag) with a slider under it that moves the standings to any moment. Zoomed out it stops at the
  * end of each game day; zoomed in on a round or a day, at every bag. Drag or tap anywhere on the
- * chart or the bar, or play it.
+ * chart or the bar, or play it like a video: play, pause, a bag back or on, rewind or fast forward
+ * (2×, 4×, 8×, back to 1×).
+ * Paused on a bag, its videos (MLB's clip and Savant's) are a tap away under the readout.
  */
 export function SeasonScrubber({
   data,
@@ -65,7 +71,13 @@ export function SeasonScrubber({
   onStop,
   onZoom,
   playing,
+  speed,
+  direction,
   onPlay,
+  onStepBack,
+  onStep,
+  onRewind,
+  onFastForward,
 }: {
   data: SeasonData;
   timeline: Timeline;
@@ -79,7 +91,17 @@ export function SeasonScrubber({
   onStop: (stop: Stop) => void;
   onZoom: (zoom: Zoom) => void;
   playing: boolean;
+  /** Playback speed: 1, 2, 4 or 8. */
+  speed: number;
+  /** Playing forward (1) or in reverse (-1). */
+  direction: 1 | -1;
   onPlay: () => void;
+  /** Pauses and goes one bag back; undefined at the start. */
+  onStepBack?: () => void;
+  /** Pauses and goes one bag on; undefined at the end. */
+  onStep?: () => void;
+  onRewind: () => void;
+  onFastForward: () => void;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
@@ -211,53 +233,36 @@ export function SeasonScrubber({
     setOrigin(e.nativeEvent.pageX - e.nativeEvent.locationX);
     scrubTo(e.nativeEvent.locationX);
   };
-  const zoomAt = ZOOMS.indexOf(zoom);
   const hasBags = days.some((d) => d.bags.length > 0);
-  const zoomLabel = zoom === 'season' ? 'Season' : zoom === 'round' ? `Round ${round}` : shortDate(day.date);
 
   return (
     <ThemedView type="backgroundElement" style={[styles.card, { boxShadow: theme.raised }]}>
       <View style={styles.head}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={playing ? 'Pause' : 'Play the season'}
-          hitSlop={6}
-          onPress={onPlay}
-          style={[styles.play, { backgroundColor: theme.accent }]}>
-          {playing ? (
-            <Svg width={12} height={12} viewBox="0 0 24 24">
-              <Path d="M5 4h5v16H5zM14 4h5v16h-5z" fill={theme.accentText} />
-            </Svg>
-          ) : (
-            <Svg width={12} height={12} viewBox="0 0 24 24">
-              <Path d="M7 4.8v14.4a1 1 0 0 0 1.52.85l11.5-7.2a1 1 0 0 0 0-1.7L8.52 3.95A1 1 0 0 0 7 4.8z" fill={theme.accentText} />
-            </Svg>
-          )}
-        </Pressable>
         <View style={styles.readout}>
-          <ThemedText type="smallBold" numberOfLines={1}>{main}</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.sub}>{sub}</ThemedText>
+          <ThemedText type="smallBold" numberOfLines={2}>{main}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={2} style={styles.sub}>{sub}</ThemedText>
+          {bag && !playing && <BagVideos bag={bag} />}
         </View>
-        <View style={[styles.zoom, { backgroundColor: theme.background, boxShadow: theme.raised }]}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Zoom out"
-            hitSlop={4}
-            onPress={() => onZoom(ZOOMS[zoomAt - 1])}
-            style={[styles.zoomButton, zoomAt === 0 && styles.hidden]}
-            disabled={zoomAt === 0}>
-            <ThemedText type="smallBold">−</ThemedText>
-          </Pressable>
-          <ThemedText type="smallBold" numberOfLines={1} style={styles.zoomLabel}>{zoomLabel}</ThemedText>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Zoom in"
-            hitSlop={4}
-            onPress={() => onZoom(ZOOMS[zoomAt + 1])}
-            style={[styles.zoomButton, (zoomAt === 2 || !hasBags) && styles.hidden]}
-            disabled={zoomAt === 2 || !hasBags}>
-            <ThemedText type="smallBold">+</ThemedText>
-          </Pressable>
+        <View accessibilityRole="tablist" accessibilityLabel="Zoom" style={[styles.zoom, { backgroundColor: theme.backgroundSelected, boxShadow: theme.sunken }]}>
+          {ZOOMS.map((z) => {
+            const on = z === zoom;
+            const off = z !== 'season' && !hasBags;
+            return (
+              <Pressable
+                key={z}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: on, disabled: off }}
+                accessibilityLabel={z === 'season' ? 'Season' : z === 'round' ? `Round ${round}` : dayName(day.date)}
+                hitSlop={{ top: 10, bottom: 10, left: 2, right: 2 }}
+                disabled={off}
+                onPress={() => onZoom(z)}
+                style={[styles.zoomButton, on && { backgroundColor: theme.segment, boxShadow: theme.raised }, off && styles.disabled]}>
+                <ThemedText type="smallBold" style={[styles.zoomLabel, { color: on ? theme.text : theme.textSecondary }]}>
+                  {z === 'season' ? 'Season' : z === 'round' ? (on ? `Rd ${round}` : 'Rd') : on ? shortDate(day.date) : 'Day'}
+                </ThemedText>
+              </Pressable>
+            );
+          })}
         </View>
       </View>
 
@@ -326,15 +331,131 @@ export function SeasonScrubber({
         )}
       </View>
 
-      <View style={styles.legend}>
-        <Key color={theme.accent} width={3} label="You" />
-        <Key color={theme.textSecondary} width={1.5} label="Others" />
-        {round < 3 && <Key color={theme.danger} width={1.5} dash label="Cut line" />}
-        <ThemedText type="small" themeColor="textSecondary" style={[styles.legendText, styles.legendEnd]}>
-          {zoom === 'season' ? 'Per day' : 'Per bag'}
-        </ThemedText>
+      <View style={styles.footer}>
+        {/* The transport, as on a video player: rewind, a bag back, play, a bag on, fast forward. */}
+        <View style={[styles.transport, { backgroundColor: theme.background, boxShadow: theme.raised }]}>
+          <Shuttle
+            label="Rewind"
+            icon={{ ios: 'backward.fill', android: 'fast_rewind', web: 'fast_rewind' }}
+            speed={playing && direction < 0 ? speed : null}
+            onPress={onRewind}
+          />
+          <TransportButton label="Previous bag" icon={{ ios: 'backward.end.fill', android: 'skip_previous', web: 'skip_previous' }} onPress={onStepBack} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={playing ? 'Pause' : 'Play the season'}
+            hitSlop={4}
+            onPress={onPlay}
+            style={[styles.play, { backgroundColor: theme.accent }]}>
+            <SymbolView
+              name={playing ? { ios: 'pause.fill', android: 'pause', web: 'pause' } : { ios: 'play.fill', android: 'play_arrow', web: 'play_arrow' }}
+              size={16}
+              tintColor={theme.accentText}
+            />
+          </Pressable>
+          <TransportButton label="Next bag" icon={{ ios: 'forward.end.fill', android: 'skip_next', web: 'skip_next' }} onPress={onStep} />
+          <Shuttle
+            label="Fast forward"
+            icon={{ ios: 'forward.fill', android: 'fast_forward', web: 'fast_forward' }}
+            speed={playing && direction > 0 && speed > 1 ? speed : null}
+            onPress={onFastForward}
+          />
+        </View>
+        <View style={styles.legend}>
+          <Key color={theme.accent} width={3} label="You" />
+          <Key color={theme.textSecondary} width={1.5} label="Others" />
+          {round < 3 && <Key color={theme.danger} width={1.5} dash label="Cut" />}
+        </View>
       </View>
     </ThemedView>
+  );
+}
+
+/**
+ * A bag's videos, as links: MLB's clip once one is posted and Savant's, which comes the day after
+ * the game. Loaded when playback stops on the bag (one hit, well under 1 KB), never while playing.
+ * The row keeps its height while loading, so the card doesn't jump.
+ */
+function BagVideos({ bag }: { bag: Bag }) {
+  const theme = useTheme();
+  const [hit, setHit] = useState<{ playId: string; clip: string | null; savant: boolean; soon: boolean } | null>(null);
+  useEffect(() => {
+    let stale = false;
+    supabase
+      .from('mlb_hits')
+      .select('clip_slug, savant_ready')
+      .eq('play_id', bag.playId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (stale) return;
+        setHit({
+          playId: bag.playId,
+          clip: data?.clip_slug ?? null,
+          savant: data?.savant_ready ?? false,
+          // Savant posts a game's videos the next day; after that a missing one isn't coming.
+          soon: Date.now() - new Date(bag.endedAt).getTime() < 36 * 3600_000,
+        });
+      });
+    return () => {
+      stale = true;
+    };
+  }, [bag.playId, bag.endedAt]);
+  const loaded = hit?.playId === bag.playId ? hit : null;
+  const chip = (label: string, url: string) => (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={`${label} video`}
+      hitSlop={{ top: 10, bottom: 10, left: 2, right: 2 }}
+      onPress={() => Linking.openURL(url)}
+      style={[styles.chip, { backgroundColor: theme.tint }]}>
+      <SymbolView name={{ ios: 'play.fill', android: 'play_arrow', web: 'play_arrow' }} size={12} tintColor={theme.accent} />
+      <ThemedText type="smallBold" themeColor="accent" style={styles.chipText}>{label}</ThemedText>
+    </Pressable>
+  );
+  return (
+    <View style={styles.videos}>
+      {loaded?.clip && chip('MLB clip', clipUrl(loaded.clip))}
+      {loaded?.savant && chip('Savant', savantUrl(bag.playId))}
+      {loaded && !loaded.savant && loaded.soon && (
+        <View style={[styles.chip, styles.pending, { borderColor: theme.textSecondary }]}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.chipText}>Savant video tomorrow</ThemedText>
+        </View>
+      )}
+    </View>
+  );
+}
+
+type Icon = SymbolViewProps['name'];
+
+/** A bag back or on; disabled (no `onPress`) at the start or the end. */
+function TransportButton({ label, icon, onPress }: { label: string; icon: Icon; onPress?: () => void }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={{ top: 8, bottom: 8 }}
+      onPress={onPress}
+      disabled={!onPress}
+      style={[styles.transportButton, !onPress && styles.disabled]}>
+      <SymbolView name={icon} size={18} tintColor={theme.text} />
+    </Pressable>
+  );
+}
+
+/** Rewind or fast forward, with the speed under it while it's the way playback is going. */
+function Shuttle({ label, icon, speed, onPress }: { label: string; icon: Icon; speed: number | null; onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={speed ? `${label}, playing at ${speed}×` : label}
+      hitSlop={{ top: 8, bottom: 8 }}
+      onPress={onPress}
+      style={styles.transportButton}>
+      <SymbolView name={icon} size={18} tintColor={speed ? theme.accent : theme.text} />
+      {speed !== null && <ThemedText themeColor="accent" style={styles.speed}>{speed}×</ThemedText>}
+    </Pressable>
   );
 }
 
@@ -351,25 +472,32 @@ function Key({ color, width, dash, label }: { color: string; width: number; dash
 
 const styles = StyleSheet.create({
   card: { borderRadius: Radius.lg, padding: Spacing.two + 4, gap: Spacing.two },
-  head: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two + 2, minHeight: 32 },
-  play: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  head: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two },
   readout: { flex: 1, minWidth: 0 },
   sub: { fontSize: 12, lineHeight: 15 },
-  zoom: { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.md },
-  zoomButton: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
-  zoomLabel: { minWidth: 52, textAlign: 'center', fontSize: 12 },
-  hidden: { opacity: 0 },
+  videos: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.one + 2, minHeight: 24, marginTop: Spacing.one + 2 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, height: 24, paddingHorizontal: 10, borderRadius: 12 },
+  chipText: { fontSize: 12, lineHeight: 16 },
+  pending: { borderWidth: 1, borderStyle: 'dashed' },
+  zoom: { flexDirection: 'row', alignItems: 'center', height: 22, padding: 2, borderRadius: Radius.md },
+  zoomButton: { height: 18, paddingHorizontal: 6, borderRadius: Radius.sm, justifyContent: 'center' },
+  zoomLabel: { fontSize: 10, lineHeight: 12 },
+  disabled: { opacity: 0.3 },
   plot: { height: CHART_H + BAR_H },
   bar: { height: BAR_H },
   track: { position: 'absolute', top: 8, height: 6, borderRadius: 3, overflow: 'hidden' },
   fill: { height: 6 },
   knob: { position: 'absolute', top: 2, width: 18, height: 18, borderRadius: 9, borderWidth: 3 },
   ticks: { height: 14 },
+  footer: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  transport: { flexDirection: 'row', alignItems: 'center', height: 32, paddingHorizontal: 2, borderRadius: 16 },
+  play: { width: 28, height: 28, borderRadius: 14, marginHorizontal: 2, alignItems: 'center', justifyContent: 'center' },
+  transportButton: { width: 30, height: 32, alignItems: 'center', justifyContent: 'center' },
+  speed: { position: 'absolute', bottom: 0, left: 0, right: 0, textAlign: 'center', fontSize: 8, lineHeight: 9, fontWeight: 800 },
   tick: { position: 'absolute', top: 0, fontSize: 10, lineHeight: 14, fontWeight: 700, letterSpacing: 0.5 },
   centered: { width: 40, textAlign: 'center' },
   right: { right: 0 },
-  legend: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three - 2 },
+  legend: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', columnGap: Spacing.two + 2, rowGap: Spacing.one },
   key: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendText: { fontSize: 12, lineHeight: 16 },
-  legendEnd: { marginLeft: 'auto' },
 });

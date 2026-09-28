@@ -9,6 +9,7 @@ import {
   nearestStop,
   nextPlayStop,
   type PlayLine,
+  prevPlayStop,
   previousStop,
   roundLines,
   scoresAt,
@@ -136,6 +137,16 @@ describe('playback', () => {
     expect(nextPlayStop(tl, 'round', { day: 2, bag: 1 })).toBeNull();
     expect(nextPlayStop(tl, 'day', { day: 0, bag: 0 })).toEqual({ day: 0, bag: 1 });
     expect(nextPlayStop(tl, 'day', { day: 0, bag: 3 })).toBeNull();
+  });
+
+  it('plays backwards bag by bag, stopping at the start of the season, round or day', () => {
+    expect(prevPlayStop(tl, 'season', { day: 0, bag: 2 })).toEqual({ day: 0, bag: 1 });
+    expect(prevPlayStop(tl, 'season', { day: 1, bag: 1 })).toEqual({ day: 0, bag: 3 });
+    expect(prevPlayStop(tl, 'season', { day: 3, bag: 1 })).toEqual({ day: 2, bag: 1 });
+    expect(prevPlayStop(tl, 'season', { day: 0, bag: 1 })).toBeNull();
+    expect(prevPlayStop(tl, 'round', { day: 1, bag: 1 })).toEqual({ day: 0, bag: 3 });
+    expect(prevPlayStop(tl, 'day', { day: 0, bag: 1 })).toEqual({ day: 0, bag: 0 });
+    expect(prevPlayStop(tl, 'day', { day: 0, bag: 0 })).toBeNull();
   });
 
   it('compares a day with the day before on the season, else with the bag before', () => {
