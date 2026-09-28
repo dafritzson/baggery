@@ -109,7 +109,7 @@ const rate = (key: ColumnKey, label: string, title: string, width = 52): Column 
 });
 
 export const COLUMNS: Column[] = [
-  { ...count('adv', 'Adv%', "His team's chance to get through this fantasy round", 54), format: (v) => `${Math.round(v)}%`, default: true, odds: true },
+  { ...count('tb', 'TB', 'Total bases', 44), default: true },
   {
     ...count('xBags', 'xBags', 'Expected TB across the rest of the postseason, from his starts and lineup spot against each hand', 58),
     format: oneDecimal,
@@ -118,18 +118,28 @@ export const COLUMNS: Column[] = [
     marked: (r) => !!r.platoon?.side,
     cellTitle: (r) => (r.platoon?.side ? 'Adjusted for his platoon: the starts he can expect against the likely starters' : null),
   },
+  { ...count('rdtb', 'RDTB', 'Regressed TB per game × expected round 1 games', 52), format: oneDecimal, default: true },
+  { ...count('tbExpected', 'TB·E[G]/162', 'TB per game × expected round 1 games', 96), format: oneDecimal, default: true },
+  { ...rate('rdslg', 'RDSLG', 'SLG regressed toward .435', 60), default: true },
+  { ...count('adv', 'Adv%', "His team's chance to get through this fantasy round", 54), format: (v) => `${Math.round(v)}%`, default: true, odds: true },
   {
     ...count('spot', 'Spot', 'Usual lineup spot (and against the other hand, when it differs)', 50),
     default: true,
     text: (r) => r.platoon?.spotLabel ?? null,
     cellTitle: (r) => spotTitle(r.platoon),
   },
-  count('wins', 'Wins', 'Team wins', 50),
   { key: 'bye', label: 'Bye', title: 'Team has a Wild Card bye', width: 44, value: (r) => (r.bye ? 1 : 0), format: (v) => (v ? '✓' : ''), default: true, flag: { yes: 'Bye', no: 'No bye' }, draft1: true },
-  { ...count('postPa', 'Post PA', 'Plate appearances this postseason', 66), default: true, postseason: true },
+  count('wins', 'Wins', 'Team wins', 50),
   { ...count('postTb', 'Post TB', 'Total bases this postseason', 66), default: true, postseason: true },
-  count('g', 'G', 'Games'),
+  { ...count('postPa', 'Post PA', 'Plate appearances this postseason', 66), default: true, postseason: true },
+  { ...count('tbPerGame', 'TB/G', 'Total bases per game', 50), format: (v) => v.toFixed(2) },
+  { ...rate('slg', 'SLG', 'Slugging percentage'), default: true },
+  { ...count('opsPlus', 'OPS+', 'OPS+ (100 is league average)', 58), default: true },
+  rate('ops', 'OPS', 'On-base plus slugging', 58),
+  rate('obp', 'OBP', 'On-base percentage'),
+  rate('avg', 'AVG', 'Batting average'),
   { ...count('pa', 'PA', 'Plate appearances', 44), default: true },
+  count('g', 'G', 'Games'),
   count('ab', 'AB', 'At-bats', 44),
   count('h', 'H', 'Hits'),
   count('doubles', '2B', 'Doubles'),
@@ -139,16 +149,6 @@ export const COLUMNS: Column[] = [
   count('rbi', 'RBI', 'Runs batted in', 44),
   count('bb', 'BB', 'Walks'),
   count('so', 'SO', 'Strikeouts', 44),
-  rate('avg', 'AVG', 'Batting average'),
-  rate('obp', 'OBP', 'On-base percentage'),
-  { ...rate('slg', 'SLG', 'Slugging percentage'), default: true },
-  rate('ops', 'OPS', 'On-base plus slugging', 58),
-  { ...count('opsPlus', 'OPS+', 'OPS+ (100 is league average)', 58), default: true },
-  { ...count('tb', 'TB', 'Total bases', 44), default: true },
-  { ...count('tbPerGame', 'TB/G', 'Total bases per game', 50), format: (v) => v.toFixed(2) },
-  { ...rate('rdslg', 'RDSLG', 'SLG regressed toward .435', 60), default: true },
-  { ...count('tbExpected', 'TB·E[G]/162', 'TB per game × expected round 1 games', 96), format: oneDecimal, default: true },
-  { ...count('rdtb', 'RDTB', 'Regressed TB per game × expected round 1 games', 52), format: oneDecimal, default: true },
 ];
 
 /** "Bats 2nd against RHP, 7th against LHP". */
