@@ -1,4 +1,4 @@
-// Alerts on this device (bag, sub and cut alerts), by web push: the service worker (public/sw.js) shows what poll-games
+// Alerts on this device (bag, sub, cut and lineup alerts), by web push: the service worker (public/sw.js) shows what poll-games
 // sends. Works in Chrome and Firefox (Android and desktop) and, on iPhone, once Baggery is opened
 // from the Home Screen (iOS 16.4+). The notifications Edge Function keeps each device's choices.
 
@@ -55,11 +55,18 @@ export async function loadPushState(): Promise<PushState> {
   // Only the signed-in user's own row is readable: someone else's alerts on this browser show as off.
   const { data } = await supabase
     .from('push_subscriptions')
-    .select('scope, delay_seconds, sub_alerts, cut_alerts')
+    .select('scope, delay_seconds, sub_alerts, cut_alerts, lineup_alerts')
     .eq('endpoint', sub.endpoint)
     .maybeSingle();
   return data
-    ? { kind: 'on', scope: data.scope, delaySeconds: data.delay_seconds, subs: data.sub_alerts, cut: data.cut_alerts }
+    ? {
+        kind: 'on',
+        scope: data.scope,
+        delaySeconds: data.delay_seconds,
+        subs: data.sub_alerts,
+        cut: data.cut_alerts,
+        lineups: data.lineup_alerts,
+      }
     : { kind: 'off' };
 }
 

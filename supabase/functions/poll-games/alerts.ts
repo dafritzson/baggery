@@ -1,16 +1,17 @@
 // Push notifications. Bag alerts are queued by the collect_bag trigger when a batting line's total
 // bases go up (private.bag_alerts); sub alerts by saveGame from each box score it reads, and cut
-// alerts after each game of the round ends (both private.push_queue). poll-games sends the ones
+// alerts after each game of the round ends, and lineup alerts from each schedule read (all
+// private.push_queue). poll-games sends the ones
 // that are due after each poll.
 
 import { bagAlert } from '../_shared/core/bag-alerts.ts';
 import { bagParam } from '../_shared/core/bag-celebration.ts';
-import { cutAlert, cutFlips, cutSpots, subAlert } from '../_shared/core/game-alerts.ts';
+import { type LineupHitter, cutAlert, cutFlips, cutSpots, lineupAlert, lineupNews, scratchAlert, subAlert } from '../_shared/core/game-alerts.ts';
 import type { FantasyRound } from '../_shared/core/types.ts';
 import { type Tx, sql } from '../_shared/db.ts';
 import { type Subscription, sendPush } from '../_shared/push.ts';
 import { roundGameTypes, roundRanking } from '../_shared/round-ranking.ts';
-import type { LineupChange } from './feed.ts';
+import type { LineupChange, LineupRow } from './feed.ts';
 
 /** A queued alert, due after its subscription's spoiler delay. */
 interface Queued {
@@ -238,6 +239,87 @@ export async function queueCutAlerts(): Promise<number> {
       }),
       tx,
     );
+  });
+}
+
+/**
+ * Queues lineup alerts from the schedule's posted lineups (feed.ts scheduleLineups), for games not
+ * started yet that start within a day. A lineup seen for the first time names every drafted hitter
+ * of that MLB team: his spot, or the bench. A later change names the drafted hitters it dropped.
+ * Returns how many it queued.
+ */
+export async function queueLineupAlerts(lineups: LineupRow[]): Promise<number> {
+  if (!lineups.length) return 0;
+  return await sql.begin(async (tx) => {
+    const upcoming = await tx`
+      select game_pk from public.mlb_games
+      where game_pk in ${tx([...new Set(lineups.map((l) => l.game_pk))])}
+        and status = 'Preview' and not start_time_tbd and start_time < now() + interval '1 day'`;
+    const open = new Set(upcoming.map((g) => g.game_pk as number));
+    const key = (l: { game_pk: number; mlb_team_id: number }) => `${l.game_pk}:${l.mlb_team_id}`;
+    const before = open.size
+      ? await tx`select game_pk, mlb_team_id, player_ids from private.lineups where game_pk in ${tx([...open])}`
+      : [];
+    const seen = new Map(before.map((r) => [key(r as unknown as LineupRow), r.player_ids as number[]]));
+    const changed = lineups.filter((l) => open.has(l.game_pk) && seen.get(key(l))?.join() !== l.player_ids.join());
+    if (!changed.length) return 0;
+    await tx`
+      insert into private.lineups ${tx(changed, 'game_pk', 'mlb_team_id', 'player_ids')}
+      on conflict (game_pk, mlb_team_id) do update set player_ids = excluded.player_ids, updated_at = now()`;
+
+    // Every drafted hitter (on a team still alive, in a season played in the app) of the MLB teams
+    // whose lineups changed, and every subscription that wants his team's alerts.
+    const rows = await tx`
+      select c.game_pk, c.mlb_team_id, mt.name as mlb_team, p.mlb_player_id, pl.full_name as player,
+             p.injured_list is not null as injured,
+             coalesce(t.name, 'Team ' || t.slot) as team, t.user_id as team_user_id,
+             nullif(split_part(pr.display_name, ' ', 1), '') as manager,
+             s.endpoint, s.user_id, s.delay_seconds
+      from unnest(${changed.map((l) => l.game_pk)}::int[], ${changed.map((l) => l.mlb_team_id)}::int[]) as c (game_pk, mlb_team_id)
+      join public.mlb_games g on g.game_pk = c.game_pk
+      join public.mlb_teams mt on mt.id = c.mlb_team_id
+      join public.seasons se on se.year = g.season_year and se.imported_at is null
+      join public.season_player_pool p on p.season_id = se.id and p.mlb_team_id = c.mlb_team_id
+      join public.roster_spells r
+        on r.season_id = se.id and r.mlb_player_id = p.mlb_player_id
+       and r.from_at <= g.start_time and (r.to_at is null or g.start_time < r.to_at)
+      join public.fantasy_teams t on t.id = r.fantasy_team_id and t.eliminated_after_round is null
+      join public.mlb_players pl on pl.id = p.mlb_player_id
+      join public.push_subscriptions s
+        on s.lineup_alerts
+       and ((s.scope = 'mine' and s.user_id = t.user_id)
+            or (s.scope = 'league' and exists (
+              select 1 from public.league_members m where m.league_id = se.league_id and m.user_id = s.user_id)))
+      left join public.profiles pr on pr.id = t.user_id`;
+
+    const byKey = new Map(changed.map((l) => [key(l), { lineup: l.player_ids, ...lineupNews(seen.get(key(l)), l.player_ids) }]));
+    const alerts: Queued[] = [];
+    // A posted lineup: one alert per device and lineup, naming all its drafted hitters.
+    const posted = new Map<string, { endpoint: string; delay: number; mlbTeam: string; hitters: LineupHitter[] }>();
+    for (const row of rows) {
+      const news = byKey.get(key(row as unknown as LineupRow))!;
+      const yours = row.team_user_id === row.user_id;
+      if (news.posted) {
+        const k = `${row.endpoint}|${key(row as unknown as LineupRow)}`;
+        const entry = posted.get(k) ?? { endpoint: row.endpoint, delay: row.delay_seconds, mlbTeam: row.mlb_team, hitters: [] as LineupHitter[] };
+        const i = news.lineup.indexOf(row.mlb_player_id);
+        entry.hitters.push({
+          player: row.player,
+          spot: i < 0 ? null : i + 1,
+          injured: row.injured,
+          owner: yours ? null : (row.manager ?? row.team),
+        });
+        posted.set(k, entry);
+      } else if (news.scratched.includes(row.mlb_player_id)) {
+        const alert = scratchAlert(row.player, row.mlb_team, { team: row.team, manager: row.manager, yours });
+        alerts.push({ ...alert, endpoint: row.endpoint, send_at: dueAt(row.delay_seconds), url: '/games' });
+      }
+    }
+    for (const p of posted.values()) {
+      alerts.push({ ...lineupAlert(p.mlbTeam, p.hitters), endpoint: p.endpoint, send_at: dueAt(p.delay), url: '/games' });
+    }
+    // Tapping one opens the Games tab.
+    return queue(alerts, tx);
   });
 }
 
