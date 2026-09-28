@@ -1,12 +1,13 @@
-// Alerts on this device (Settings): bag alerts, and sub, cut and lineup alerts with them. poll-games sends the alerts themselves.
+// Alerts on this device (Settings): bag alerts, and sub, cut and lineup alerts with them, and draft
+// alerts. poll-games sends the game alerts themselves, and the draft function the draft alerts.
 //
 // POST { action: 'key' }                          the public key browsers subscribe with.
-// POST { action: 'subscribe', subscription, scope, delaySeconds, subs?, cut?, lineups? }
+// POST { action: 'subscribe', subscription, scope, delaySeconds, subs?, cut?, lineups?, draft? }
 //                                                 signed in: saves this browser's subscription and
-//                                                 its choices (also to change them). `subs`, `cut`
-//                                                 and `lineups` turn sub, cut and lineup alerts on
-//                                                 or off; left out, they stay as they were (at
-//                                                 first sub and cut alerts on, lineup alerts off).
+//                                                 its choices (also to change them). `subs`, `cut`,
+//                                                 `lineups` and `draft` turn sub, cut, lineup and
+//                                                 draft alerts on or off; left out, they stay as
+//                                                 they were (at first all on but lineup alerts).
 // POST { action: 'unsubscribe', endpoint }        signed in: this browser's alerts are off.
 // POST { action: 'test', endpoint }               signed in: sends this browser a test alert.
 
@@ -26,6 +27,7 @@ interface Body {
   subs?: boolean;
   cut?: boolean;
   lineups?: boolean;
+  draft?: boolean;
   endpoint?: string;
 }
 
@@ -46,17 +48,19 @@ serve(async (req) => {
       const subs = typeof body.subs === 'boolean' ? body.subs : null;
       const cut = typeof body.cut === 'boolean' ? body.cut : null;
       const lineups = typeof body.lineups === 'boolean' ? body.lineups : null;
+      const draft = typeof body.draft === 'boolean' ? body.draft : null;
       // An endpoint belongs to one browser; whoever signs in there last gets its alerts.
       await sql`
-        insert into push_subscriptions (endpoint, user_id, p256dh, auth, scope, delay_seconds, sub_alerts, cut_alerts, lineup_alerts)
+        insert into push_subscriptions (endpoint, user_id, p256dh, auth, scope, delay_seconds, sub_alerts, cut_alerts, lineup_alerts, draft_alerts)
         values (${endpoint}, ${userId}, ${keys.p256dh}, ${keys.auth}, ${body.scope}, ${delay},
-                coalesce(${subs}::boolean, true), coalesce(${cut}::boolean, true), coalesce(${lineups}::boolean, false))
+                coalesce(${subs}::boolean, true), coalesce(${cut}::boolean, true), coalesce(${lineups}::boolean, false), coalesce(${draft}::boolean, true))
         on conflict (endpoint) do update set
           user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth,
           scope = excluded.scope, delay_seconds = excluded.delay_seconds,
           sub_alerts = coalesce(${subs}::boolean, push_subscriptions.sub_alerts),
           cut_alerts = coalesce(${cut}::boolean, push_subscriptions.cut_alerts),
-          lineup_alerts = coalesce(${lineups}::boolean, push_subscriptions.lineup_alerts)`;
+          lineup_alerts = coalesce(${lineups}::boolean, push_subscriptions.lineup_alerts),
+          draft_alerts = coalesce(${draft}::boolean, push_subscriptions.draft_alerts)`;
       return json({ ok: true });
     }
 
