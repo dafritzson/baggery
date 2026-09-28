@@ -55,7 +55,7 @@ export async function loadPushState(): Promise<PushState> {
   // Only the signed-in user's own row is readable: someone else's alerts on this browser show as off.
   const { data } = await supabase
     .from('push_subscriptions')
-    .select('scope, delay_seconds, bag_alerts, sub_alerts, cut_alerts, lineup_alerts, draft_alerts')
+    .select('scope, delay_seconds, bag_alerts, sub_alerts, cut_alerts, lineup_alerts, draft_alerts, draft_started_alerts, autopick_alerts, draft_done_alerts')
     .eq('endpoint', sub.endpoint)
     .maybeSingle();
   return data
@@ -68,6 +68,9 @@ export async function loadPushState(): Promise<PushState> {
         cut: data.cut_alerts,
         lineups: data.lineup_alerts,
         draft: data.draft_alerts,
+        draftStarted: data.draft_started_alerts,
+        autopicks: data.autopick_alerts,
+        draftDone: data.draft_done_alerts,
       }
     : { kind: 'off' };
 }
