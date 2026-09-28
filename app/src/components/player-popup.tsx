@@ -27,6 +27,7 @@ import {
 import { playerSeries } from '@core/scoreboard.ts';
 import { type GameType, ROUND_FOR_GAME_TYPE } from '@core/types.ts';
 
+import { MatchupStrip, PlatoonSplitTable } from '@/components/platoon';
 import { type GridRow, ScoreGrid } from '@/components/score-grid';
 import { StatChart } from '@/components/stat-chart';
 import { ThemedText } from '@/components/themed-text';
@@ -36,8 +37,9 @@ import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { headshotUrl, shortDate } from '@/lib/format';
 import type { DraftAction } from '@/lib/player';
-import { type Projection, projection } from '@/lib/projections';
-import { coreSpells, usePlayerScores } from '@/lib/scores';
+import { matchupsByTeam, playerPlatoon, usePlatoons } from '@/lib/platoon';
+import { type Projection, projection, teamOdds } from '@/lib/projections';
+import { coreSpells, usePlayerScores, useScores } from '@/lib/scores';
 import { type SeasonData, useSeason } from '@/lib/season';
 import { supabase } from '@/lib/supabase';
 import { ownerName, teamName } from '@/lib/teams';
@@ -205,6 +207,7 @@ export function PlayerDetails({
       />
       <ScrollView contentContainerStyle={styles.body}>
         {data && <BaggerySection data={data} playerId={playerId} requestedYear={requestedYear} onClose={onClose} />}
+        {data && <MatchupsSection data={data} playerId={playerId} />}
         {error && <ThemedText themeColor="danger">{error}</ThemedText>}
         {!stats && !error && <ActivityIndicator style={{ padding: Spacing.five }} />}
         {stats && year && (
@@ -224,6 +227,29 @@ export function PlayerDetails({
         </View>
       </ScrollView>
     </>
+  );
+}
+
+/**
+ * His starts, lineup spots and splits against each hand, and this round's likely starters against
+ * his team (components/platoon.tsx). Only for pool players the sync found lineups for.
+ */
+function MatchupsSection({ data, playerId }: { data: SeasonData; playerId: number }) {
+  const platoons = usePlatoons(data);
+  const { scores } = useScores();
+  const entry = data.poolByPlayer.get(playerId);
+  const platoon = useMemo(() => {
+    if (!entry || !platoons || !scores) return null;
+    const team = data.mlbTeams.get(entry.mlb_team_id);
+    const live = data.season.status !== 'complete' && !team?.eliminated;
+    const matchups = live ? (matchupsByTeam(data, platoons, scores.games).get(entry.mlb_team_id) ?? []) : [];
+    return playerPlatoon(entry, platoons, matchups, live ? teamOdds(data, scores.games)?.get(entry.mlb_team_id) : undefined);
+  }, [data, entry, platoons, scores]);
+  if (!platoon) return null;
+  return (
+    <Section id="matchups" title={platoon.matchups.length ? 'Matchups this round' : 'Against each hand'}>
+      {platoon.matchups.length ? <MatchupStrip platoon={platoon} /> : <PlatoonSplitTable platoon={platoon} />}
+    </Section>
   );
 }
 

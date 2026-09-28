@@ -100,6 +100,19 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   scores it shows are the app-wide ones. Fewer loads than before, and no new realtime channels or Edge Function calls.
 - **Adv% and xBags.** Computed in the app from the season and scores it already loads. The season
   load gains each team's seed and league (a few bytes per team). No new calls, polling or storage.
+- **Platoons and batting order.** Kept out of the season load, which reloads often (see Egress):
+  the draft table, Research and the player popup load the pool's `platoon` column, the teams'
+  rotations and the announced starters once per app open, in one set of requests: an estimated
+  50–60 KB uncompressed for ~170 hitters (a JSON record of ~300 bytes each), well under that
+  gzipped. At ~15 people opening the app ~10 times a day, that's under 250 MB a month, likely
+  ~60 MB compressed. Announced starters are their own table (`mlb_probables`), not `mlb_games`
+  columns, so they add nothing to the scores broadcast, which sends whole `mlb_games` rows many
+  times a live game. `sync-pool` reads ~12 more MLB responses of ~1 MB each (one team's season
+  of lineups), 12 roster splits and one `/people` batch; downloads into the function, not egress,
+  and only when the commissioner syncs. `poll-games`'s schedule read adds `hydrate=probablePitcher,
+  person` (a few KB more from MLB) and writes `mlb_probables` only when a starter changes. No new
+  Edge Function calls, polling or realtime channels. Re-syncing the pool updates ~170 pool rows,
+  whose Postgres Changes now carry the platoon record too (~0.3 KB more each), a few times a season.
 - **The player popup's Baggery section.** Each time the popup opens it loads the player's MLB
   team's postseason games (up to ~20 rows) and his TB in them, straight from the tables: ~5 KB. At
   ~15 people opening ~20 popups a day, that's ~45 MB a month. It doesn't follow live games (no

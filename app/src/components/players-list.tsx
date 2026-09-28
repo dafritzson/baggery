@@ -3,6 +3,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, TextInput, View, useWindow
 import Svg, { Circle, Path } from 'react-native-svg';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
+import type { MatchupSeries } from '@core/matchups.ts';
 import type { TeamOdds } from '@core/odds.ts';
 import { expectedBags } from '@core/stats.ts';
 
@@ -14,6 +15,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { type Range, filterRows } from '@/lib/column-filters';
 import { useOpenPlayer } from '@/lib/player';
 import { usePlayerColumns } from '@/lib/player-columns';
+import { type PlatoonData, matchupsByTeam, playerPlatoon, usePlatoons } from '@/lib/platoon';
 import { projection, teamOdds } from '@/lib/projections';
 import { useScores } from '@/lib/scores';
 import type { Draft, SeasonData } from '@/lib/season';
@@ -115,6 +117,8 @@ export function availablePlayers(
   board: Board = currentBoard(data),
   totals: PostseasonTotals | null = null,
   odds: Map<number, TeamOdds> | null = null,
+  platoons: PlatoonData | null = null,
+  matchups: Map<number, MatchupSeries[]> = new Map(),
 ): (PlayerRow & { mlbTeamId: number })[] {
   const postseason = !!totals?.size;
   // Teams that have played: any of their hitters has a postseason line.
@@ -128,6 +132,7 @@ export function availablePlayers(
       const team = data.mlbTeams.get(p.mlb_team_id);
       const teamOdd = odds?.get(p.mlb_team_id);
       const { bye, rdslg, tbExpected, rdtb } = projection(data, p);
+      const platoon = playerPlatoon(p, platoons, matchups.get(p.mlb_team_id) ?? [], teamOdd);
       const ab = p.at_bats;
       const h = p.hits;
       const onBase = h === null || ab === null ? null : h + (p.walks ?? 0) + (p.hit_by_pitch ?? 0);
@@ -140,7 +145,12 @@ export function availablePlayers(
         team: team?.abbreviation ?? '',
         wins: team?.wins ?? null,
         adv: teamOdd ? 100 * teamOdd.advance : null,
-        xBags: teamOdd && ab !== null && p.games_played !== null ? expectedBags(p.regular_season_tb, ab, p.games_played, teamOdd.games) : null,
+        // From his starts and lineup spots against each hand when the pool has them.
+        xBags:
+          platoon?.xBags ??
+          (teamOdd && ab !== null && p.games_played !== null ? expectedBags(p.regular_season_tb, ab, p.games_played, teamOdd.games) : null),
+        spot: platoon?.spots[platoon.primary] ?? null,
+        platoon,
         bye,
         postPa: postseason && played.has(p.mlb_team_id) ? (totals!.get(p.mlb_player_id)?.pa ?? 0) : null,
         postTb: postseason && played.has(p.mlb_team_id) ? (totals!.get(p.mlb_player_id)?.tb ?? 0) : null,
@@ -207,7 +217,15 @@ export function PlayersList({
   const { scores } = useScores();
   // Waits for the games, so a series under way isn't shown from 0-0.
   const odds = useMemo(() => (scores ? teamOdds(data, scores.games, shownBoard.statsBefore) : null), [data, scores, shownBoard.statsBefore]);
-  const available = useMemo(() => availablePlayers(data, shownBoard, totals, odds), [data, shownBoard, totals, odds]);
+  const platoons = usePlatoons(data);
+  const matchups = useMemo(
+    () => matchupsByTeam(data, platoons, scores?.games ?? null, shownBoard.statsBefore),
+    [data, platoons, scores, shownBoard.statsBefore],
+  );
+  const available = useMemo(
+    () => availablePlayers(data, shownBoard, totals, odds, platoons, matchups),
+    [data, shownBoard, totals, odds, platoons, matchups],
+  );
   // Postseason columns only once it has games (before that they'd be empty), Draft 1's (Bye) only
   // before; the odds columns only with odds.
   const offered = useMemo(

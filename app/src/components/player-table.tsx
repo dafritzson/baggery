@@ -4,11 +4,13 @@ import Svg, { Path } from 'react-native-svg';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { FilterSheet } from '@/components/filter-sheet';
+import { PlatoonChip } from '@/components/platoon';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { type Range, thresholds } from '@/lib/column-filters';
+import { type PlayerPlatoon, ordinal } from '@/lib/platoon';
 
 export interface PlayerRow {
   id: number;
@@ -46,9 +48,13 @@ export interface PlayerRow {
   rdslg: number | null;
   tbExpected: number | null;
   rdtb: number | null;
+  /** Usual lineup spot (against the hand he starts against more): null without lineups. */
+  spot: number | null;
+  /** Platoon and lineup spots (lib/platoon.ts), when the pool has them. */
+  platoon: PlayerPlatoon | null;
 }
 
-export type ColumnKey = Exclude<keyof PlayerRow, 'id' | 'name' | 'team'>;
+export type ColumnKey = Exclude<keyof PlayerRow, 'id' | 'name' | 'team' | 'platoon'>;
 type SortKey = 'name' | ColumnKey;
 
 export interface Column {
@@ -69,6 +75,12 @@ export interface Column {
   draft1?: boolean;
   /** From the team odds: left out when there are none (no seeds yet, or a past season's format). */
   odds?: boolean;
+  /** Shown instead of the formatted value, e.g. "2 · 7". */
+  text?: (row: PlayerRow) => string | null;
+  /** Web: what resting the pointer on a cell says about it. */
+  cellTitle?: (row: PlayerRow) => string | null;
+  /** Underlined with dots, e.g. xBags adjusted for a platoon. */
+  marked?: (row: PlayerRow) => boolean;
 }
 
 /** Bounds per column, from the filter menus in the header. */
@@ -94,7 +106,20 @@ const rate = (key: ColumnKey, label: string, title: string, width = 52): Column 
 
 export const COLUMNS: Column[] = [
   { ...count('adv', 'Adv%', "His team's chance to get through this fantasy round", 54), format: (v) => `${Math.round(v)}%`, default: true, odds: true },
-  { ...count('xBags', 'xBags', 'Expected TB across the rest of the postseason', 58), format: oneDecimal, default: true, odds: true },
+  {
+    ...count('xBags', 'xBags', 'Expected TB across the rest of the postseason, from his starts and lineup spot against each hand', 58),
+    format: oneDecimal,
+    default: true,
+    odds: true,
+    marked: (r) => !!r.platoon?.side,
+    cellTitle: (r) => (r.platoon?.side ? 'Adjusted for his platoon: the starts he can expect against the likely starters' : null),
+  },
+  {
+    ...count('spot', 'Spot', 'Usual lineup spot (and against the other hand, when it differs)', 50),
+    default: true,
+    text: (r) => r.platoon?.spotLabel ?? null,
+    cellTitle: (r) => spotTitle(r.platoon),
+  },
   count('wins', 'Wins', 'Team wins', 50),
   { key: 'bye', label: 'Bye', title: 'Team has a Wild Card bye', width: 44, value: (r) => (r.bye ? 1 : 0), format: (v) => (v ? '✓' : ''), default: true, flag: { yes: 'Bye', no: 'No bye' }, draft1: true },
   { ...count('postPa', 'Post PA', 'Plate appearances this postseason', 66), default: true, postseason: true },
@@ -121,6 +146,13 @@ export const COLUMNS: Column[] = [
   { ...count('tbExpected', 'TB·E[G]/162', 'TB per game × expected round 1 games', 96), format: oneDecimal, default: true },
   { ...count('rdtb', 'RDTB', 'Regressed TB per game × expected round 1 games', 52), format: oneDecimal, default: true },
 ];
+
+/** "Bats 2nd against RHP, 7th against LHP". */
+function spotTitle(p: PlayerPlatoon | null): string | null {
+  if (!p) return null;
+  const parts = (['R', 'L'] as const).filter((h) => p.spots[h] !== null).map((h) => `${ordinal(p.spots[h])} against ${h}HP`);
+  return parts.length ? `Bats ${parts.join(', ')}` : null;
+}
 
 export const DEFAULT_COLUMNS: ColumnKey[] = COLUMNS.filter((c) => c.default).map((c) => c.key);
 
@@ -287,13 +319,17 @@ export function PlayerTable({
         <Pressable key={r.id} {...rowPress(r.id)} style={[rowStyle(r.id, i), styles.cells]}>
           {columns.map((c) => {
             const value = c.value(r);
+            const title = c.cellTitle?.(r);
             return (
-              <View key={c.key} style={[styles.cell, { minWidth: c.width, flexGrow: c.width, flexBasis: c.width }]}>
+              <View
+                key={c.key}
+                ref={title ? hoverTitle(title) : undefined}
+                style={[styles.cell, { minWidth: c.width, flexGrow: c.width, flexBasis: c.width }]}>
                 <ThemedText
                   type={c.key === sort.key ? 'smallBold' : 'small'}
                   themeColor={value === null ? 'textSecondary' : 'text'}
-                  style={styles.number}>
-                  {value === null ? '—' : c.format ? c.format(value) : value}
+                  style={[styles.number, c.marked?.(r) && styles.marked]}>
+                  {c.text?.(r) ?? (value === null ? '—' : c.format ? c.format(value) : value)}
                 </ThemedText>
               </View>
             );
@@ -328,6 +364,7 @@ export function PlayerTable({
           <Pressable key={r.id} {...rowPress(r.id)} style={[rowStyle(r.id, i), styles.nameCell, styles.nameRow]}>
             <ThemedText type="smallBold" numberOfLines={1} style={styles.name}>{r.name}</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">{r.team}</ThemedText>
+            {r.platoon?.side && <PlatoonChip platoon={r.platoon} name={r.name} />}
           </Pressable>
         ))}
       </View>
@@ -462,4 +499,5 @@ const styles = StyleSheet.create({
   cells: { flexDirection: 'row', paddingRight: Spacing.two },
   cell: { height: ROW_HEIGHT, justifyContent: 'center', alignItems: 'flex-end', paddingLeft: Spacing.one },
   number: { fontVariant: ['tabular-nums'] },
+  marked: { textDecorationLine: 'underline', textDecorationStyle: 'dotted' },
 });

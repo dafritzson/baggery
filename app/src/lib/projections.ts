@@ -3,6 +3,7 @@ import { postseasonSeries } from '@core/schedule.ts';
 import type { GameInfo } from '@core/score-feed.ts';
 import { expectedTb, regressedSlg, regressedTb } from '@core/stats.ts';
 
+import { oddsField } from '@/lib/platoon';
 import type { PoolEntry, SeasonData } from '@/lib/season';
 
 /** A pool player's round-1 projections, as the draft table and the player popup show them. */
@@ -32,9 +33,7 @@ export function projection(data: SeasonData, entry: PoolEntry): Projection {
  * lock). Null until the pool sync has set a full 6 seeds per league.
  */
 export function teamOdds(data: SeasonData, games: GameInfo[], before?: string | null): Map<number, TeamOdds> | null {
-  const teams = [...data.mlbTeams.values()].flatMap((t) =>
-    t.seed !== null && t.league !== null && t.wins !== null ? [{ teamId: t.id, league: t.league, seed: t.seed, wins: t.wins }] : [],
-  );
+  const teams = oddsField(data);
   const cut = before ? Date.parse(before) : Infinity;
   return postseasonOdds(teams, postseasonSeries(games.filter((g) => Date.parse(g.start) < cut)));
 }
