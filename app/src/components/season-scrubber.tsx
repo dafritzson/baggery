@@ -1,4 +1,4 @@
-import { SymbolView } from 'expo-symbols';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useEffect, useState } from 'react';
 import { type GestureResponderEvent, Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
@@ -49,7 +49,8 @@ export function roundTeamIds(data: SeasonData, round: FantasyRound): string[] {
  * Below the standings: the season as a race (each team's running round total, stepping up bag by
  * bag) with a slider under it that moves the standings to any moment. Zoomed out it stops at the
  * end of each game day; zoomed in on a round or a day, at every bag. Drag or tap anywhere on the
- * chart or the bar, or play it: play, pause, go one bag on, or fast forward (2×, 4×, 8×, back to 1×).
+ * chart or the bar, or play it like a video: play, pause, a bag back or on, rewind or fast forward
+ * (2×, 4×, 8×, back to 1×).
  * Paused on a bag, its videos (MLB's clip and Savant's) are a tap away under the readout.
  */
 export function SeasonScrubber({
@@ -64,8 +65,11 @@ export function SeasonScrubber({
   onZoom,
   playing,
   speed,
+  direction,
   onPlay,
+  onStepBack,
   onStep,
+  onRewind,
   onFastForward,
 }: {
   data: SeasonData;
@@ -82,9 +86,14 @@ export function SeasonScrubber({
   playing: boolean;
   /** Playback speed: 1, 2, 4 or 8. */
   speed: number;
+  /** Playing forward (1) or in reverse (-1). */
+  direction: 1 | -1;
   onPlay: () => void;
+  /** Pauses and goes one bag back; undefined at the start. */
+  onStepBack?: () => void;
   /** Pauses and goes one bag on; undefined at the end. */
   onStep?: () => void;
+  onRewind: () => void;
   onFastForward: () => void;
 }) {
   const theme = useTheme();
@@ -315,46 +324,41 @@ export function SeasonScrubber({
         )}
       </View>
 
-      <View style={styles.transport}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={playing ? 'Pause' : 'Play the season'}
-          hitSlop={4}
-          onPress={onPlay}
-          style={[styles.play, { backgroundColor: theme.accent }]}>
-          <SymbolView
-            name={playing ? { ios: 'pause.fill', android: 'pause', web: 'pause' } : { ios: 'play.fill', android: 'play_arrow', web: 'play_arrow' }}
-            size={20}
-            tintColor={theme.accentText}
+      <View style={styles.footer}>
+        {/* The transport, as on a video player: rewind, a bag back, play, a bag on, fast forward. */}
+        <View style={[styles.transport, { backgroundColor: theme.background, boxShadow: theme.raised }]}>
+          <Shuttle
+            label="Rewind"
+            icon={{ ios: 'backward.fill', android: 'fast_rewind', web: 'fast_rewind' }}
+            speed={playing && direction < 0 ? speed : null}
+            onPress={onRewind}
           />
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Next bag"
-          hitSlop={4}
-          onPress={onStep}
-          disabled={!onStep}
-          style={[styles.transportButton, !onStep && styles.disabled]}>
-          <SymbolView name={{ ios: 'forward.end.fill', android: 'skip_next', web: 'skip_next' }} size={20} tintColor={theme.text} />
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={playing ? `Fast forward, playing at ${speed}×` : 'Fast forward'}
-          hitSlop={4}
-          onPress={onFastForward}
-          style={[styles.transportButton, styles.fastForward]}>
-          <SymbolView name={{ ios: 'forward.fill', android: 'fast_forward', web: 'fast_forward' }} size={20} tintColor={playing && speed > 1 ? theme.accent : theme.text} />
-          {playing && speed > 1 && <ThemedText type="smallBold" themeColor="accent" style={styles.speed}>{speed}×</ThemedText>}
-        </Pressable>
-      </View>
-
-      <View style={styles.legend}>
-        <Key color={theme.accent} width={3} label="You" />
-        <Key color={theme.textSecondary} width={1.5} label="Others" />
-        {round < 3 && <Key color={theme.danger} width={1.5} dash label="Cut line" />}
-        <ThemedText type="small" themeColor="textSecondary" style={[styles.legendText, styles.legendEnd]}>
-          {zoom === 'season' ? 'Per day' : 'Per bag'}
-        </ThemedText>
+          <TransportButton label="Previous bag" icon={{ ios: 'backward.end.fill', android: 'skip_previous', web: 'skip_previous' }} onPress={onStepBack} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={playing ? 'Pause' : 'Play the season'}
+            hitSlop={4}
+            onPress={onPlay}
+            style={[styles.play, { backgroundColor: theme.accent }]}>
+            <SymbolView
+              name={playing ? { ios: 'pause.fill', android: 'pause', web: 'pause' } : { ios: 'play.fill', android: 'play_arrow', web: 'play_arrow' }}
+              size={16}
+              tintColor={theme.accentText}
+            />
+          </Pressable>
+          <TransportButton label="Next bag" icon={{ ios: 'forward.end.fill', android: 'skip_next', web: 'skip_next' }} onPress={onStep} />
+          <Shuttle
+            label="Fast forward"
+            icon={{ ios: 'forward.fill', android: 'fast_forward', web: 'fast_forward' }}
+            speed={playing && direction > 0 && speed > 1 ? speed : null}
+            onPress={onFastForward}
+          />
+        </View>
+        <View style={styles.legend}>
+          <Key color={theme.accent} width={3} label="You" />
+          <Key color={theme.textSecondary} width={1.5} label="Others" />
+          {round < 3 && <Key color={theme.danger} width={1.5} dash label="Cut" />}
+        </View>
       </View>
     </ThemedView>
   );
@@ -414,6 +418,40 @@ function BagVideos({ bag }: { bag: Bag }) {
   );
 }
 
+type Icon = SymbolViewProps['name'];
+
+/** A bag back or on; disabled (no `onPress`) at the start or the end. */
+function TransportButton({ label, icon, onPress }: { label: string; icon: Icon; onPress?: () => void }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={{ top: 8, bottom: 8 }}
+      onPress={onPress}
+      disabled={!onPress}
+      style={[styles.transportButton, !onPress && styles.disabled]}>
+      <SymbolView name={icon} size={18} tintColor={theme.text} />
+    </Pressable>
+  );
+}
+
+/** Rewind or fast forward, with the speed under it while it's the way playback is going. */
+function Shuttle({ label, icon, speed, onPress }: { label: string; icon: Icon; speed: number | null; onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={speed ? `${label}, playing at ${speed}×` : label}
+      hitSlop={{ top: 8, bottom: 8 }}
+      onPress={onPress}
+      style={styles.transportButton}>
+      <SymbolView name={icon} size={18} tintColor={speed ? theme.accent : theme.text} />
+      {speed !== null && <ThemedText themeColor="accent" style={styles.speed}>{speed}×</ThemedText>}
+    </Pressable>
+  );
+}
+
 function Key({ color, width, dash, label }: { color: string; width: number; dash?: boolean; label: string }) {
   return (
     <View style={styles.key}>
@@ -444,16 +482,15 @@ const styles = StyleSheet.create({
   fill: { height: 6 },
   knob: { position: 'absolute', top: 2, width: 18, height: 18, borderRadius: 9, borderWidth: 3 },
   ticks: { height: 14 },
-  transport: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one + 2 },
-  play: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  transportButton: { height: 36, minWidth: 36, alignItems: 'center', justifyContent: 'center' },
-  fastForward: { flexDirection: 'row', gap: 2, paddingHorizontal: 6 },
-  speed: { fontSize: 12, lineHeight: 16 },
+  footer: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  transport: { flexDirection: 'row', alignItems: 'center', height: 32, paddingHorizontal: 2, borderRadius: 16 },
+  play: { width: 28, height: 28, borderRadius: 14, marginHorizontal: 2, alignItems: 'center', justifyContent: 'center' },
+  transportButton: { width: 30, height: 32, alignItems: 'center', justifyContent: 'center' },
+  speed: { position: 'absolute', bottom: 0, left: 0, right: 0, textAlign: 'center', fontSize: 8, lineHeight: 9, fontWeight: 800 },
   tick: { position: 'absolute', top: 0, fontSize: 10, lineHeight: 14, fontWeight: 700, letterSpacing: 0.5 },
   centered: { width: 40, textAlign: 'center' },
   right: { right: 0 },
-  legend: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three - 2 },
+  legend: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', columnGap: Spacing.two + 2, rowGap: Spacing.one },
   key: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendText: { fontSize: 12, lineHeight: 16 },
-  legendEnd: { marginLeft: 'auto' },
 });
