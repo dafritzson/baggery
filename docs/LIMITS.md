@@ -151,6 +151,10 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   spoiler delay keep the cron job calling `poll-games` for up to 2 more minutes, as bag alerts do.
   That's at most ~12 extra calls per finished game, ~500 a postseason per project. No new
   realtime traffic or app downloads; Settings reads two more booleans from its own row.
+- **League log.** One row (~300 bytes) per commissioner action, claim, team rename or name or
+  photo change: a few hundred a season.
+  Settings reads the latest 20 only for the commissioner, ~6 KB per visit, plus 20 more on
+  "Show older". No new function calls, realtime traffic or polling.
 - **Realtime messages per second.** The old per-row Postgres Changes could burst 150–250 messages
   right after a poll on a busy day. One broadcast per poll keeps it to about one message per open
   app every 10 seconds. The draft room still uses Postgres Changes on low-traffic tables

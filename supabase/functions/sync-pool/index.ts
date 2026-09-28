@@ -26,6 +26,7 @@ import {
 } from '../_shared/core/stats.ts';
 import { type Tx, sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
+import { logCommissioner } from '../_shared/league-log.ts';
 import {
   type Person,
   type PlatoonRecord,
@@ -420,6 +421,13 @@ serve(async (req) => {
         update drafts set locks_at = ${wildCardStart}
         where season_id = ${seasonId} and number = 1 and status = 'scheduled'`;
     }
+    await logCommissioner(tx, {
+      seasonId,
+      userId,
+      action: 'sync-pool',
+      summary: `Synced ${year}'s player pool from MLB (${playoffTeamIds.length} teams, ${players.length} players)`,
+      details: { teamIds: playoffTeamIds },
+    });
   });
 
   return json({

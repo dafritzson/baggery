@@ -162,6 +162,34 @@ describe('draft 1', () => {
     expect(count).toBe(0);
   });
 
+  it('logs commissioner actions and managers claiming and renaming, which only the commissioner can read', async () => {
+    const daniel = clients.get('Daniel')!;
+    const { data: log } = await daniel.from('league_log').select('action, summary, user_id, commissioner').order('id');
+    const { data: profile } = await admin.from('profiles').select('id').eq('display_name', 'Daniel').single();
+
+    const commissioner = log!.filter((l) => l.commissioner);
+    expect(commissioner.map((l) => l.action)).toEqual(['rename_team', 'sync-pool', 'start', 'undo']);
+    expect(commissioner[0].summary).toBe('Renamed Big Bags to Kyle Bags');
+    expect(commissioner[3].summary).toMatch(/^Undid .+'s pick of .+ in Draft 1$/);
+    expect(commissioner.every((l) => l.user_id === profile!.id)).toBe(true);
+
+    // Managers' own claims and renames; their picks on their turn aren't logged (draft_actions has them).
+    const managers = log!.filter((l) => !l.commissioner);
+    expect(managers.filter((l) => l.action === 'claim_team')).toHaveLength(MANAGERS.length);
+    expect(managers[0].summary).toBe('Claimed a spot as Daniel Bags, becoming commissioner');
+    expect(managers.find((l) => l.action === 'rename_team')!.summary).toBe('Renamed their team from Kyle Bags to Big Bags');
+    expect(managers.map((l) => l.action).filter((a) => a !== 'claim_team')).toEqual(['rename_team']);
+
+    // Managers can't read it; nobody can change it.
+    expect((await clients.get('Kyle')!.from('league_log').select('id')).data).toEqual([]);
+    expect((await daniel.from('league_log').delete().eq('action', 'undo')).error?.message).toMatch(/permission denied/);
+    expect((await daniel.from('league_log').update({ summary: 'nothing to see' }).eq('action', 'undo')).error?.message).toMatch(
+      /permission denied/,
+    );
+    const { count } = await admin.from('league_log').select('*', { count: 'exact', head: true });
+    expect(count).toBe(log!.length);
+  });
+
   it('lets the commissioner undo a mistaken pick and the autopicks after it, one at a time', async () => {
     const up = await onTheClock();
     const upTeam = teamIdByManager.get(up)!;
@@ -303,6 +331,9 @@ describe('profile photos', () => {
     expect((await kyle.from('profiles').update({ avatar_path: null }).eq('id', kyleId)).error).toBeNull();
     expect((await bucket.remove([`${kyleId}/1.png`])).error).toBeNull();
     expect((await admin.storage.from('avatars').list(kyleId)).data).toHaveLength(0);
+    // Both show in the league log (the rejected ones don't).
+    const { data: log } = await admin.from('league_log').select('summary').eq('user_id', kyleId).eq('action', 'photo').order('id');
+    expect(log!.map((l) => l.summary)).toEqual(['Uploaded a new photo', 'Removed their uploaded photo']);
   });
 });
 

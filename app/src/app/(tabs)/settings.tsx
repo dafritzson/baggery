@@ -7,6 +7,7 @@ import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { ExportSeasonCard } from '@/components/export-season-card';
 import { ImportSeasonCard } from '@/components/import-season-card';
+import { LeagueLogCard } from '@/components/league-log-card';
 import { Loader } from '@/components/loader';
 import { PastManagersCard } from '@/components/past-managers-card';
 import { OwnerBadge } from '@/components/owner-badge';
@@ -25,7 +26,7 @@ import { suggestTeamName, teamName } from '@/lib/teams';
 
 /**
  * Your settings: your photo, your team name for the season being viewed, bag alerts and
- * celebrations on this device, and (commissioner) past seasons and their managers.
+ * celebrations on this device, and (commissioner) past seasons, their managers and the league log.
  */
 export default function SettingsScreen() {
   const { data, loading, refetch } = useSeason();
@@ -77,6 +78,7 @@ export default function SettingsScreen() {
       <ImportSeasonCard />
       <ReloadGamesCard />
       <PastManagersCard />
+      <LeagueLogCard />
     </Screen>
   );
 }
