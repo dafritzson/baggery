@@ -175,6 +175,12 @@ export function nextPlayStop(tl: Timeline, zoom: Zoom, at: Stop): Stop | null {
   return playStops(tl, zoom, at).find((s) => stopPosition(tl, s) > from) ?? null;
 }
 
+/** Where playback in reverse goes after `at`; null at the start. */
+export function prevPlayStop(tl: Timeline, zoom: Zoom, at: Stop): Stop | null {
+  const from = stopPosition(tl, at);
+  return playStops(tl, zoom, at).filter((s) => stopPosition(tl, s) < from).pop() ?? null;
+}
+
 /**
  * The stop before `at`, to show who moved since: the day before at a day's end on the season,
  * else the bag before. Null at the start.
