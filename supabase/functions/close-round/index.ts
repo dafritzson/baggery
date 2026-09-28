@@ -8,10 +8,10 @@
 
 import { requireCommissioner, requireUser } from '../_shared/auth.ts';
 import { type Season, closeRound } from '../_shared/close-round.ts';
-import { logCommissioner, teamLabel } from '../_shared/commissioner-log.ts';
 import type { FantasyRound } from '../_shared/core/types.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
+import { logCommissioner, teamLabel } from '../_shared/league-log.ts';
 
 serve(async (req) => {
   const userId = await requireUser(req);

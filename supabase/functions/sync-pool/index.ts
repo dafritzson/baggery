@@ -11,7 +11,6 @@
 // POST { seasonId, teamIds?: number[] }  (teamIds overrides the clinched-teams lookup)
 
 import { requireCommissioner, requireUser } from '../_shared/auth.ts';
-import { logCommissioner } from '../_shared/commissioner-log.ts';
 import { INJURED_LISTS, injuredListReturn, injuredSince } from '../_shared/core/injured-list.ts';
 import type { Hand } from '../_shared/core/platoon.ts';
 import { type Counts, sumCounts } from '../_shared/core/player-stats.ts';
@@ -27,6 +26,7 @@ import {
 } from '../_shared/core/stats.ts';
 import { type Tx, sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
+import { logCommissioner } from '../_shared/league-log.ts';
 import {
   type Person,
   type PlatoonRecord,

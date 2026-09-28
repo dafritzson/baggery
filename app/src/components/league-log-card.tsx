@@ -12,6 +12,7 @@ interface Entry {
   id: number;
   user_id: string | null;
   summary: string;
+  commissioner: boolean;
   created_at: string;
 }
 
@@ -22,10 +23,11 @@ function formatWhen(iso: string): string {
 }
 
 /**
- * Commissioner only: every commissioner action in the league, newest first (the commissioner_log
- * table, which only the commissioner can read and nobody can change).
+ * Commissioner only: the league log, newest first. Every commissioner action, plus managers
+ * claiming spots, renaming their team and changing their name or photo (the league_log table,
+ * which only the commissioner can read and nobody can change).
  */
-export function CommissionerLogCard() {
+export function LeagueLogCard() {
   const { data } = useSeason();
   const leagueId = data?.isCommissioner ? data.season.league_id : null;
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -34,8 +36,8 @@ export function CommissionerLogCard() {
 
   async function load(leagueId: string, before: number | null): Promise<{ rows: Entry[]; more: boolean }> {
     let query = supabase
-      .from('commissioner_log')
-      .select('id, user_id, summary, created_at')
+      .from('league_log')
+      .select('id, user_id, summary, commissioner, created_at')
       .eq('league_id', leagueId)
       .order('id', { ascending: false })
       .limit(PAGE + 1);
@@ -68,17 +70,18 @@ export function CommissionerLogCard() {
   }
 
   return (
-    <Card title="Commissioner log">
+    <Card title="League log">
       <ThemedText type="small" themeColor="textSecondary">
-        Everything done with commissioner powers, newest first. Only the commissioner sees this, and it can&apos;t be
-        edited.
+        Everything done with commissioner powers, plus managers claiming spots and changing their team name, name or
+        photo, newest first. Only the commissioner sees this, and it can&apos;t be edited.
       </ThemedText>
       {entries.length === 0 && <ThemedText themeColor="textSecondary">Nothing yet.</ThemedText>}
       {entries.map((e) => (
         <View key={e.id} style={styles.row}>
           <ThemedText>{e.summary}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            {(e.user_id && data.owners.get(e.user_id)) ?? 'Someone'} · {formatWhen(e.created_at)}
+            {(e.user_id && data.owners.get(e.user_id)) ?? 'Someone'}
+            {e.commissioner ? ' (as commissioner)' : ''} · {formatWhen(e.created_at)}
           </ThemedText>
         </View>
       ))}

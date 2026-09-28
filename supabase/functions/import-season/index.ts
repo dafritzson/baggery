@@ -8,10 +8,10 @@
 // played in the app can never be overwritten.
 
 import { requireUser } from '../_shared/auth.ts';
-import { logCommissioner } from '../_shared/commissioner-log.ts';
 import { IMPORT_DRAFTS, importSpells, type SeasonImport, validateSeasonImport } from '../_shared/core/season-import.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
+import { logCommissioner } from '../_shared/league-log.ts';
 
 serve(async (req) => {
   const userId = await requireUser(req);

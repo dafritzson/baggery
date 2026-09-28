@@ -16,9 +16,9 @@
 
 import { requireCommissioner, requireUser } from '../_shared/auth.ts';
 import { autoCloseRounds } from '../_shared/close-round.ts';
-import { logCommissioner } from '../_shared/commissioner-log.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
+import { logCommissioner } from '../_shared/league-log.ts';
 import { queueCutAlerts, queueSubAlerts, sendBagAlerts, sendQueuedAlerts } from './alerts.ts';
 import {
   type ProbableRow,

@@ -1,15 +1,16 @@
-// The commissioner log (see the commissioner_log migration). Written in the same transaction as
-// the action it records, with names as they are at the time.
+// The league log (see the league_log migration). Written in the same transaction as the action it
+// records, with names as they are at the time.
 
 import type { Tx, sql } from './db.ts';
 
+/** Logs an action taken with commissioner powers. */
 export async function logCommissioner(
   tx: Tx | typeof sql,
   entry: { seasonId: string; userId: string; action: string; summary: string; details?: Record<string, unknown> },
 ): Promise<void> {
   await tx`
-    insert into commissioner_log (league_id, season_id, user_id, action, summary, details)
-    select league_id, id, ${entry.userId}, ${entry.action}, ${entry.summary}, ${tx.json(JSON.parse(JSON.stringify(entry.details ?? {})))}
+    insert into league_log (league_id, season_id, user_id, action, summary, details, commissioner)
+    select league_id, id, ${entry.userId}, ${entry.action}, ${entry.summary}, ${tx.json(JSON.parse(JSON.stringify(entry.details ?? {})))}, true
     from seasons where id = ${entry.seasonId}`;
 }
 

@@ -4,7 +4,6 @@
 // POST { draftId, action: 'start' | 'pick' | 'yield' | 'autopick' | 'undo' | 'set-autodraft', ... }
 
 import { isCommissioner, requireUser } from '../_shared/auth.ts';
-import { logCommissioner, playerName, teamLabel } from '../_shared/commissioner-log.ts';
 import {
   type AutodraftCandidate,
   type DraftAction,
@@ -20,6 +19,7 @@ import {
 import type { FantasyRound } from '../_shared/core/types.ts';
 import { type Tx, sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
+import { logCommissioner, playerName, teamLabel } from '../_shared/league-log.ts';
 import { roundRanking } from '../_shared/round-ranking.ts';
 
 interface Body {
