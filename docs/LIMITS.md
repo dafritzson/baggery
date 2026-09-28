@@ -133,7 +133,10 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   20 s, and its highlights (~1 MB) every 2 minutes while live and every 10 minutes for 6 hours
   after, until every hit has a clip. Those are downloads into the function, not egress. The app
   downloads a hitter's hits (well under 1 KB) only when someone taps ▶, and the videos stream
-  from MLB and Savant, not us. The commissioner's Reload button costs about 10 calls per season.
+  from MLB and Savant, not us. The Standings scrubber also shows a bag's video links when playback
+  stops on it: one hit's `clip_slug` and `savant_ready` (a few hundred bytes), never while playing.
+  At ~10 scrubbing sessions a day stopping on ~30 bags each, that's under 10 MB a month.
+  The commissioner's Reload button costs about 10 calls per season.
   Savant's videos come the day after a game, so from 12 hours after first pitch the poller loads
   one Savant page (~85–100 KB) per game each hour until it has the video, at most 48 times: ~15–25
   loads per game, a few hundred a day at most in the postseason, inside polls that already run.
