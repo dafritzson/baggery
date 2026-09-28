@@ -80,12 +80,73 @@ export function people(data: any): Map<number, Person> {
   );
 }
 
-/** A hitter's games in his team's lineups, by the opposing starter's hand (games with no known hand left out). */
-export function hitterLineupGames(games: TeamGame[], playerId: number, hands: Map<number, Person>): LineupGame[] {
+/**
+ * A stretch a hitter couldn't play for his team: on the injured list, in the minors, or not on the
+ * team yet. From `from` up to `to` (YYYY-MM-DD, `to` excluded: he can play that day's game), or
+ * still out when `to` is null.
+ */
+export interface Absence {
+  from: string;
+  to: string | null;
+}
+
+/** Earlier than any game: for a hitter whose first move of the year brings him back. */
+const SEASON_START = '0000-00-00';
+
+/**
+ * When a hitter was off his team's active roster this year, from its `/transactions?teamId=…`:
+ * placed on the injured list (from the day it's backdated to) until activated, optioned or
+ * designated for assignment until recalled or selected, and before a trade brought him over. A
+ * hitter whose first move of the year brings him back (activated off a list he started the year on,
+ * or called up) was out from the start.
+ */
+// deno-lint-ignore no-explicit-any
+export function absences(transactions: any[], playerId: number, teamId: number): Absence[] {
+  const moves = transactions
+    .filter((t) => t?.person?.id === playerId)
+    .flatMap((t): { day: string; out: boolean }[] => {
+      const day: string | undefined = t.effectiveDate ?? t.date;
+      const text = String(t.description ?? '');
+      if (!day) return [];
+      if (t.typeCode === 'SC' && /\binjured list\b/i.test(text)) {
+        if (/\bplaced\b/i.test(text)) return [{ day, out: true }];
+        if (/\b(activated|reinstated)\b/i.test(text)) return [{ day, out: false }];
+        return [];
+      }
+      if (t.typeCode === 'OPT' || t.typeCode === 'DES') return [{ day, out: true }];
+      if (t.typeCode === 'CU' || t.typeCode === 'SE') return [{ day, out: false }];
+      if (t.typeCode === 'TR') {
+        if (t.toTeam?.id === teamId) return [{ day, out: false }];
+        if (t.fromTeam?.id === teamId) return [{ day, out: true }];
+      }
+      return [];
+    })
+    .sort((a, b) => a.day.localeCompare(b.day));
+  const result: Absence[] = [];
+  let outSince: string | null = moves[0] && !moves[0].out ? SEASON_START : null;
+  for (const m of moves) {
+    if (m.out && outSince === null) outSince = m.day;
+    else if (!m.out && outSince !== null) {
+      result.push({ from: outSince, to: m.day });
+      outSince = null;
+    }
+  }
+  if (outSince !== null) result.push({ from: outSince, to: null });
+  return result;
+}
+
+/**
+ * A hitter's games in his team's lineups, by the opposing starter's hand (games with no known hand
+ * left out). Games he couldn't play (`away`: injured, in the minors) are left out too, so they
+ * don't count as games he sat: his start rate is from the games he was there for.
+ */
+export function hitterLineupGames(games: TeamGame[], playerId: number, hands: Map<number, Person>, away: Absence[] = []): LineupGame[] {
   return games.flatMap((g) => {
     const starterHand = g.oppStarterId === null ? null : hands.get(g.oppStarterId)?.pitchHand;
     if (!starterHand) return [];
     const i = g.lineup.indexOf(playerId);
+    // In the lineup, he was there, whatever the transactions say.
+    if (i < 0 && away.some((a) => g.date >= a.from && (a.to === null || g.date < a.to))) return [];
     return [{ date: g.date, starterHand, spot: i < 0 ? null : i + 1 }];
   });
 }

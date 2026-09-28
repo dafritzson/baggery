@@ -15,7 +15,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { type Range, filterRows } from '@/lib/column-filters';
 import { useOpenPlayer } from '@/lib/player';
 import { usePlayerColumns } from '@/lib/player-columns';
-import { type PlatoonData, matchupsByTeam, playerPlatoon, usePlatoons } from '@/lib/platoon';
+import { type PlatoonData, availableGames, matchupsByTeam, playerPlatoon, usePlatoons } from '@/lib/platoon';
 import { projection, teamOdds } from '@/lib/projections';
 import { useScores } from '@/lib/scores';
 import { type Draft, type SeasonData, injuredDraftable } from '@/lib/season';
@@ -127,6 +127,8 @@ export function availablePlayers(
   const postseason = !!totals?.size;
   // Teams that have played: any of their hitters has a postseason line.
   const played = new Set(data.pool.filter((p) => totals?.has(p.mlb_player_id)).map((p) => p.mlb_team_id));
+  // The odds are from the draft's lock for a finished one; xBags counts injured games from then.
+  const now = board.statsBefore ? Date.parse(board.statsBefore) : Date.now();
   return data.pool
     .filter(
       (p) =>
@@ -138,7 +140,9 @@ export function availablePlayers(
       const team = data.mlbTeams.get(p.mlb_team_id);
       const teamOdd = odds?.get(p.mlb_team_id);
       const { bye, rdslg, tbExpected, rdtb } = projection(data, p);
-      const platoon = playerPlatoon(p, platoons, matchups.get(p.mlb_team_id) ?? [], teamOdd);
+      const teamMatchups = matchups.get(p.mlb_team_id) ?? [];
+      const platoon = playerPlatoon(p, platoons, teamMatchups, teamOdd, now);
+      const gamesLeft = availableGames(p, teamMatchups, teamOdd, now);
       const ab = p.at_bats;
       const h = p.hits;
       const onBase = h === null || ab === null ? null : h + (p.walks ?? 0) + (p.hit_by_pitch ?? 0);
@@ -155,7 +159,7 @@ export function availablePlayers(
         // From his starts and lineup spots against each hand when the pool has them.
         xBags:
           platoon?.xBags ??
-          (teamOdd && ab !== null && p.games_played !== null ? expectedBags(p.regular_season_tb, ab, p.games_played, teamOdd.games) : null),
+          (gamesLeft !== null && ab !== null && p.games_played !== null ? expectedBags(p.regular_season_tb, ab, p.games_played, gamesLeft) : null),
         spot: platoon?.spots[platoon.primary] ?? null,
         platoon,
         bye,

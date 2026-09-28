@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 
+import { playableFrom } from '@core/injured-list.ts';
 import { type MatchupSeries, type NamedPitcher, expectedGames, roundMatchups } from '@core/matchups.ts';
 import type { OddsTeam, TeamOdds } from '@core/odds.ts';
 import {
   type Hand,
   type PlatoonRecord,
+  type Sidelined,
+  expectedGamesAvailable,
   expectedPaOver,
   expectedStartsOver,
   paPerStart,
@@ -108,15 +111,35 @@ export interface PlayerPlatoon {
 const SPOT_MIN_STARTS = 5;
 
 /**
+ * A hitter on the injured list, as xBags takes it: no games until the day he can come off it, and
+ * every game after, as if he'd never been hurt. Null when he isn't on it. `now` is the time the
+ * odds are from (a finished draft's lock, or now).
+ */
+export function sidelined(entry: PoolEntry, now: number): Sidelined | null {
+  const from = playableFrom(entry.injured_list, entry.injury_return, now);
+  return from === null || from <= now ? null : { from, now };
+}
+
+/**
+ * Expected team games a hitter is there for over the rest of the postseason: his team's expected
+ * games, less the ones before he's back from the injured list. Null without odds.
+ */
+export function availableGames(entry: PoolEntry, matchups: MatchupSeries[], odds: TeamOdds | undefined, now = Date.now()): number | null {
+  return odds ? expectedGamesAvailable(expectedGames(matchups, now), odds.games, sidelined(entry, now)) : null;
+}
+
+/**
  * A hitter's platoon view, or null without platoon data. xBags as core/stats.ts expectedBags has
  * it (RDSLG × at-bats × games), but with his plate appearances from his starts and lineup spot
- * against each hand's starters, and the hands his team will likely face.
+ * against each hand's starters, and the hands his team will likely face. A hitter on the injured
+ * list gets nothing from the games before he can come off it.
  */
 export function playerPlatoon(
   entry: PoolEntry,
   platoons: PlatoonData | null,
   matchups: MatchupSeries[],
   odds: TeamOdds | undefined,
+  now = Date.now(),
 ): PlayerPlatoon | null {
   const found = platoons?.players.get(entry.mlb_player_id);
   if (!found) return null;
@@ -133,8 +156,9 @@ export function playerPlatoon(
   const ab = entry.at_bats;
   const pa = entry.plate_appearances;
   const perPa = ab && pa ? (regressedSlg(entry.regular_season_tb, ab) * ab) / pa : null;
-  const known = expectedGames(matchups);
+  const known = expectedGames(matchups, now);
   const teamGames = odds ? odds.games : null;
+  const out = sidelined(entry, now);
   return {
     batSide,
     record,
@@ -143,10 +167,11 @@ export function playerPlatoon(
     spots,
     spotLabel,
     matchups,
-    starts: teamGames === null ? null : expectedStartsOver(splits, known, teamGames),
+    starts: teamGames === null ? null : expectedStartsOver(splits, known, teamGames, out),
     teamGames,
-    xBags: teamGames === null || perPa === null ? null : perPa * expectedPaOver(splits, known, teamGames),
-    everyDayXBags: teamGames === null || perPa === null ? null : perPa * paPerStart(splits, primary) * teamGames,
+    xBags: teamGames === null || perPa === null ? null : perPa * expectedPaOver(splits, known, teamGames, out),
+    everyDayXBags:
+      teamGames === null || perPa === null ? null : perPa * paPerStart(splits, primary) * expectedGamesAvailable(known, teamGames, out),
   };
 }
 

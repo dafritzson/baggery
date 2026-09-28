@@ -4,10 +4,12 @@ import { expectedGames, roundMatchups } from '../supabase/functions/_shared/core
 import { seriesGameChances, seriesOdds } from '../supabase/functions/_shared/core/odds.ts';
 import {
   BENCH_PA,
+  DAYS_PER_POSTSEASON_GAME,
   type Hand,
   LEAGUE_LHP_SHARE,
   type LineupGame,
   PA_BY_SPOT,
+  expectedGamesAvailable,
   expectedPaOver,
   expectedPaPerGame,
   expectedStartsOver,
@@ -180,7 +182,7 @@ describe('roundMatchups', () => {
     expect(ds.games.map((g) => g.starter?.hand)).toEqual(['R', 'R', 'L', 'R', 'R']);
     const expected = expectedGames([wc, ds]);
     expect(expected).toHaveLength(8);
-    expect(expected[1]).toEqual({ chance: 1, lhpChance: 1 });
+    expect(expected[1]).toMatchObject({ chance: 1, lhpChance: 1 });
   });
 
   it('gives a bye team the likelier Wild Card winner', () => {
@@ -221,5 +223,38 @@ describe('expectedStartsOver', () => {
     const starts = expectedStartsOver(splits, [{ chance: 1, lhpChance: 1 }, { chance: 1, lhpChance: 0 }, { chance: 0.5, lhpChance: 0 }], 2.5);
     expect(starts).toBeGreaterThan(0.8);
     expect(starts).toBeLessThan(1.2);
+  });
+});
+
+describe('a hitter on the injured list', () => {
+  const DAY = 86_400_000;
+  const now = Date.parse('2026-10-01T00:00:00Z');
+  const splits = lineupSplits(season(3, 3));
+  // Three games this series, a day apart, and 3 more expected after.
+  const known = [0, 1, 2].map((d) => ({ chance: 1, lhpChance: 0, start: now + (d + 0.75) * DAY }));
+
+  it("gets nothing from games before he's back, and everything after", () => {
+    const healthy = expectedPaOver(splits, known, 6);
+    expect(expectedPaOver(splits, known, 6, { from: now - DAY, now })).toBeCloseTo(healthy);
+    // Back for game 3: one known game, and all 3 after.
+    const back = { from: now + 2.5 * DAY, now };
+    expect(expectedGamesAvailable(known, 6, back)).toBeCloseTo(4);
+    expect(expectedPaOver(splits, known, 6, back)).toBeCloseTo(expectedPaPerGame(splits, 0) + 3 * expectedPaPerGame(splits, LEAGUE_LHP_SHARE));
+    expect(expectedStartsOver(splits, known, 6, back)).toBeLessThan(expectedStartsOver(splits, known, 6));
+    // Out a game and a half past the series: misses one of the later ones too.
+    expect(expectedGamesAvailable(known, 6, { from: known[2].start + DAYS_PER_POSTSEASON_GAME * DAY, now })).toBeCloseTo(2);
+    // Out past the end: nothing.
+    expect(expectedGamesAvailable(known, 6, { from: now + 60 * DAY, now })).toBe(0);
+  });
+
+  it('spaces the games MLB has not scheduled yet a day and a half apart', () => {
+    const [ds] = roundMatchups(1, {
+      field: [1, 2, 3, 4, 5, 6].map((seed) => ({ teamId: seed, league: 'AL' as const, seed, wins: 90 })),
+      series: [],
+      rotations: new Map(),
+      probables: new Map(),
+    });
+    const starts = expectedGames([ds], now).map((g) => (g.start! - now) / DAY);
+    expect(starts).toEqual([1.5, 3, 4.5, 6, 7.5]);
   });
 });

@@ -4,7 +4,7 @@
 // Pure, so the unit tests can run it without Supabase.
 
 import { type OddsTeam, seriesGameChances, seriesOdds, strength } from './odds.ts';
-import { type ExpectedGame, LEAGUE_LHP_SHARE, type RotationPitcher, seriesStarters } from './platoon.ts';
+import { DAYS_PER_POSTSEASON_GAME, type ExpectedGame, LEAGUE_LHP_SHARE, type RotationPitcher, seriesStarters } from './platoon.ts';
 import type { ScheduleGame, Series } from './schedule.ts';
 import type { GameType } from './types.ts';
 
@@ -18,6 +18,8 @@ export interface MatchupGame {
   /** Chance it gets played with this team in it: 1 once played. */
   chance: number;
   played: boolean;
+  /** Scheduled first pitch (ISO), or null until MLB schedules it. */
+  start: string | null;
   /** The opposing starter: announced, or the rotation's turn; null with nothing to go on. */
   starter: (NamedPitcher & { announced: boolean }) | null;
 }
@@ -86,6 +88,7 @@ export function roundMatchups(teamId: number, input: MatchupInput): MatchupSerie
         number: i + 1,
         chance: c * weight,
         played: slots[i]?.status === 'Final',
+        start: slots[i]?.start ?? null,
         starter: starters[i],
       })),
     };
@@ -140,11 +143,21 @@ export function roundMatchups(teamId: number, input: MatchupInput): MatchupSerie
   return [];
 }
 
-/** The games still to play, for core/platoon.ts expectedPaOver: a left-hander's chance from the starter. */
-export function expectedGames(matchups: MatchupSeries[]): ExpectedGame[] {
+const DAY_MS = 86_400_000;
+
+/**
+ * The games still to play, for core/platoon.ts expectedPaOver: a left-hander's chance from the
+ * starter, and when it starts. A game MLB hasn't scheduled yet comes a day and a half after the
+ * one before it (or after `now`).
+ */
+export function expectedGames(matchups: MatchupSeries[], now = Date.now()): ExpectedGame[] {
+  let last = now;
   return matchups.flatMap((s) =>
-    s.games
-      .filter((g) => !g.played && g.chance > 0)
-      .map((g) => ({ chance: g.chance, lhpChance: g.starter ? (g.starter.hand === 'L' ? 1 : 0) : LEAGUE_LHP_SHARE })),
+    s.games.flatMap((g) => {
+      const start = g.start ? Date.parse(g.start) : last + DAYS_PER_POSTSEASON_GAME * DAY_MS;
+      last = Math.max(last, start);
+      if (g.played || g.chance <= 0) return [];
+      return [{ chance: g.chance, lhpChance: g.starter ? (g.starter.hand === 'L' ? 1 : 0) : LEAGUE_LHP_SHARE, start }];
+    }),
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, injuredListReturn, injuredSince } from '../supabase/functions/_shared/core/injured-list.ts';
+import { addDays, injuredListReturn, injuredSince, playableFrom } from '../supabase/functions/_shared/core/injured-list.ts';
 
 // Real MLB /transactions entries, trimmed to the fields read.
 const judge = [
@@ -52,5 +52,18 @@ describe('injuredListReturn', () => {
 
   it('takes everyone before the postseason schedule is out', () => {
     expect(injuredListReturn(60, null, '2026-09-27', null).inTime).toBe(true);
+  });
+});
+
+describe('playableFrom', () => {
+  const now = Date.parse('2026-09-28T16:00:00Z');
+  it('is the start of his return day, Eastern, so a game that night counts and the night before does not', () => {
+    const from = playableFrom(10, '2026-10-03', now)!;
+    expect(from).toBeLessThanOrEqual(Date.parse('2026-10-03T07:33:00Z')); // MLB's placeholder for a game without a time
+    expect(from).toBeGreaterThan(Date.parse('2026-10-03T05:40:00Z')); // a 10:40 PM Pacific start the night before
+  });
+  it('takes a full stay from now when the start is unknown, and null off the list', () => {
+    expect(playableFrom(15, null, now)).toBe(now + 15 * 86_400_000);
+    expect(playableFrom(null, '2026-10-03', now)).toBeNull();
   });
 });

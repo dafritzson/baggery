@@ -80,7 +80,15 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
   hover card shows his splits and the round's likely starters. The player popup's **Matchups this
   round** shows each game's likely starter and his chance to start. Hitters without lineups (no
   sync since this shipped) keep the old xBags. Traded hitters' starts count their current team's
-  games only. Which table columns show is each person's choice, saved in their browser. `season_mlb_teams` holds each team's wins and Wild Card bye.
+  games only. His chance to start only counts the games he could have played: `sync-pool` reads
+  each team's `/transactions` and leaves out games while he was on the injured list (from the day
+  it's backdated to until he's activated), optioned or designated until recalled or selected, or
+  not yet traded over (a game he's in the lineup for always counts). So an injury doesn't read as
+  sitting, and a past injury doesn't make a future one likelier. A hitter on the injured list now
+  gets no xBags from his team's games before the day he can come off it (`injury_return`, or a
+  full stay from now when that's unknown) and every game after: known games by their start time,
+  the rest (and games MLB hasn't scheduled yet) about a game every day and a half. The old xBags
+  takes his team's expected games less the same missed ones. Which table columns show is each person's choice, saved in their browser. `season_mlb_teams` holds each team's wins and Wild Card bye.
 - `drafts`, `draft_actions`: every pick or yield, numbered. `unique(draft_id, action_number)`
   prevents double picks.
 - `roster_spells`: (team, player, from, to) intervals. `unique(season_id, mlb_player_id)`
