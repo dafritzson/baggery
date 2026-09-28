@@ -24,6 +24,7 @@ import { type Tx, sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
 import { logCommissioner, playerName, teamLabel } from '../_shared/league-log.ts';
 import { roundRanking } from '../_shared/round-ranking.ts';
+import { type OnTheClock, alertOnTheClock } from './on-the-clock.ts';
 
 interface Body {
   draftId: string;
@@ -267,7 +268,7 @@ serve(async (req) => {
     return json({ ok: true });
   }
 
-  await sql.begin(async (tx) => {
+  const onTheClock = await sql.begin(async (tx): Promise<OnTheClock | null> => {
     const ctx = await load(tx, body.draftId);
     const commissioner = await isCommissioner(ctx.draft.season_id, userId);
     const commissionerOnly = () => {
@@ -425,7 +426,24 @@ serve(async (req) => {
       default:
         throw new UserError('Unknown action.');
     }
+
+    // Whoever the action put on the clock hears about it: not autodraft teams, whose pick is made
+    // for them, nor the one who acted (a commissioner's undo of their own pick, say).
+    const next = nextTurn(ctx.state.config, body.action === 'undo' ? ctx.state.actions.slice(0, -1) : ctx.state.actions);
+    if (!next) return null;
+    const owner = ctx.teamOwners.get(turnOwner(next));
+    const changed = body.action === 'start' || body.action === 'undo' || !turn || turnOwner(next) !== turnOwner(turn);
+    if (!owner || owner === userId || !changed || ctx.autodraftTeams.has(turnOwner(next))) return null;
+    return { userId: owner, draftNumber: ctx.draft.number, kind: ctx.draft.kind, turn: next };
   });
+
+  if (onTheClock) {
+    // Sent after the response, so the pick doesn't wait on push services.
+    const sending = alertOnTheClock(onTheClock).catch((e) => console.error('draft alert failed', e));
+    const runtime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime;
+    if (runtime) runtime.waitUntil(sending);
+    else await sending;
+  }
 
   console.log(JSON.stringify({ action: body.action, ms: Date.now() - started }));
   return json({ ok: true });

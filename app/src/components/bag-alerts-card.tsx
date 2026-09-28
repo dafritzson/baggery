@@ -6,6 +6,7 @@ import { Card } from '@/components/card';
 import { ThemedText } from '@/components/themed-text';
 import { Toggle } from '@/components/toggle';
 import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
 import { type Prefs, type PushState, type Scope, loadPushState, savePush, sendTestPush, turnOffPush } from '@/lib/push';
 import { supabase } from '@/lib/supabase';
@@ -72,7 +73,8 @@ function reachWarning(standing: Standing, scope: Scope | 'off', email: string | 
  * Alerts on this device: a notification ("👜 Shohei Ohtani got a bag") when your hitters, or
  * anyone's, get a bag, and with them sub alerts (👀 off the bench, 😠 replaced) and cut alerts (🥵 on
  * the hot seat, 😮‍💨 off the chopping block), each of which can be turned off, and lineup alerts (📋
- * a starting lineup is posted), which are off unless turned on. Web push, so web only
+ * a starting lineup is posted), which are off unless turned on, and draft alerts (⏰ you're on the
+ * clock), which are on unless turned off. Web push, so web only
  * for now; on iPhone it takes the Home Screen app.
  */
 export function BagAlertsCard() {
@@ -81,6 +83,7 @@ export function BagAlertsCard() {
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [standing, setStanding] = useState<Standing>('none');
   const { session } = useAuth();
+  const theme = useTheme();
   const userId = session?.user.id;
 
   useEffect(() => {
@@ -122,6 +125,7 @@ export function BagAlertsCard() {
     subs: on.subs,
     cut: on.cut,
     lineups: on.lineups,
+    draft: on.draft,
   };
   const warning = reachWarning(standing, on?.scope ?? 'off', session?.user.email);
 
@@ -160,6 +164,7 @@ export function BagAlertsCard() {
                     subs: on?.subs ?? true,
                     cut: on?.cut ?? true,
                     lineups: on?.lineups ?? false,
+                    draft: on?.draft ?? true,
                   });
                 }
               }}
@@ -201,6 +206,16 @@ export function BagAlertsCard() {
                 📋 when a team posts its starting lineup, usually a few hours before first pitch: where your hitters bat, or
                 that they’re on the bench. 🪑 if a late change drops one.
               </ThemedText>
+              <View style={[styles.section, { borderColor: theme.border }]}>
+                <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionTitle}>Draft</ThemedText>
+              </View>
+              <ThemedText type="smallBold" themeColor="textSecondary">You’re on the clock</ThemedText>
+              <View style={styles.row}>
+                <Toggle options={ON_OFF} value={on.draft} onChange={(v) => !busy && choose({ ...prefs!, draft: v })} />
+              </View>
+              <ThemedText type="small" themeColor="textSecondary">
+                ⏰ when it’s your turn to pick in a draft. Not while autodraft is picking for you.
+              </ThemedText>
               <View style={styles.row}>
                 <Button
                   label={busy ? 'Sending…' : 'Send a test'}
@@ -228,4 +243,6 @@ export function BagAlertsCard() {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  section: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: Spacing.two, marginTop: Spacing.one },
+  sectionTitle: { textTransform: 'uppercase', letterSpacing: 0.5 },
 });

@@ -165,6 +165,10 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   from MLB, not Supabase egress. Each read compares the lineups of games starting within a day with
   `private.lineups` (a couple of dozen small rows) and only looks up drafted hitters and devices
   when one changed: a few times a game. Off by default; the pushes are ~1 KB each.
+- **Draft alerts.** No new Edge Function calls, polling or realtime traffic: the draft function,
+  already called for each pick, pass or start, sends "⏰ You're on the clock" to the next manager's
+  devices after it answers (one small `push_subscriptions` lookup and ~1 KB per device). Four
+  drafts of ~30 picks a season: ~150 pushes. Settings reads one more boolean from its own row.
 - **Realtime messages per second.** The old per-row Postgres Changes could burst 150–250 messages
   right after a poll on a busy day. One broadcast per poll keeps it to about one message per open
   app every 10 seconds. The draft room still uses Postgres Changes on low-traffic tables
