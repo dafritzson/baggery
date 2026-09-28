@@ -167,10 +167,9 @@ export function AlertsSettings() {
           <AlertRow icon="✅" name="Draft done" detail="When the last pick is made" value={prefs.draftDone} onChange={(v) => save({ draftDone: v })} />
         </View>
       </Card>
-      <Card title="Game alerts">
-        <View style={styles.scope}>
-          <Toggle options={SCOPES} value={prefs.scope} onChange={(v) => save({ scope: v })} />
-        </View>
+      <Card
+        title="Game alerts"
+        action={<Toggle options={SCOPES} value={prefs.scope} onChange={(v) => save({ scope: v })} />}>
         {warning && <ThemedText type="small" themeColor="danger">{warning}</ThemedText>}
         {games ? (
           <View>
@@ -251,7 +250,6 @@ function Divider() {
 }
 
 const styles = StyleSheet.create({
-  scope: { flexDirection: 'row' },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, minHeight: 56, paddingVertical: Spacing.one },
   icon: { width: 24, textAlign: 'center' },
   text: { flex: 1 },

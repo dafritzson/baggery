@@ -5,7 +5,10 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 
-/** A card, with an optional title and, beside the title, an optional control (a toggle, say). */
+/**
+ * A card, with an optional title and, beside the title, an optional control (a toggle, say). A
+ * control too wide to fit beside the title goes on the next line.
+ */
 export function Card({
   title,
   action,
@@ -36,5 +39,5 @@ export function Card({
 const styles = StyleSheet.create({
   card: { padding: Spacing.three, borderRadius: Radius.lg, gap: Spacing.two },
   title: { textTransform: 'uppercase', letterSpacing: 0.5 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two },
+  header: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two },
 });
