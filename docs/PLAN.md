@@ -54,7 +54,25 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
   to get through the current fantasy round: reach the LCS in round 1, which a Wild Card team does
   by winning two series) and **xBags** (expected TB for the rest of the postseason: RDSLG ×
   his AB per game × his team's expected games left). Both are hidden without a full 6 seeds per
-  league, so re-sync the pool after the seeds exist. Which table columns show is each person's choice, saved in their browser. `season_mlb_teams` holds each team's wins and Wild Card bye.
+  league, so re-sync the pool after the seeds exist.
+- Platoons and batting order (`core/platoon.ts`, `core/matchups.ts`). `sync-pool` reads each
+  postseason team's regular-season lineups and starters (one `/schedule?teamId=…&hydrate=lineups,
+  probablePitcher` per team; the probable pitcher is kept after the game and is who started) and
+  stores, per hitter, his starts and lineup spots against left- and right-handed starters (recent
+  games weighted more, half-life 30 days) and his splits against each hand
+  (`season_player_pool.platoon`, `bat_side`), and each team's likely rotation: the 4 pitchers with
+  the most starts in its last 30 days (`season_mlb_teams.rotation`). `poll-games` keeps the
+  announced starters of postseason games in `mlb_probables`. With these, xBags becomes RDSLG × AB
+  per PA × expected PA, where expected PA sums, over his team's likely games, the chance of each
+  hand starting × his chance to start against it × the PA a game at his usual spot against it
+  (MLB's 2026 averages, 4.63 leading off down to 3.75 batting 9th), plus a little for bench games.
+  Games this round use the announced or rotation starters; later ones a league-average 27% lefties.
+  The table's **Spot** column shows his usual spot ("2 · 7" when it differs by hand), and a
+  platoon hitter (40+ points likelier to start against one hand) gets a `vs L`/`vs R` chip whose
+  hover card shows his splits and the round's likely starters. The player popup's **Matchups this
+  round** shows each game's likely starter and his chance to start. Hitters without lineups (no
+  sync since this shipped) keep the old xBags. Traded hitters' starts count their current team's
+  games only. Which table columns show is each person's choice, saved in their browser. `season_mlb_teams` holds each team's wins and Wild Card bye.
 - `drafts`, `draft_actions`: every pick or yield, numbered. `unique(draft_id, action_number)`
   prevents double picks.
 - `roster_spells`: (team, player, from, to) intervals. `unique(season_id, mlb_player_id)`

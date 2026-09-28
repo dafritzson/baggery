@@ -19,7 +19,20 @@ import { autoCloseRounds } from '../_shared/close-round.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
 import { queueCutAlerts, queueSubAlerts, sendBagAlerts, sendQueuedAlerts } from './alerts.ts';
-import { boxscoreBatting, boxscoreSubs, clipsForHits, highlightClips, linescoreLive, linescoreRuns, playHits, playLines, savantHasVideo, scheduleGames } from './feed.ts';
+import {
+  type ProbableRow,
+  boxscoreBatting,
+  boxscoreSubs,
+  clipsForHits,
+  highlightClips,
+  linescoreLive,
+  linescoreRuns,
+  playHits,
+  playLines,
+  savantHasVideo,
+  scheduleGames,
+  scheduleProbables,
+} from './feed.ts';
 
 const MLB = 'https://statsapi.mlb.com/api/v1';
 const LEAGUES: Record<number, 'AL' | 'NL'> = { 103: 'AL', 104: 'NL' };
@@ -278,13 +291,34 @@ async function poll(year: number, all: boolean) {
 }
 
 /**
+ * Keeps mlb_probables in step with the schedule's games: rows are only written when a starter
+ * changes, and dropped when one is no longer announced.
+ */
+async function syncProbables(rows: ProbableRow[], gamePks: number[]) {
+  if (!gamePks.length) return;
+  const keys = rows.map((r) => `${r.game_pk}:${r.mlb_team_id}`);
+  await sql`
+    delete from mlb_probables
+    where game_pk = any(${gamePks}) and not (game_pk::text || ':' || mlb_team_id::text = any(${keys}))`;
+  if (!rows.length) return;
+  await sql`
+    insert into mlb_probables ${sql(rows, 'game_pk', 'mlb_team_id', 'pitcher_id', 'pitcher_name', 'hand')}
+    on conflict (game_pk, mlb_team_id) do update set
+      pitcher_id = excluded.pitcher_id, pitcher_name = excluded.pitcher_name, hand = excluded.hand
+    where (mlb_probables.pitcher_id, mlb_probables.pitcher_name, mlb_probables.hand)
+      is distinct from (excluded.pitcher_id, excluded.pitcher_name, excluded.hand)`;
+}
+
+/**
  * Reads the postseason schedule into mlb_games. Rows are only rewritten when something changed,
  * so open apps don't refetch for nothing. A live game keeps the score its linescore gave (read
  * every few seconds) over the schedule's, which can lag behind.
  */
 async function syncSchedule(year: number, all: boolean): Promise<number> {
   const teams = await knownTeamIds(year);
-  const games = scheduleGames(await mlb(`/schedule?sportId=1&season=${year}&gameType=F,D,L,W`), year, teams);
+  // The person part brings each probable pitcher's hand, for the draft table's platoons.
+  const schedule = await mlb(`/schedule?sportId=1&season=${year}&gameType=F,D,L,W&hydrate=probablePitcher,person`);
+  const games = scheduleGames(schedule, year, teams);
   if (games.length) {
     const settled = all ? new Date(Date.now() - 24 * 3600 * 1000).toISOString() : new Date().toISOString();
     const rows = games.map((g) => ({ ...g, final_seen_at: g.status === 'Final' ? settled : null }));
@@ -317,6 +351,7 @@ async function syncSchedule(year: number, all: boolean): Promise<number> {
          or (excluded.status <> 'Live'
              and (mlb_games.home_score, mlb_games.away_score) is distinct from (excluded.home_score, excluded.away_score))`;
   }
+  await syncProbables(scheduleProbables(schedule, games), games.map((g) => g.game_pk));
   // Only the latest season's read counts for the cron job's schedule; reloading a past season
   // mustn't delay the next read of the one being played.
   await sql`update private.poller set schedule_synced_at = now() where ${year} = (select max(year) from seasons)`;

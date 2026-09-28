@@ -87,6 +87,32 @@ export function seriesOdds(high: number, low: number, bestOf: number, wins: [num
   return from(wins[0], wins[1]);
 }
 
+/**
+ * The chance each game of a best-of-n series gets played, game 1 first, from `wins` (higher seed's
+ * first): 1 for games already played or sure to be, less for the ones a sweep would skip.
+ */
+export function seriesGameChances(high: number, low: number, bestOf: number, wins: [number, number] = [0, 0]): number[] {
+  const needed = Math.floor(bestOf / 2) + 1;
+  const hosts = HOSTS[bestOf] ?? Array(bestOf).fill(true);
+  const chances = Array(bestOf).fill(0);
+  for (let i = 0; i < wins[0] + wins[1] && i < bestOf; i++) chances[i] = 1;
+  // Chance of reaching each score, walked game by game.
+  let reach = new Map<string, number>([[`${wins[0]}-${wins[1]}`, 1]]);
+  for (let n = wins[0] + wins[1]; n < bestOf; n++) {
+    const next = new Map<string, number>();
+    for (const [key, p] of reach) {
+      const [w, l] = key.split('-').map(Number);
+      if (w >= needed || l >= needed) continue;
+      chances[n] += p;
+      const win = gameWinChance(high, low, hosts[n] ?? true);
+      next.set(`${w + 1}-${l}`, (next.get(`${w + 1}-${l}`) ?? 0) + p * win);
+      next.set(`${w}-${l + 1}`, (next.get(`${w}-${l + 1}`) ?? 0) + p * (1 - win));
+    }
+    reach = next;
+  }
+  return chances;
+}
+
 /** Who might be in a slot of the bracket, with their chances. */
 type Field = Map<number, number>;
 

@@ -81,6 +81,43 @@ export function scheduleGames(data: any, year: number, knownTeamIds: Set<number>
   return [...games.values()];
 }
 
+export interface ProbableRow {
+  game_pk: number;
+  mlb_team_id: number;
+  pitcher_id: number;
+  pitcher_name: string;
+  hand: 'L' | 'R' | null;
+}
+
+/**
+ * Each team's announced starter in the games scheduleGames keeps, from the same schedule read with
+ * `hydrate=probablePitcher,person` (the person part brings the hand). After a game, MLB keeps the
+ * one who started.
+ */
+// deno-lint-ignore no-explicit-any
+export function scheduleProbables(data: any, games: GameRow[]): ProbableRow[] {
+  const kept = new Set(games.map((g) => g.game_pk));
+  const rows = new Map<string, ProbableRow>();
+  // deno-lint-ignore no-explicit-any
+  for (const g of (data?.dates ?? []).flatMap((d: any) => d.games ?? [])) {
+    if (!kept.has(g.gamePk) || g.status?.detailedState === 'Postponed') continue;
+    for (const side of ['home', 'away'] as const) {
+      const team = g.teams?.[side];
+      const p = team?.probablePitcher;
+      if (!team?.team?.id || !p?.id) continue;
+      const hand = p.pitchHand?.code;
+      rows.set(`${g.gamePk}:${team.team.id}`, {
+        game_pk: g.gamePk,
+        mlb_team_id: team.team.id,
+        pitcher_id: p.id,
+        pitcher_name: p.fullName ?? `Pitcher ${p.id}`,
+        hand: hand === 'L' || hand === 'R' ? hand : null,
+      });
+    }
+  }
+  return [...rows.values()];
+}
+
 /** Every player who batted in a game, from `/game/{gamePk}/boxscore`. */
 // deno-lint-ignore no-explicit-any
 export function boxscoreBatting(gamePk: number, data: any): { rows: BattingRow[]; players: { id: number; full_name: string }[] } {
