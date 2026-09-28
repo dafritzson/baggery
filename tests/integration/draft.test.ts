@@ -265,6 +265,39 @@ describe('draft 1', () => {
     expect(await count()).toBe(after);
   });
 
+  it('keeps a queue private and autopicks from it before the most TB', async () => {
+    const count = async () => (await admin.from('draft_actions').select('*', { count: 'exact', head: true }).eq('draft_id', draftId)).count!;
+    const before = await count();
+    const up = await onTheClock();
+    const other = MANAGERS.find((m) => m !== up)!;
+    // The hitter with the fewest TB left: autodraft would never take him on its own.
+    const { data: taken } = await admin.from('roster_spells').select('mlb_player_id').eq('season_id', SEASON_ID);
+    const takenIds = new Set(taken!.map((t) => t.mlb_player_id));
+    const { data: pool } = await admin
+      .from('season_player_pool')
+      .select('mlb_player_id')
+      .eq('season_id', SEASON_ID)
+      .eq('on_postseason_roster', true)
+      .order('regular_season_tb');
+    const [worst, next] = pool!.filter((p) => !takenIds.has(p.mlb_player_id)).map((p) => p.mlb_player_id);
+
+    expect((await call(up, 'draft', { draftId, action: 'set-queue', queue: [{ playerId: worst }, { playerId: next }] })).ok).toBe(true);
+    expect((await call(up, 'draft', { draftId, action: 'set-queue', queue: [{ playerId: worst }, { playerId: worst }] })).error).toMatch(/once/);
+    const { data: mine } = await clients.get(up)!.from('draft_queue').select('mlb_player_id').order('position');
+    expect(mine!.map((q) => q.mlb_player_id)).toEqual([worst, next]);
+    const { data: theirs } = await clients.get(other)!.from('draft_queue').select('mlb_player_id');
+    expect(theirs).toEqual([]);
+
+    expect((await call('Daniel', 'draft', { draftId, action: 'autopick' })).ok).toBe(true);
+    const { data: auto } = await admin.from('draft_actions').select('add_player_id').eq('draft_id', draftId).eq('action_number', before).single();
+    expect(auto!.add_player_id).toBe(worst);
+
+    // Back to the draft as it was, with an empty queue.
+    expect((await call('Daniel', 'draft', { draftId, action: 'undo' })).ok).toBe(true);
+    expect(await count()).toBe(before);
+    expect((await call(up, 'draft', { draftId, action: 'set-queue', queue: [] })).ok).toBe(true);
+  });
+
   it('autodrafts for absent managers and finishes with 4 players each', async () => {
     // Mookie is away: autodraft picks for them whenever they're up.
     expect((await call('Mookie', 'draft', { draftId, action: 'set-autodraft', teamId: teamIdByManager.get('Mookie'), autodraft: true })).ok).toBe(true);

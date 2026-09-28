@@ -49,6 +49,11 @@ export interface DraftState {
   everRostered: Set<PlayerId>;
   /** Players currently eligible to be drafted (in the pool and their MLB team alive). */
   eligible: Set<PlayerId>;
+  /**
+   * Rostered players whose MLB team is eliminated. They can't stay: a team holding one can't yield
+   * (or pass a ghost turn) while there's anyone left to replace him with.
+   */
+  eliminated?: Set<PlayerId>;
 }
 
 export const ROSTER_SIZE = 4;
@@ -106,7 +111,10 @@ export function validateAction(state: DraftState, action: DraftAction): string |
 
   if (action.type === 'yield') {
     if (turn.ghost?.kind === 'add') return 'The ghost can’t skip filling a spot.';
-    return state.config.kind === 'initial' ? 'You cannot yield in the initial draft.' : null;
+    if (state.config.kind === 'initial') return 'You cannot yield in the initial draft.';
+    const out = mustReplace(state, turn.teamId);
+    if (out > 0) return `Replace your ${out === 1 ? 'eliminated hitter' : `${out} eliminated hitters`} before you yield.`;
+    return null;
   }
 
   const roster = state.rosters.get(action.teamId) ?? [];
@@ -125,6 +133,19 @@ export function validateAction(state: DraftState, action: DraftAction): string |
   if (action.dropPlayerId === undefined) return 'A redraft pick must drop a player.';
   if (!roster.includes(action.dropPlayerId)) return 'That player is not on your roster.';
   return null;
+}
+
+/**
+ * How many of a team's players are on an eliminated MLB team and must be replaced: 0 once nobody
+ * undrafted is left to replace them with.
+ */
+export function mustReplace(state: DraftState, teamId: TeamId): number {
+  const eliminated = state.eliminated;
+  if (!eliminated?.size) return 0;
+  const out = (state.rosters.get(teamId) ?? []).filter((p) => eliminated.has(p)).length;
+  if (!out) return 0;
+  for (const p of state.eligible) if (!state.everRostered.has(p)) return out;
+  return 0;
 }
 
 /** Applies a legal action to the roster state. Does not validate. */
@@ -157,8 +178,18 @@ export interface AutodraftCandidate {
   injured?: boolean;
 }
 
+/** A player a manager queued up for autodraft, and in a redraft who to drop for him. */
+export interface QueueEntry {
+  playerId: PlayerId;
+  /** Unset: whoever autodraft would drop (MLB team eliminated). */
+  dropPlayerId?: PlayerId;
+}
+
 /**
- * The action autodraft takes for the team on the clock.
+ * The action autodraft takes for the team on the clock. First the manager's queue (whoever makes
+ * the turn), top to bottom: the first queued player still available, dropping the player queued
+ * with him (if he's still on the roster) or else a droppable one; entries that can't be made are
+ * skipped. The queue may hold injured players: that's the manager's call. Then, as without one:
  * - Initial draft: the available player with the most regular-season TB, passing over injured ones.
  * - Redraft: drop the first droppable player (MLB team eliminated, or an injury the group
  *   voted on) and add the best available player; yield when nothing needs replacing.
@@ -167,23 +198,31 @@ export function autodraftAction(
   state: DraftState,
   candidates: AutodraftCandidate[],
   droppable: PlayerId[],
+  queue: QueueEntry[] = [],
 ): DraftAction | null {
   const turn = nextTurn(state.config, state.actions);
   if (!turn) return null;
   const teamId = turn.teamId;
-
-  const best = candidates
-    .filter((c) => !c.injured && state.eligible.has(c.playerId) && !state.everRostered.has(c.playerId))
-    .sort((a, b) => b.regularSeasonTb - a.regularSeasonTb || a.playerId - b.playerId)[0];
+  const available = (id: PlayerId) => state.eligible.has(id) && !state.everRostered.has(id);
 
   const roster = state.rosters.get(teamId) ?? [];
-  if (state.config.kind === 'initial' || turn.ghost?.kind === 'add' || (turn.ghost && roster.length < ROSTER_SIZE)) {
-    return best ? { type: 'pick', teamId, addPlayerId: best.playerId } : null;
+  const filling = state.config.kind === 'initial' || turn.ghost?.kind === 'add' || (turn.ghost && roster.length < ROSTER_SIZE);
+  const autoDrop = droppable.find((p) => roster.includes(p));
+
+  for (const entry of queue) {
+    if (!available(entry.playerId)) continue;
+    if (filling) return { type: 'pick', teamId, addPlayerId: entry.playerId };
+    const drop = entry.dropPlayerId !== undefined && roster.includes(entry.dropPlayerId) ? entry.dropPlayerId : autoDrop;
+    if (drop !== undefined) return { type: 'pick', teamId, addPlayerId: entry.playerId, dropPlayerId: drop };
   }
 
-  const drop = droppable.find((p) => roster.includes(p));
-  if (drop === undefined || !best) return { type: 'yield', teamId };
-  return { type: 'pick', teamId, addPlayerId: best.playerId, dropPlayerId: drop };
+  const best = candidates
+    .filter((c) => !c.injured && available(c.playerId))
+    .sort((a, b) => b.regularSeasonTb - a.regularSeasonTb || a.playerId - b.playerId)[0];
+
+  if (filling) return best ? { type: 'pick', teamId, addPlayerId: best.playerId } : null;
+  if (autoDrop === undefined || !best) return { type: 'yield', teamId };
+  return { type: 'pick', teamId, addPlayerId: best.playerId, dropPlayerId: autoDrop };
 }
 
 /**

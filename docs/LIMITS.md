@@ -171,6 +171,10 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   drafts of ~30 picks a season: ~150 pushes. "Draft started" and "Draft done" go to every league
   member's devices twice per draft (~100 pushes a season), and "Autodraft picked" (off by default)
   one per autopick. Settings reads a few more booleans from its own row.
+- **Draft queues.** One `draft` call per queue change (add, remove, reorder, pick a drop), a few
+  dozen per manager per draft at most: ~12 managers × 4 drafts × ~30 is ~1.5k calls a season,
+  under 1% of the invocation quota. The draft room reads your queue (a few small rows) when it
+  opens and after a failed save; it isn't realtime, so picks send nothing extra.
 - **Realtime messages per second.** The old per-row Postgres Changes could burst 150–250 messages
   right after a poll on a busy day. One broadcast per poll keeps it to about one message per open
   app every 10 seconds. The draft room still uses Postgres Changes on low-traffic tables

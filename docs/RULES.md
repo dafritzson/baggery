@@ -59,7 +59,9 @@ xSLG, xwOBA, WAR and age were dropped as tiebreakers. They may come back later, 
 - All drafts are snake drafts, up to 4 rounds.
 - **Initial draft**: each pick adds a player. Every team ends with 4.
 - **Redraft**: each pick drops any player on your roster and adds an undrafted player.
-  A manager may **yield** instead, which skips them for the rest of that draft.
+  A manager may **yield** instead, which skips them for the rest of that draft, but not while
+  they have a player whose MLB team is eliminated: he can't stay, so his spot must be filled
+  first (unless nobody undrafted is left). The same goes for passing a ghost turn.
 - **A player can be on one roster, ever, per season.** Once drafted he is off the board
   for good, including after being dropped, after his fantasy team is eliminated, and for
   the team that dropped him.
@@ -74,7 +76,8 @@ xSLG, xwOBA, WAR and age were dropped as tiebreakers. They may come back later, 
   - Redrafts: players on the postseason roster of an MLB team still alive, never
     previously drafted.
 - **Pick lock**: picks lock at the first pitch of the first game of the next series.
-  Unmade redraft picks become yields. Unmade initial-draft picks are autodrafted.
+  Unmade redraft picks become yields, except the ones that must replace a player whose MLB team
+  is eliminated, which are autodrafted. Unmade initial-draft picks are autodrafted.
 - Picks are not timed.
 
 ## Ghost team
@@ -109,6 +112,15 @@ The eliminated managers' team, so they keep following along. It's in the Standin
   with the available player with the most regular-season TB. Yields when there's
   nothing left to replace. Replacing an injured player through autodraft needs a group
   vote, and the commissioner triggers it manually.
+- **Queue**: a manager who'd rather not leave it to TB can queue players for a draft, in order
+  (the draft room's Queue tab, or Add to queue on a player). Autodraft, their switch or the
+  commissioner's autopick, takes the top queued player still available first, even one on the
+  injured list. In a redraft a queued player fills an empty spot (a player whose MLB team is
+  eliminated, or who is off its postseason roster), top of the queue first; the manager can
+  instead have him replace a player who's still playing. A queued player with no spot to fill is
+  skipped. Once nobody in the queue can be taken, autodraft goes back to TB as
+  above. A queue is private: only its manager sees it. On a ghost turn it's the queue of the
+  manager making it.
 
 ## Out of scope for now
 

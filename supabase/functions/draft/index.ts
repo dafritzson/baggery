@@ -1,7 +1,7 @@
 // Draft room actions. Every action runs in one transaction that locks the draft row, so
 // concurrent picks can't interleave. Rules live in the shared core.
 //
-// POST { draftId, action: 'start' | 'pick' | 'yield' | 'autopick' | 'undo' | 'set-autodraft', ... }
+// POST { draftId, action: 'start' | 'pick' | 'yield' | 'autopick' | 'undo' | 'set-autodraft' | 'set-queue', ... }
 
 import { isCommissioner, requireUser } from '../_shared/auth.ts';
 import {
@@ -10,6 +10,7 @@ import {
   type DraftAction,
   type DraftState,
   type GhostTurn,
+  type QueueEntry,
   applyAction,
   autodraftAction,
   draftable,
@@ -28,12 +29,17 @@ import { type DraftNotice, sendDraftAlerts } from './alerts.ts';
 
 interface Body {
   draftId: string;
-  action: 'start' | 'pick' | 'yield' | 'autopick' | 'undo' | 'set-autodraft';
+  action: 'start' | 'pick' | 'yield' | 'autopick' | 'undo' | 'set-autodraft' | 'set-queue';
   addPlayerId?: number;
   dropPlayerId?: number;
   teamId?: string;
   autodraft?: boolean;
+  /** set-queue: your whole queue for this draft, top first. */
+  queue?: { playerId: number; dropPlayerId?: number | null }[];
 }
+
+/** The most players a queue holds. */
+const MAX_QUEUE = 50;
 
 interface DraftRow {
   id: string;
@@ -58,6 +64,8 @@ interface Ctx {
   droppable: number[];
   candidates: AutodraftCandidate[];
   teamOwners: Map<string, string | null>;
+  /** Each manager's queue for this draft (by the team making the turns), top first. */
+  queues: Map<string, QueueEntry[]>;
   /** The picks and passes autodraft made in this request (advance), for their alerts. */
   autopicks: { turn: Turn; action: DraftAction }[];
   /** This request made the draft's last pick. */
@@ -75,7 +83,7 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
     for update of d`;
   if (!draft) throw new UserError('Draft not found.', 404);
 
-  const [actions, spells, pool, teams] = await Promise.all([
+  const [actions, spells, pool, teams, queued] = await Promise.all([
     tx`select type, fantasy_team_id, add_player_id, drop_player_id
        from draft_actions where draft_id = ${draftId} order by action_number`,
     tx`select fantasy_team_id, mlb_player_id, dropped_by_draft_id
@@ -85,7 +93,12 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
        join season_mlb_teams t on t.season_id = p.season_id and t.mlb_team_id = p.mlb_team_id
        where p.season_id = ${draft.season_id}`,
     tx`select id, user_id, autodraft, is_ghost from fantasy_teams where season_id = ${draft.season_id}`,
+    tx`select fantasy_team_id, mlb_player_id, drop_player_id from draft_queue where draft_id = ${draftId} order by position`,
   ]);
+  const queues = new Map<string, QueueEntry[]>();
+  for (const q of queued) {
+    queues.set(q.fantasy_team_id, [...(queues.get(q.fantasy_team_id) ?? []), { playerId: q.mlb_player_id, dropPlayerId: q.drop_player_id ?? undefined }]);
+  }
 
   const ghostId: string | undefined = teams.find((t) => t.is_ghost)?.id;
   const ghost = ghostId && draft.ghost_turns.length ? { teamId: ghostId, turns: draft.ghost_turns } : undefined;
@@ -119,6 +132,8 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
       rosters,
       everRostered: new Set(spells.map((s) => s.mlb_player_id)),
       eligible: new Set(available.map((p) => p.mlb_player_id)),
+      // Players on a knocked-out MLB team can't stay on a roster (no yielding while holding one).
+      eliminated: new Set(pool.filter((p) => p.eliminated).map((p) => p.mlb_player_id)),
     },
     autodraftTeams: new Set(teams.filter((t) => t.autodraft).map((t) => t.id)),
     droppable: spells.filter((s) => s.dropped_by_draft_id === null && unavailable.has(s.mlb_player_id)).map((s) => s.mlb_player_id),
@@ -128,6 +143,7 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
       injured: p.injured_list !== null,
     })),
     teamOwners: new Map(teams.map((t) => [t.id, t.user_id])),
+    queues,
     autopicks: [],
     completed: false,
   };
@@ -171,7 +187,7 @@ async function commit(tx: Tx, ctx: Ctx, action: DraftAction, madeBy: string | nu
 async function advance(tx: Tx, ctx: Ctx) {
   for (let turn = nextTurn(ctx.state.config, ctx.state.actions); turn; turn = nextTurn(ctx.state.config, ctx.state.actions)) {
     if (!ctx.autodraftTeams.has(turnOwner(turn))) break;
-    const action = autodraftAction(ctx.state, ctx.candidates, ctx.droppable);
+    const action = autodraftAction(ctx.state, ctx.candidates, ctx.droppable, ctx.queues.get(turnOwner(turn)));
     if (!action) break;
     await commit(tx, ctx, action, null, true);
     ctx.autopicks.push({ turn, action });
@@ -318,11 +334,58 @@ async function setAutodraft(body: Body, userId: string): Promise<DraftNotice[]> 
   });
 }
 
+/**
+ * Saves a manager's queue for a draft, replacing what was there. Only your own: nobody else sees
+ * or sets it. Players already drafted may stay in it; autodraft skips them.
+ */
+async function setQueue(body: Body, userId: string) {
+  const queue = body.queue;
+  if (!Array.isArray(queue)) throw new UserError('queue is required.');
+  if (queue.length > MAX_QUEUE) throw new UserError(`A queue holds up to ${MAX_QUEUE} players.`);
+  const ids = queue.map((e) => e.playerId);
+  const drops = [...new Set(queue.flatMap((e) => (e.dropPlayerId == null ? [] : [e.dropPlayerId])))];
+  if (![...ids, ...drops].every(Number.isInteger)) throw new UserError('Unknown player.');
+  if (new Set(ids).size !== ids.length) throw new UserError('Each player can be queued once.');
+
+  await sql.begin(async (tx) => {
+    // Locked like a pick, so autodraft never reads a half-saved queue.
+    const [draft] = await tx`select id, season_id, status from drafts where id = ${body.draftId} for update`;
+    if (!draft) throw new UserError('Draft not found.', 404);
+    if (draft.status === 'complete') throw new UserError('This draft is over.');
+    const [team] = await tx`
+      select id from fantasy_teams where season_id = ${draft.season_id} and user_id = ${userId} and not is_ghost`;
+    if (!team) throw new UserError('You don’t have a team this season.', 403);
+    const [known] = await tx`
+      select
+        (select count(*)::int from season_player_pool where season_id = ${draft.season_id} and mlb_player_id = any(${ids}::int[])) as players,
+        (select count(distinct mlb_player_id)::int from roster_spells where season_id = ${draft.season_id} and mlb_player_id = any(${drops}::int[])) as drops`;
+    if (known.players !== ids.length) throw new UserError('That player isn’t in the draft pool.');
+    if (known.drops !== drops.length) throw new UserError('You can only drop a player on a roster.');
+
+    await tx`delete from draft_queue where draft_id = ${draft.id} and fantasy_team_id = ${team.id}`;
+    if (!queue.length) return;
+    const rows = queue.map((e, position) => ({
+      draft_id: draft.id,
+      fantasy_team_id: team.id,
+      position,
+      mlb_player_id: e.playerId,
+      drop_player_id: e.dropPlayerId ?? null,
+    }));
+    await tx`insert into draft_queue ${tx(rows, 'draft_id', 'fantasy_team_id', 'position', 'mlb_player_id', 'drop_player_id')}`;
+  });
+}
+
 serve(async (req) => {
   const started = Date.now();
   const userId = await requireUser(req);
   const body = (await req.json()) as Body;
   if (!body.draftId) throw new UserError('draftId is required.');
+
+  if (body.action === 'set-queue') {
+    await setQueue(body, userId);
+    console.log(JSON.stringify({ action: body.action, ms: Date.now() - started }));
+    return json({ ok: true });
+  }
 
   if (body.action === 'set-autodraft') {
     await alert(await setAutodraft(body, userId));
@@ -428,7 +491,8 @@ serve(async (req) => {
         // Commissioner picks the autodraft choice for whoever is on the clock.
         commissionerOnly();
         await requireLive(ctx);
-        const action = autodraftAction(ctx.state, ctx.candidates, ctx.droppable);
+        // Their queue first, like their own autodraft.
+        const action = autodraftAction(ctx.state, ctx.candidates, ctx.droppable, turn ? ctx.queues.get(turnOwner(turn)) : undefined);
         if (!action) throw new UserError('No eligible players left.');
         await commit(tx, ctx, action, userId, true);
         if (action.type === 'pick') {

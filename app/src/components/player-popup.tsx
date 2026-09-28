@@ -186,6 +186,9 @@ export function PlayerDetails({
 
   const name = stats?.person.name ?? data?.players.get(playerId)?.full_name ?? '';
   const canDraft = !!draftAction?.canDraft(playerId);
+  const queue = draftAction?.queue;
+  const queued = !!queue?.has(playerId);
+  const canQueue = !!queue && (queued || queue.canQueue(playerId));
   const pool = data?.poolByPlayer.get(playerId);
 
   return (
@@ -198,14 +201,29 @@ export function PlayerDetails({
         onClose={onClose}
         dragHandlers={dragHandlers}
         draft={
-          canDraft && (
-            <Button
-              label={draftAction!.label}
-              onPress={() => {
-                onClose?.();
-                draftAction!.draft(playerId);
-              }}
-            />
+          (canDraft || canQueue) && (
+            <View style={styles.draftButtons}>
+              {canDraft && (
+                <View style={styles.draftButton}>
+                  <Button
+                    label={draftAction!.label}
+                    onPress={() => {
+                      onClose?.();
+                      draftAction!.draft(playerId);
+                    }}
+                  />
+                </View>
+              )}
+              {canQueue && (
+                <View style={styles.draftButton}>
+                  <Button
+                    label={queued ? 'Remove from queue' : 'Add to queue'}
+                    variant="secondary"
+                    onPress={() => queue!.toggle(playerId)}
+                  />
+                </View>
+              )}
+            </View>
           )
         }
       />
@@ -783,6 +801,9 @@ const ROW = 30;
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, alignItems: 'center' },
+  // Draft and queue side by side, full width under the name.
+  draftButtons: { flexDirection: 'row', gap: Spacing.two },
+  draftButton: { flex: 1 },
   dim: { backgroundColor: 'rgba(0,0,0,0.5)' },
   backdropWide: { justifyContent: 'center', padding: Spacing.four },
   backdropCompact: { justifyContent: 'flex-end' },
