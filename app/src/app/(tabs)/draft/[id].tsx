@@ -4,7 +4,7 @@ import { type ReactNode, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
-import { type DraftConfig, ROSTER_SIZE, type Turn, nextTurn } from '@core/draft.ts';
+import { type DraftConfig, ROSTER_SIZE, type Turn, draftTurns, nextTurn } from '@core/draft.ts';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
@@ -23,8 +23,8 @@ import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { formatLockTime, mlbTeamAbbr, playerLine, playerName } from '@/lib/format';
 import { type DraftAction, useDraftAction, useOpenPlayer } from '@/lib/player';
-import { type Draft, type DraftActionRow, type SeasonData, coreActions, currentRosters, useSeason } from '@/lib/season';
-import { ownerName, teamLabel, teamName } from '@/lib/teams';
+import { type Draft, type DraftActionRow, type SeasonData, coreActions, currentRosters, draftConfig, useSeason } from '@/lib/season';
+import { ownerLine, ownerName, teamLabel, teamName } from '@/lib/teams';
 import { callFunction } from '@/lib/supabase';
 
 type Tab = 'players' | 'board' | 'rosters';
@@ -54,14 +54,18 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
   const [selected, setSelected] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const config: DraftConfig = { kind: draft.kind, order: draft.pick_order, rounds: draft.rounds };
+  const config = draftConfig(data, draft);
   const actions = coreActions(data.actions, draft.id);
   const turn = draft.status === 'live' ? nextTurn(config, actions) : null;
   const teamsById = new Map(data.teams.map((t) => [t.id, t]));
   const myTeam = data.myTeam;
-  const myTurn = !!turn && turn.teamId === myTeam?.id;
+  // On a ghost turn, the eliminated manager making it is the one on the clock.
+  const myTurn = !!turn && (turn.ghost?.by ?? turn.teamId) === myTeam?.id;
   const canAct = !!turn && (myTurn || data.isCommissioner);
-  const onBehalfOf = turn && !myTurn ? teamLabel(data, teamsById.get(turn.teamId)) : undefined;
+  const onBehalfOf = turn && !myTurn ? teamLabel(data, teamsById.get(turn.ghost?.by ?? turn.teamId)) : undefined;
+  const dropOptions = turn ? currentRosters(data).get(turn.teamId) ?? [] : [];
+  // The ghost fills its empty spots without dropping anyone, and can't skip filling them.
+  const filling = !!turn?.ghost && dropOptions.length < ROSTER_SIZE;
 
   // The player popup's Draft button opens the pick sheet, for anyone the drafter can still take.
   const draftable = useMemo(() => new Set(availablePlayers(data).map((p) => p.id)), [data]);
@@ -86,8 +90,12 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
   const status = clockStatus(data, draft, turn, myTurn, actions.length);
   const errorText = error && <ThemedText themeColor="danger">{error}</ThemedText>;
   const commissioner = useCommissionerActions(data, draft, turn, run);
-  const yieldButton = myTurn && draft.kind === 'redraft' && (
-    <Button label="I'm done: yield my remaining picks" variant="secondary" onPress={() => run({ action: 'yield' })} />
+  const yieldButton = myTurn && draft.kind === 'redraft' && !filling && (
+    <Button
+      label={turn?.ghost ? 'Pass: the ghost keeps its hitters' : "I'm done: yield my remaining picks"}
+      variant="secondary"
+      onPress={() => run({ action: 'yield' })}
+    />
   );
   const autodraft = myTeam && draft.status !== 'complete' && (
     <View style={styles.switchRow}>
@@ -158,7 +166,9 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
         draft={draft}
         playerId={selected}
         onBehalfOf={onBehalfOf}
-        dropOptions={turn ? currentRosters(data).get(turn.teamId) ?? [] : []}
+        forGhost={!!turn?.ghost}
+        needsDrop={draft.kind === 'redraft' && !filling}
+        dropOptions={dropOptions}
         onClose={() => setSelected(null)}
         onConfirm={async (dropPlayerId) => {
           const failed = await run({ action: 'pick', addPlayerId: selected, dropPlayerId });
@@ -178,7 +188,7 @@ interface ClockStatus {
 
 /** What the clock card (desktop) and the clock bar (phone) say. */
 function clockStatus(data: SeasonData, draft: Draft, turn: Turn | null, myTurn: boolean, actionCount: number): ClockStatus {
-  const team = turn ? data.teams.find((t) => t.id === turn.teamId) : undefined;
+  const team = turn ? data.teams.find((t) => t.id === (turn.ghost?.by ?? turn.teamId)) : undefined;
   const lastAction = data.actions.filter((a) => a.draft_id === draft.id).at(-1);
   const lastTeam = lastAction && data.teams.find((t) => t.id === lastAction.fantasy_team_id);
   const last =
@@ -198,9 +208,11 @@ function clockStatus(data: SeasonData, draft: Draft, turn: Turn | null, myTurn: 
     };
   }
   if (draft.status === 'complete' || !turn) return { headline: 'Draft complete', detail: null, last };
+  const n = draft.pick_order.length;
+  const forGhost = turn.ghost ? ' for the 👻 Ghost' : '';
   return {
-    headline: myTurn ? "You're on the clock!" : `${teamLabel(data, team)} is on the clock`,
-    detail: `Round ${turn.round} · Pick ${(turn.slot % draft.pick_order.length) + 1} · #${actionCount + 1} overall`,
+    headline: myTurn ? `You're on the clock${forGhost}!` : `${teamLabel(data, team)} is on the clock${forGhost}`,
+    detail: `${turn.round > draft.rounds ? 'Ghost picks' : `Round ${turn.round}`} · Pick ${pickLabel(turn.slot, n, draft.rounds)} · #${actionCount + 1} overall`,
     last,
   };
 }
@@ -310,6 +322,7 @@ function Segmented({ value, onChange }: { value: Tab; onChange: (t: Tab) => void
 }
 
 function Board({ data, draft, config }: { data: SeasonData; draft: Draft; config: DraftConfig }) {
+  const ghostAfter = config.ghost && !draft.pick_order.includes(config.ghost.teamId) ? config.ghost : undefined;
   const theme = useTheme();
   const actions = coreActions(data.actions, draft.id);
   // Replay the draft to find which snake slot each action filled.
@@ -329,7 +342,7 @@ function Board({ data, draft, config }: { data: SeasonData; draft: Draft; config
         <View style={styles.boardRow}>
           {draft.pick_order.map((teamId) => {
             const team = data.teams.find((t) => t.id === teamId);
-            const owner = team && ownerName(data, team);
+            const owner = team && (team.is_ghost ? ownerLine(data, team) : ownerName(data, team));
             return (
               <View key={teamId} style={styles.boardCell}>
                 <ThemedText type="smallBold" numberOfLines={1}>{team ? teamName(team) : '—'}</ThemedText>
@@ -350,7 +363,10 @@ function Board({ data, draft, config }: { data: SeasonData; draft: Draft; config
                   key={teamId}
                   type="backgroundElement"
                   style={[styles.boardCell, styles.boardPick, isCurrent && { borderColor: theme.danger, borderWidth: 2 }]}>
-                  <ThemedText type="small" themeColor="textSecondary">{pickLabel(slot, n)}</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {pickLabel(slot, n)}
+                    {teamId === config.ghost?.teamId && <GhostBy data={data} config={config} slot={slot} />}
+                  </ThemedText>
                   {action?.type === 'pick' ? (
                     <PlayerName playerId={action.addPlayerId} numberOfLines={2}>{playerName(data, action.addPlayerId)}</PlayerName>
                   ) : (
@@ -363,9 +379,43 @@ function Board({ data, draft, config }: { data: SeasonData; draft: Draft; config
             })}
           </View>
         ))}
+        {ghostAfter && (
+          // Draft 3: the ghost's picks, by the managers out after round 1, come after the snake.
+          <View style={styles.boardRow}>
+            {ghostAfter.turns.map((g, i) => {
+              const slot = draft.rounds * n + i;
+              const action = bySlot.get(slot);
+              const isCurrent = current?.slot === slot;
+              return (
+                <ThemedView
+                  key={slot}
+                  type="backgroundElement"
+                  style={[styles.boardCell, styles.boardPick, isCurrent && { borderColor: theme.danger, borderWidth: 2 }]}>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    👻 {pickLabel(slot, n, draft.rounds)}
+                    <GhostBy data={data} config={config} slot={slot} />
+                  </ThemedText>
+                  {action?.type === 'pick' ? (
+                    <PlayerName playerId={action.addPlayerId} numberOfLines={2}>{playerName(data, action.addPlayerId)}</PlayerName>
+                  ) : (
+                    <ThemedText type="small" numberOfLines={2}>{isCurrent ? 'On the clock' : ''}</ThemedText>
+                  )}
+                </ThemedView>
+              );
+            })}
+          </View>
+        )}
       </View>
     </ScrollView>
   );
+}
+
+/** " · Kyle": who makes the ghost's pick in a slot. */
+function GhostBy({ data, config, slot }: { data: SeasonData; config: DraftConfig; slot: number }) {
+  const by = draftTurns(config).find((t) => t.slot === slot)?.ghost?.by;
+  const team = by ? data.teams.find((t) => t.id === by) : undefined;
+  const name = team && (ownerName(data, team) ?? teamName(team));
+  return name ? <ThemedText type="small" themeColor="textSecondary"> · {name}</ThemedText> : null;
 }
 
 /** Sidebar: your current players. */
@@ -406,8 +456,9 @@ function MyRoster({ data, teamId }: { data: SeasonData; teamId: string }) {
   );
 }
 
-/** "2.6": round 2, sixth pick of the round, for a snake slot (0-based). */
-function pickLabel(slot: number, teams: number): string {
+/** "2.6": round 2, sixth pick of the round, for a snake slot (0-based). "G1": the ghost's first pick after the snake (Draft 3). */
+function pickLabel(slot: number, teams: number, rounds = Infinity): string {
+  if (slot >= rounds * teams) return `G${slot - rounds * teams + 1}`;
   return `${Math.floor(slot / teams) + 1}.${(slot % teams) + 1}`;
 }
 
@@ -446,7 +497,7 @@ function RecentPicks({ data, draft, config }: { data: SeasonData; draft: Draft; 
                 key={a.action_number}
                 data={data}
                 action={a}
-                label={pickLabel(slot, draft.pick_order.length)}
+                label={pickLabel(slot, draft.pick_order.length, draft.rounds)}
               />
             ))}
           </ScrollView>
@@ -477,7 +528,9 @@ function PickCard({
   const openPlayer = useOpenPlayer();
   const [hovered, setHovered] = useState(false);
   const team = data.teams.find((t) => t.id === action.fantasy_team_id);
-  const owner = team && ownerName(data, team);
+  // A ghost pick shows who made it.
+  const by = action.by_team_id ? data.teams.find((t) => t.id === action.by_team_id) : undefined;
+  const owner = by ? ownerName(data, by) ?? teamName(by) : team && ownerName(data, team);
   const playerId = action.type === 'pick' ? action.add_player_id! : null;
   const player = playerId !== null ? data.players.get(playerId) : undefined;
   const tb = playerId !== null ? data.poolByPlayer.get(playerId)?.regular_season_tb : undefined;
@@ -516,7 +569,10 @@ function PickCard({
 function Rosters({ data, draft }: { data: SeasonData; draft: Draft }) {
   const wide = useLayout() === 'wide';
   const rosters = currentRosters(data);
-  const order = draft.pick_order.length ? draft.pick_order : data.teams.map((t) => t.id);
+  const ghost = data.teams.find((t) => t.is_ghost);
+  const order = draft.pick_order.length ? draft.pick_order : data.teams.filter((t) => !t.is_ghost).map((t) => t.id);
+  // Draft 3: the ghost picks after the snake without being in it.
+  if (ghost && draft.ghost_turns.length && !order.includes(ghost.id)) order.push(ghost.id);
   return (
     // Two tiles to a row on desktop, where the main column is wide; an odd one out stays half width.
     <Card style={[styles.rosters, wide && styles.rostersWide]}>
@@ -533,6 +589,8 @@ function PickSheet({
   draft,
   playerId,
   onBehalfOf,
+  forGhost,
+  needsDrop,
   dropOptions,
   onClose,
   onConfirm,
@@ -541,6 +599,8 @@ function PickSheet({
   draft: Draft;
   playerId: number | null;
   onBehalfOf?: string;
+  forGhost: boolean;
+  needsDrop: boolean;
   dropOptions: number[];
   onClose: () => void;
   onConfirm: (dropPlayerId?: number) => Promise<string | null>;
@@ -549,7 +609,6 @@ function PickSheet({
   const [drop, setDrop] = useState<number | undefined>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const needsDrop = draft.kind === 'redraft';
   const injury = playerId !== null ? injuryText(data.poolByPlayer.get(playerId)) : null;
 
   async function confirm() {
@@ -574,6 +633,7 @@ function PickSheet({
         </ThemedText>
       )}
       {onBehalfOf && <ThemedText type="smallBold">Picking for {onBehalfOf} (commissioner)</ThemedText>}
+      {forGhost && <ThemedText type="smallBold">For the 👻 Ghost team</ThemedText>}
       {needsDrop && (
         <View style={{ gap: Spacing.one }}>
           <ThemedText type="smallBold">Drop which player?</ThemedText>
@@ -616,7 +676,7 @@ function useCommissionerActions(
   const [confirming, setConfirming] = useState<'start' | 'undo' | null>(null);
   const [busy, setBusy] = useState(false);
   if (!data.isCommissioner) return null;
-  const onClock = draft.status === 'live' && turn ? data.teams.find((t) => t.id === turn.teamId) : undefined;
+  const onClock = draft.status === 'live' && turn ? data.teams.find((t) => t.id === (turn.ghost?.by ?? turn.teamId)) : undefined;
 
   async function act(body: object) {
     setBusy(true);
@@ -627,7 +687,7 @@ function useCommissionerActions(
 
   return {
     canStart: draft.status === 'scheduled',
-    autopickFor: onClock ? teamName(onClock) : null,
+    autopickFor: onClock ? `${teamName(onClock)}${turn?.ghost ? ' (👻 Ghost pick)' : ''}` : null,
     // A finished season's drafts are history.
     canUndo: data.season.status !== 'complete' && data.actions.some((a) => a.draft_id === draft.id),
     busy,
@@ -659,7 +719,7 @@ function useCommissionerActions(
 function AutodraftSettings({ data, run }: { data: SeasonData; run: (body: object) => Promise<string | null> }) {
   return (
     <>
-      {data.teams.map((t) => (
+      {data.teams.filter((t) => !t.is_ghost).map((t) => (
         <View key={t.id} style={styles.switchRow}>
           <ThemedText type="small" style={{ flex: 1 }}>{teamLabel(data, t)}</ThemedText>
           <AutodraftSwitch
@@ -705,7 +765,7 @@ function CommissionerCard({
       {draft.status !== 'complete' && (
         <Pressable onPress={() => setShowAutodraft(!showAutodraft)} hitSlop={8}>
           <ThemedText type="small" themeColor="textSecondary">
-            {showAutodraft ? '▾' : '▸'} Autodraft settings ({data.teams.filter((t) => t.autodraft).length} on)
+            {showAutodraft ? '▾' : '▸'} Autodraft settings ({data.teams.filter((t) => t.autodraft && !t.is_ghost).length} on)
           </ThemedText>
         </Pressable>
       )}

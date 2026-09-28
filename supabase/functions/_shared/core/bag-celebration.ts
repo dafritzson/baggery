@@ -6,7 +6,7 @@
 import { hitsText } from './bag-alerts.ts';
 import type { ScoreChanges, Scores } from './score-feed.ts';
 import { ownerAt, roundStandings, type ScoreStat } from './scoreboard.ts';
-import type { RosterSpell } from './scoring.ts';
+import { type RosterSpell, facesCut, inRound } from './scoring.ts';
 import { type PlayerId, ROUND_FOR_GAME_TYPE, type TeamId } from './types.ts';
 
 /** One bag: a batting line's total bases went up. */
@@ -184,7 +184,7 @@ export function bagSummary(
   bag: Pick<BagHit, 'gamePk' | 'playerId'>,
   scores: Scores,
   spells: RosterSpell[],
-  teams: { id: TeamId; eliminatedAfterRound: number | null }[],
+  teams: { id: TeamId; eliminatedAfterRound: number | null; isGhost?: boolean }[],
 ): BagSummary {
   const lines = scores.stats.filter((s) => s.playerId === bag.playerId);
   const summary: BagSummary = {
@@ -196,8 +196,9 @@ export function bagSummary(
   const teamId = game && ownerAt(spells, bag.playerId, game.start);
   if (!game || !teamId) return summary;
   const round = ROUND_FOR_GAME_TYPE[game.gameType];
-  const inRound = teams.filter((t) => t.eliminatedAfterRound === null || t.eliminatedAfterRound >= round).map((t) => t.id);
-  const standings = roundStandings(round, inRound, scores.games, scores.stats, spells);
+  // Ranked among the teams facing the round's cut (the ghost team in round 2 isn't).
+  const ranked = teams.filter((t) => inRound(t, round) && facesCut(t, round)).map((t) => t.id);
+  const standings = roundStandings(round, ranked, scores.games, scores.stats, spells);
   const row = standings.find((r) => r.teamId === teamId);
   if (row) {
     const tied = standings.some((r) => r !== row && r.rank === row.rank);

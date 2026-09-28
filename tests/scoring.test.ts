@@ -5,6 +5,8 @@ import {
   type TeamTotals,
   eliminations,
   emptyTotals,
+  facesCut,
+  inRound,
   obp,
   rankTeams,
   slg,
@@ -108,5 +110,37 @@ describe('eliminations', () => {
     expect(result.advancing).toEqual(['A']);
     expect(result.eliminated).toEqual(['E']);
     expect(result.drinkOff).toEqual({ teamIds: ['B', 'C', 'D'], spots: 2 });
+  });
+});
+
+describe('the ghost team', () => {
+  const ghost = { eliminatedAfterRound: null, isGhost: true };
+
+  it('plays rounds 2 and 3 only', () => {
+    expect([1, 2, 3].map((r) => inRound(ghost, r as 1 | 2 | 3))).toEqual([false, true, true]);
+    expect(inRound({ eliminatedAfterRound: 3, isGhost: true }, 3)).toBe(true);
+    expect([1, 2, 3].map((r) => inRound({ eliminatedAfterRound: 1 }, r as 1 | 2 | 3))).toEqual([true, false, false]);
+  });
+
+  it('faces only round 3’s cut', () => {
+    expect([1, 2, 3].map((r) => facesCut(ghost, r as 1 | 2 | 3))).toEqual([false, false, true]);
+    expect(facesCut({}, 2)).toBe(true);
+  });
+
+  it('round 2: the cut ignores the ghost, however it ranks', () => {
+    // G outscores everyone, and ties E at the cut, but only the managers' 5 teams are cut to 3.
+    const all = rankTeams([totals('A', { tb: 30 }), totals('B', { tb: 25 }), totals('C', { tb: 20 }), totals('D', { tb: 15 }), totals('E', { tb: 10 }), totals('G', { tb: 40 })]);
+    const isGhost = (id: string) => id === 'G';
+    const managers = rankTeams(all.filter((t) => facesCut({ isGhost: isGhost(t.teamId) }, 2)));
+    expect(eliminations(managers, 3)).toEqual({ advancing: ['A', 'B', 'C'], eliminated: ['D', 'E'], drinkOff: null });
+  });
+
+  it('round 3: the ghost wins by beating every finalist, and a full tie at the top is a drink-off', () => {
+    const win = rankTeams([totals('A', { tb: 12 }), totals('B', { tb: 9 }), totals('C', { tb: 8 }), totals('G', { tb: 13 })]);
+    expect(eliminations(win, 1)).toEqual({ advancing: ['G'], eliminated: ['A', 'B', 'C'], drinkOff: null });
+    const lose = rankTeams([totals('A', { tb: 12 }), totals('B', { tb: 9 }), totals('C', { tb: 8 }), totals('G', { tb: 11 })]);
+    expect(eliminations(lose, 1).eliminated).toEqual(['G', 'B', 'C']);
+    const tie = rankTeams([totals('A', { tb: 12, ab: 20 }), totals('B', { tb: 9 }), totals('C', { tb: 8 }), totals('G', { tb: 12, ab: 20 })]);
+    expect(eliminations(tie, 1).drinkOff).toEqual({ teamIds: ['A', 'G'], spots: 1 });
   });
 });

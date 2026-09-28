@@ -2,12 +2,26 @@ import type { PlayerId, TeamId } from './types.ts';
 
 export type DraftKind = 'initial' | 'redraft';
 
+/**
+ * A turn the ghost team takes, made by one of the eliminated managers (`by`, their team). An add
+ * fills an empty spot and can't be yielded; a redraft is an ordinary redraft pick.
+ */
+export interface GhostTurn {
+  by: TeamId;
+  kind: 'add' | 'redraft';
+}
+
 export interface DraftConfig {
   kind: DraftKind;
   /** Team ids in first-round pick order. */
   order: TeamId[];
   /** Number of snake rounds. Always 4 today. */
   rounds: number;
+  /**
+   * The ghost team's turns (Drafts 3 and 4). When the ghost isn't in `order` (Draft 3) they come
+   * after the snake; when it is (Draft 4) they fill its snake slots in order.
+   */
+  ghost?: { teamId: TeamId; turns: GhostTurn[] };
 }
 
 export type DraftAction =
@@ -20,6 +34,8 @@ export interface Turn {
   round: number;
   /** 0-based index into the full snake sequence. */
   slot: number;
+  /** On a ghost turn: the eliminated manager's team who makes it, and the kind of turn. */
+  ghost?: GhostTurn;
 }
 
 /** Everything needed to validate an action. Built by the caller from the database. */
@@ -47,22 +63,36 @@ export function snakeSlots(order: TeamId[], rounds: number): TeamId[] {
 }
 
 /**
+ * Every slot of the draft: the snake, with the ghost's turns in its own slots (in order; any
+ * slots past its last turn are left out) or, when it isn't in the snake, in a round after it.
+ */
+export function draftTurns(config: DraftConfig): Turn[] {
+  const n = config.order.length;
+  const slots: Turn[] = snakeSlots(config.order, config.rounds).map((teamId, slot) => ({ teamId, round: Math.floor(slot / n) + 1, slot }));
+  const ghost = config.ghost;
+  if (!ghost) return slots;
+  if (!config.order.includes(ghost.teamId)) {
+    return [...slots, ...ghost.turns.map((g, i) => ({ teamId: ghost.teamId, round: config.rounds + 1, slot: slots.length + i, ghost: g }))];
+  }
+  let next = 0;
+  return slots.flatMap((s) => (s.teamId !== ghost.teamId ? [s] : next < ghost.turns.length ? [{ ...s, ghost: ghost.turns[next++] }] : []));
+}
+
+/**
  * Whose turn it is, or null when the draft is complete. Teams that have yielded are
  * skipped for the rest of the draft.
  */
 export function nextTurn(config: DraftConfig, actions: DraftAction[]): Turn | null {
-  const slots = snakeSlots(config.order, config.rounds);
   const yielded = new Set<TeamId>();
   let next = 0;
-  for (let slot = 0; slot < slots.length; slot++) {
-    const teamId = slots[slot];
-    if (yielded.has(teamId)) continue;
+  for (const turn of draftTurns(config)) {
+    if (yielded.has(turn.teamId)) continue;
     if (next < actions.length) {
-      if (actions[next].type === 'yield') yielded.add(teamId);
+      if (actions[next].type === 'yield') yielded.add(turn.teamId);
       next++;
       continue;
     }
-    return { teamId, round: Math.floor(slot / config.order.length) + 1, slot };
+    return turn;
   }
   return null;
 }
@@ -74,6 +104,7 @@ export function validateAction(state: DraftState, action: DraftAction): string |
   if (turn.teamId !== action.teamId) return 'It is not your turn.';
 
   if (action.type === 'yield') {
+    if (turn.ghost?.kind === 'add') return 'The ghost can’t skip filling a spot.';
     return state.config.kind === 'initial' ? 'You cannot yield in the initial draft.' : null;
   }
 
@@ -81,8 +112,11 @@ export function validateAction(state: DraftState, action: DraftAction): string |
   if (state.everRostered.has(action.addPlayerId)) return 'That player has already been drafted.';
   if (!state.eligible.has(action.addPlayerId)) return 'That player is not eligible.';
 
-  if (state.config.kind === 'initial') {
-    if (action.dropPlayerId !== undefined) return 'You cannot drop players in the initial draft.';
+  // The ghost fills its empty spots without dropping anyone; after that it redrafts like anyone.
+  if (state.config.kind === 'initial' || turn.ghost?.kind === 'add' || (turn.ghost && roster.length < ROSTER_SIZE)) {
+    if (action.dropPlayerId !== undefined) {
+      return turn.ghost ? 'The ghost has an empty spot to fill first.' : 'You cannot drop players in the initial draft.';
+    }
     if (roster.length >= ROSTER_SIZE) return 'Your roster is full.';
     return null;
   }
@@ -141,14 +175,25 @@ export function autodraftAction(
     .filter((c) => !c.injured && state.eligible.has(c.playerId) && !state.everRostered.has(c.playerId))
     .sort((a, b) => b.regularSeasonTb - a.regularSeasonTb || a.playerId - b.playerId)[0];
 
-  if (state.config.kind === 'initial') {
+  const roster = state.rosters.get(teamId) ?? [];
+  if (state.config.kind === 'initial' || turn.ghost?.kind === 'add' || (turn.ghost && roster.length < ROSTER_SIZE)) {
     return best ? { type: 'pick', teamId, addPlayerId: best.playerId } : null;
   }
 
-  const roster = state.rosters.get(teamId) ?? [];
   const drop = droppable.find((p) => roster.includes(p));
   if (drop === undefined || !best) return { type: 'yield', teamId };
   return { type: 'pick', teamId, addPlayerId: best.playerId, dropPlayerId: drop };
+}
+
+/**
+ * The ghost team's turns in a draft, each group of eliminated managers best-ranked first. Draft 3:
+ * the 2 out after round 1 each add a hitter. Draft 4: the 2 out after round 2 each add one, then
+ * the 2 out after round 1 each make an ordinary redraft pick.
+ */
+export function ghostTurns(draftNumber: number, outAfterRound1: TeamId[], outAfterRound2: TeamId[]): GhostTurn[] {
+  const adds = (draftNumber === 3 ? outAfterRound1 : draftNumber === 4 ? outAfterRound2 : []).map((by): GhostTurn => ({ by, kind: 'add' }));
+  const redrafts = draftNumber === 4 ? outAfterRound1.map((by): GhostTurn => ({ by, kind: 'redraft' })) : [];
+  return [...adds, ...redrafts];
 }
 
 /** Fisher–Yates shuffle. `random` returns a float in [0, 1). */

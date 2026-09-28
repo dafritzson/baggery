@@ -53,7 +53,7 @@ export function OwnerBadge({
         },
       ]}>
       <ThemedText style={{ color: '#fff', fontSize: size * 0.42, lineHeight: size * 0.52, fontWeight: 700 }}>
-        {owner[0].toUpperCase()}
+        {[...owner][0].toUpperCase()}
       </ThemedText>
     </View>
   );

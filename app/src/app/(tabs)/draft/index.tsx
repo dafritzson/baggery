@@ -60,7 +60,7 @@ export default function DraftsScreen() {
 
 function ClaimTeam({ data, onClaimed }: { data: SeasonData; onClaimed: () => void }) {
   const [choice, setChoice] = useState<Team | null>(null);
-  const open = data.teams.filter((t) => !t.user_id);
+  const open = data.teams.filter((t) => !t.user_id && !t.is_ghost);
 
   async function claim(teamId: string, name: string) {
     const { error } = await supabase.rpc('claim_team', { p_team_id: teamId, p_name: name });
@@ -208,7 +208,7 @@ function CommissionerCard({ data }: { data: SeasonData }) {
       {data.season.status !== 'complete' && (
         <ThemedText type="smallBold" style={{ marginTop: Spacing.two }}>Who claimed which spot</ThemedText>
       )}
-      {data.season.status !== 'complete' && data.teams.map((t) => (
+      {data.season.status !== 'complete' && data.teams.filter((t) => !t.is_ghost).map((t) => (
         <View key={t.id} style={styles.assignRow}>
           <ThemedText type="small" style={{ flex: 1 }}>
             {t.slot}. {teamName(t)}: {t.user_id ? ownerName(data, t) ?? 'signed up' : '—'}

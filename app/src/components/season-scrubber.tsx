@@ -15,6 +15,7 @@ import {
   valueAt,
   type Zoom,
 } from '@core/timeline.ts';
+import { inRound } from '@core/scoring.ts';
 import type { FantasyRound } from '@core/types.ts';
 
 import { ThemedText } from '@/components/themed-text';
@@ -36,9 +37,9 @@ const dayName = (date: string) =>
   new Date(`${date}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 const colLabel = (g: GameInfo) => `${SERIES.find((s) => s.gameType === g.gameType)!.label}${g.seriesGameNumber}`;
 
-/** The teams in a round (not knocked out before it). */
+/** The teams in a round (not knocked out before it; the ghost team from round 2). */
 export function roundTeamIds(data: SeasonData, round: FantasyRound): string[] {
-  return data.teams.filter((t) => t.eliminated_after_round === null || t.eliminated_after_round >= round).map((t) => t.id);
+  return data.teams.filter((t) => inRound({ eliminatedAfterRound: t.eliminated_after_round, isGhost: t.is_ghost }, round)).map((t) => t.id);
 }
 
 /**

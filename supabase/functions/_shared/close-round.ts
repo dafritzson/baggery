@@ -4,7 +4,7 @@
 // the commissioner reopened are left for the commissioner (close-round).
 
 import { roundDecided } from './core/scoreboard.ts';
-import { eliminations } from './core/scoring.ts';
+import { eliminations, facesCut } from './core/scoring.ts';
 import type { FantasyRound, TeamId } from './core/types.ts';
 import type { Tx } from './db.ts';
 import { UserError } from './http.ts';
@@ -51,13 +51,14 @@ export async function roundState(tx: Tx, season: Season, round: FantasyRound): P
  * them nothing is saved and the drink-off is returned. Throws when the round can't be closed.
  */
 export async function closeRound(tx: Tx, season: Season, round: FantasyRound, drinkOffWinners?: TeamId[]): Promise<CloseResult> {
-  const teams = await tx`select id, eliminated_after_round from fantasy_teams where season_id = ${season.id}`;
+  const teams = await tx`select id, eliminated_after_round, is_ghost from fantasy_teams where season_id = ${season.id}`;
   const closed = (r: number) => teams.some((t) => t.eliminated_after_round === r);
   if (closed(round)) throw new UserError(`Round ${round} is already closed.`);
   if (round > 1 && !closed(round - 1)) throw new UserError(`Close round ${round - 1} first.`);
   if (!(await roundState(tx, season, round)).decided) throw new UserError(`Round ${round}'s series aren't all decided yet.`);
 
-  const alive = teams.filter((t) => t.eliminated_after_round === null).map((t) => t.id as string);
+  // The ghost team plays round 2 but isn't cut until round 3, where it plays the finalists.
+  const alive = teams.filter((t) => t.eliminated_after_round === null && facesCut({ isGhost: t.is_ghost }, round)).map((t) => t.id as string);
   const ranked = await roundRanking(tx, season, round, alive);
   const cut = eliminations(ranked, Math.min(season.survivors_after_round[round - 1] ?? 1, ranked.length));
   let { advancing, eliminated } = cut;

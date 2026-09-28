@@ -6,11 +6,14 @@
 import { isCommissioner, requireUser } from '../_shared/auth.ts';
 import {
   type AutodraftCandidate,
+  type Turn,
   type DraftAction,
   type DraftState,
+  type GhostTurn,
   applyAction,
   autodraftAction,
   draftable,
+  ghostTurns,
   nextTurn,
   randomOrder,
   redraftOrder,
@@ -43,6 +46,7 @@ interface DraftRow {
   pick_order: string[];
   rounds: number;
   locks_at: Date | null;
+  ghost_turns: GhostTurn[];
 }
 
 interface Ctx {
@@ -55,9 +59,12 @@ interface Ctx {
   teamOwners: Map<string, string | null>;
 }
 
+/** Who acts on a turn: the team on the clock, or on a ghost turn the eliminated manager's team making it. */
+const turnOwner = (turn: Turn) => turn.ghost?.by ?? turn.teamId;
+
 async function load(tx: Tx, draftId: string): Promise<Ctx> {
   const [draft] = await tx<DraftRow[]>`
-    select d.id, d.season_id, s.year, s.status as season_status, d.number, d.kind, d.status, d.pick_order, d.rounds, d.locks_at
+    select d.id, d.season_id, s.year, s.status as season_status, d.number, d.kind, d.status, d.pick_order, d.rounds, d.locks_at, d.ghost_turns
     from drafts d join seasons s on s.id = d.season_id
     where d.id = ${draftId}
     for update of d`;
@@ -72,10 +79,12 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
        from season_player_pool p
        join season_mlb_teams t on t.season_id = p.season_id and t.mlb_team_id = p.mlb_team_id
        where p.season_id = ${draft.season_id}`,
-    tx`select id, user_id, autodraft from fantasy_teams where season_id = ${draft.season_id}`,
+    tx`select id, user_id, autodraft, is_ghost from fantasy_teams where season_id = ${draft.season_id}`,
   ]);
 
-  const rosters = new Map<string, number[]>(draft.pick_order.map((id) => [id, []]));
+  const ghostId: string | undefined = teams.find((t) => t.is_ghost)?.id;
+  const ghost = ghostId && draft.ghost_turns.length ? { teamId: ghostId, turns: draft.ghost_turns } : undefined;
+  const rosters = new Map<string, number[]>([...draft.pick_order, ...(ghost ? [ghost.teamId] : [])].map((id) => [id, []]));
   for (const s of spells) {
     if (s.dropped_by_draft_id === null) {
       rosters.set(s.fantasy_team_id, [...(rosters.get(s.fantasy_team_id) ?? []), s.mlb_player_id]);
@@ -90,7 +99,7 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
   return {
     draft,
     state: {
-      config: { kind: draft.kind, order: draft.pick_order, rounds: draft.rounds },
+      config: { kind: draft.kind, order: draft.pick_order, rounds: draft.rounds, ghost },
       actions: actions.map(
         (a): DraftAction =>
           a.type === 'yield'
@@ -131,9 +140,10 @@ async function commit(tx: Tx, ctx: Ctx, action: DraftAction, madeBy: string | nu
   const { draft } = ctx;
   const add = action.type === 'pick' ? action.addPlayerId : null;
   const drop = action.type === 'pick' ? action.dropPlayerId ?? null : null;
+  const by = nextTurn(ctx.state.config, ctx.state.actions)?.ghost?.by ?? null;
   await tx`
-    insert into draft_actions (draft_id, action_number, fantasy_team_id, type, add_player_id, drop_player_id, is_auto, made_by)
-    values (${draft.id}, ${ctx.state.actions.length}, ${action.teamId}, ${action.type}, ${add}, ${drop}, ${isAuto}, ${madeBy})`;
+    insert into draft_actions (draft_id, action_number, fantasy_team_id, type, add_player_id, drop_player_id, is_auto, made_by, by_team_id)
+    values (${draft.id}, ${ctx.state.actions.length}, ${action.teamId}, ${action.type}, ${add}, ${drop}, ${isAuto}, ${madeBy}, ${by})`;
 
   if (action.type === 'pick') {
     const at = effectiveAt(draft);
@@ -153,7 +163,7 @@ async function commit(tx: Tx, ctx: Ctx, action: DraftAction, madeBy: string | nu
 /** Makes picks for autodraft teams while they're on the clock, then marks the draft complete if done. */
 async function advance(tx: Tx, ctx: Ctx) {
   for (let turn = nextTurn(ctx.state.config, ctx.state.actions); turn; turn = nextTurn(ctx.state.config, ctx.state.actions)) {
-    if (!ctx.autodraftTeams.has(turn.teamId)) break;
+    if (!ctx.autodraftTeams.has(turnOwner(turn))) break;
     const action = autodraftAction(ctx.state, ctx.candidates, ctx.droppable);
     if (!action) break;
     await commit(tx, ctx, action, null, true);
@@ -175,6 +185,17 @@ async function logPick(tx: Tx, ctx: Ctx, userId: string, action: 'pick' | 'autop
   });
 }
 
+/** The season's ghost team, created on first use: the spot after the managers', named Ghost. */
+async function ghostTeam(tx: Tx, seasonId: string): Promise<string> {
+  const [existing] = await tx`select id from fantasy_teams where season_id = ${seasonId} and is_ghost`;
+  if (existing) return existing.id;
+  const [created] = await tx`
+    insert into fantasy_teams (season_id, slot, name, is_ghost)
+    select ${seasonId}, coalesce(max(slot), 0) + 1, 'Ghost', true from fantasy_teams where season_id = ${seasonId}
+    returning id`;
+  return created.id;
+}
+
 async function requireLive(ctx: Ctx) {
   if (ctx.draft.status !== 'live') throw new UserError('The draft is not live.');
 }
@@ -190,7 +211,7 @@ async function setAutodraft(body: Body, userId: string) {
   const on = !!body.autodraft;
   await sql.begin(async (tx) => {
     const [draft] = await tx<DraftRow[]>`
-      select id, season_id, kind, status, pick_order, rounds from drafts where id = ${body.draftId} for update`;
+      select id, season_id, kind, status, pick_order, rounds, ghost_turns from drafts where id = ${body.draftId} for update`;
     if (!draft) throw new UserError('Draft not found.', 404);
     const [team] = await tx`select user_id from fantasy_teams where id = ${teamId} and season_id = ${draft.season_id}`;
     if (!team) throw new UserError('Team not found.', 404);
@@ -211,13 +232,21 @@ async function setAutodraft(body: Body, userId: string) {
 
     const actions = await tx`
       select type, fantasy_team_id from draft_actions where draft_id = ${draft.id} order by action_number`;
+    const [ghostTeam] = draft.ghost_turns.length
+      ? await tx`select id from fantasy_teams where season_id = ${draft.season_id} and is_ghost`
+      : [];
     const turn = nextTurn(
-      { kind: draft.kind, order: draft.pick_order, rounds: draft.rounds },
+      {
+        kind: draft.kind,
+        order: draft.pick_order,
+        rounds: draft.rounds,
+        ghost: ghostTeam ? { teamId: ghostTeam.id, turns: draft.ghost_turns } : undefined,
+      },
       actions.map((a): DraftAction =>
         a.type === 'yield' ? { type: 'yield', teamId: a.fantasy_team_id } : { type: 'pick', teamId: a.fantasy_team_id, addPlayerId: 0 },
       ),
     );
-    if (turn?.teamId !== teamId) return;
+    if (!turn || turnOwner(turn) !== teamId) return;
     await advance(tx, await load(tx, draft.id));
   });
 }
@@ -244,37 +273,53 @@ serve(async (req) => {
     const turn = nextTurn(ctx.state.config, ctx.state.actions);
     const actingFor = () => {
       if (!turn) throw new UserError('The draft is complete.');
-      if (ctx.teamOwners.get(turn.teamId) !== userId && !commissioner) {
+      if (ctx.teamOwners.get(turnOwner(turn)) !== userId && !commissioner) {
         throw new UserError('It is not your turn.');
       }
       return turn.teamId;
     };
+    // Acting for someone else's turn (logged): on a ghost turn, the manager making it.
+    const forSomeoneElse = () => !turn || ctx.teamOwners.get(turnOwner(turn)) !== userId;
 
     switch (body.action) {
       case 'start': {
         commissionerOnly();
         if (ctx.draft.status !== 'scheduled') throw new UserError('This draft has already started.');
         const teams = await tx`
-          select id from fantasy_teams where season_id = ${ctx.draft.season_id} and eliminated_after_round is null`;
-        const alive = teams.map((t) => t.id as string);
+          select id, eliminated_after_round from fantasy_teams where season_id = ${ctx.draft.season_id} and not is_ghost`;
+        const alive = teams.filter((t) => t.eliminated_after_round === null).map((t) => t.id as string);
         const random = () => crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32;
         let order: string[];
+        let ghost: DraftState['config']['ghost'];
         if (ctx.draft.number <= 2) {
           order = randomOrder(alive, random);
         } else {
           // Drafts 3 and 4 go in the previous round's order (the best-ranked team first), once
           // that round is closed.
           const round = (ctx.draft.number - 2) as FantasyRound;
-          const [closed] = await tx`
-            select 1 from fantasy_teams where season_id = ${ctx.draft.season_id} and eliminated_after_round = ${round} limit 1`;
-          if (!closed) throw new UserError(`Close round ${round} first (on the Standings page), so the draft order can follow it.`);
-          order = redraftOrder(await roundRanking(tx, { id: ctx.draft.season_id, year: ctx.draft.year }, round, alive), alive, random);
+          const season = { id: ctx.draft.season_id, year: ctx.draft.year };
+          const out = (r: number) => teams.filter((t) => t.eliminated_after_round === r).map((t) => t.id as string);
+          if (!out(round).length) throw new UserError(`Close round ${round} first (on the Standings page), so the draft order can follow it.`);
+          // The ghost team: created for Draft 3, where the managers out after round 1 give it its first
+          // hitters. In Draft 4 it drafts in the snake, placed by its round 2 ranking like everyone.
+          const ghostId = await ghostTeam(tx, ctx.draft.season_id);
+          const ranked1 = await roundRanking(tx, season, 1, teams.map((t) => t.id as string));
+          const outAfter1 = redraftOrder(ranked1, out(1), random);
+          if (round === 1) {
+            order = redraftOrder(ranked1, alive, random);
+            ghost = { teamId: ghostId, turns: ghostTurns(3, outAfter1, []) };
+          } else {
+            const ranked2 = await roundRanking(tx, season, 2, [...alive, ...out(2), ghostId]);
+            order = redraftOrder(ranked2, [...alive, ghostId], random);
+            ghost = { teamId: ghostId, turns: ghostTurns(4, outAfter1, redraftOrder(ranked2, out(2), random)) };
+          }
         }
-        await tx`update drafts set status = 'live', pick_order = ${order} where id = ${ctx.draft.id}`;
+        const ghostTurnList = ghost?.turns ?? [];
+        await tx`update drafts set status = 'live', pick_order = ${order}, ghost_turns = ${tx.json(JSON.parse(JSON.stringify(ghostTurnList)))} where id = ${ctx.draft.id}`;
         await tx`update seasons set status = 'active' where id = ${ctx.draft.season_id} and status = 'setup'`;
-        ctx.draft = { ...ctx.draft, status: 'live', pick_order: order };
-        ctx.state = { ...ctx.state, config: { ...ctx.state.config, order } };
-        for (const id of order) if (!ctx.state.rosters.has(id)) ctx.state.rosters.set(id, []);
+        ctx.draft = { ...ctx.draft, status: 'live', pick_order: order, ghost_turns: ghostTurnList };
+        ctx.state = { ...ctx.state, config: { ...ctx.state.config, order, ghost } };
+        for (const id of [...order, ...(ghost ? [ghost.teamId] : [])]) if (!ctx.state.rosters.has(id)) ctx.state.rosters.set(id, []);
         await logCommissioner(tx, {
           seasonId: ctx.draft.season_id,
           userId,
@@ -290,7 +335,7 @@ serve(async (req) => {
         const teamId = actingFor();
         if (body.addPlayerId === undefined) throw new UserError('Choose a player.');
         await commit(tx, ctx, { type: 'pick', teamId, addPlayerId: body.addPlayerId, dropPlayerId: body.dropPlayerId }, userId, false);
-        if (ctx.teamOwners.get(teamId) !== userId) {
+        if (forSomeoneElse()) {
           await logPick(tx, ctx, userId, 'pick', teamId, body.addPlayerId, body.dropPlayerId ?? null);
         }
         await advance(tx, ctx);
@@ -300,7 +345,7 @@ serve(async (req) => {
         await requireLive(ctx);
         const teamId = actingFor();
         await commit(tx, ctx, { type: 'yield', teamId }, userId, false);
-        if (ctx.teamOwners.get(teamId) !== userId) {
+        if (forSomeoneElse()) {
           await logCommissioner(tx, {
             seasonId: ctx.draft.season_id,
             userId,

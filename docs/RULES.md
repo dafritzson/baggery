@@ -53,8 +53,8 @@ xSLG, xwOBA, WAR and age were dropped as tiebreakers. They may come back later, 
 |---|---|---|---|
 | 1 | Wild Card | Random | Initial: 4-round snake |
 | 2 | Division Series | Random (new) | Redraft |
-| 3 | Championship Series | Fantasy round 1 ranking | Redraft (survivors only) |
-| 4 | World Series | Fantasy round 2 ranking | Redraft (survivors only) |
+| 3 | Championship Series | Fantasy round 1 ranking | Redraft (survivors, then the ghost's 2 adds) |
+| 4 | World Series | Fantasy round 2 ranking (the ghost included) | Redraft (finalists and the ghost) |
 
 - All drafts are snake drafts, up to 4 rounds.
 - **Initial draft**: each pick adds a player. Every team ends with 4.
@@ -76,6 +76,27 @@ xSLG, xwOBA, WAR and age were dropped as tiebreakers. They may come back later, 
 - **Pick lock**: picks lock at the first pitch of the first game of the next series.
   Unmade redraft picks become yields. Unmade initial-draft picks are autodrafted.
 - Picks are not timed.
+
+## Ghost team
+
+The eliminated managers' team, so they keep following along. It's in the Standings from round 2.
+
+- **Draft 3**: after the survivors' snake, the 2 managers out after round 1 each add an undrafted
+  hitter to the ghost, the higher-ranked of them first.
+- **Round 2**: the ghost plays the Championship Series with those 2 hitters. It's never cut and
+  doesn't take a spot: the cut counts only the managers' teams.
+- **Draft 4**: the ghost is in the snake with the 3 finalists, placed by round 2 bags like everyone.
+  Its first 2 turns fill its empty spots (no drop, no yield), made by the 2 managers out after
+  round 2. Its last 2 are ordinary redraft picks, made by the 2 managers out after round 1. Each
+  pair goes higher-ranked first, so each of the 4 managers makes one turn. A yield skips the
+  ghost for the rest of the draft, as for anyone.
+- **Round 3**: the ghost is ranked with the finalists. If it ranks first, it's the champion and
+  its 4 managers share the title. A full tie with the top finalist is a drink-off (one of its
+  managers drinks).
+- A ghost pick its manager doesn't make is autodrafted (their autodraft switch, or the
+  commissioner's autopick).
+- The ghost wins about 6% of seasons (`scripts/ghost-sim.ts --ghost-in-cs`): with 2 hitters it
+  finishes last in the CS 99% of the time, so it nearly always picks 4th and 5th in Draft 4.
 
 ## Autodraft
 
