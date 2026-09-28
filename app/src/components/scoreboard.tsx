@@ -249,6 +249,8 @@ export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; sco
   const shown = blocks.filter((b, i) => {
     const round = ROUNDS.find((r) => roundSeries(r.round).some((s) => s.gameType === b.gameType))!.round;
     if (out !== null && round > out) return false;
+    // The ghost team starts in round 2.
+    if (team.is_ghost && round === 1) return false;
     return i === 0 || scores.games.some((g) => g.gameType === b.gameType);
   });
   const mine = team.id === data.myTeam?.id;
