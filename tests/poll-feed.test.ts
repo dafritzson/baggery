@@ -200,6 +200,21 @@ describe('linescore feed', () => {
     expect(linescoreTable({ innings: [], teams: {} })).toBeNull();
   });
 
+  it("takes the batting side from the offense's team, which MLB switches at a break before the half", () => {
+    const middle = {
+      currentInning: 3,
+      inningState: 'Middle',
+      isTopInning: true,
+      // The home team is already listed as the offense for the bottom half.
+      offense: { team: { id: 143 }, batter: { id: 1, fullName: 'Kyle Schwarber' } },
+      defense: { team: { id: 144 }, batter: { id: 2, fullName: 'Ronald Acuña Jr.' } },
+    };
+    expect(linescoreLive(middle, 143)).toMatchObject({ battingSide: 'home', batting: [{ id: 1 }, null, null], dueUp: [{ id: 2 }, null, null] });
+    expect(linescoreLive({ ...middle, offense: { ...middle.offense, team: { id: 144 } } }, 143)?.battingSide).toBe('away');
+    // Without the teams, the inning half decides, as before.
+    expect(linescoreLive(middle)?.battingSide).toBe('away');
+  });
+
   it('reads the runs so far', () => {
     expect(linescoreRuns({ teams: { home: { runs: 2 }, away: { runs: 3 } } })).toEqual({ home: 2, away: 3 });
     expect(linescoreRuns({ teams: { home: {}, away: {} } })).toBeNull();

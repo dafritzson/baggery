@@ -293,16 +293,23 @@ export function linescoreTable(data: any): Linescore | null {
   };
 }
 
-/** The live state from `/game/{gamePk}/linescore`, or null before the game has an inning. */
+/**
+ * The live state from `/game/{gamePk}/linescore`, or null before the game has an inning.
+ * `homeTeamId` says which side the offense is: at an inning break MLB switches `offense` and
+ * `defense` to the next half before (or after) it flips `isTopInning`, so going by the offense's
+ * team keeps the batters and due-up lists under the right team.
+ */
 // deno-lint-ignore no-explicit-any
-export function linescoreLive(data: any): LiveState | null {
+export function linescoreLive(data: any, homeTeamId?: number): LiveState | null {
   if (!data?.currentInning) return null;
   const offense = data.offense ?? {};
   const defense = data.defense ?? {};
+  const offenseTeam: number | undefined = offense.team?.id;
   return {
     inning: data.currentInning,
     inningState: data.inningState ?? data.inningHalf ?? 'Top',
-    battingSide: data.isTopInning === false ? 'home' : 'away',
+    battingSide:
+      offenseTeam && homeTeamId ? (offenseTeam === homeTeamId ? 'home' : 'away') : data.isTopInning === false ? 'home' : 'away',
     outs: data.outs ?? 0,
     balls: data.balls ?? 0,
     strikes: data.strikes ?? 0,
