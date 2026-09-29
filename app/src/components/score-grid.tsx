@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
   liveDot: { position: 'absolute', top: 6, right: 4, width: 6, height: 6, borderRadius: 3 },
   row: { height: ROW },
   cut: { borderTopWidth: 2, borderStyle: 'dashed' },
-  labelCell: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.two + 2 },
+  labelCell: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.two },
   cells: { flexDirection: 'row', paddingHorizontal: Spacing.one },
   cell: { minWidth: CELL, flexGrow: 1, flexBasis: 0, alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center' },
   divider: { borderLeftWidth: StyleSheet.hairlineWidth },

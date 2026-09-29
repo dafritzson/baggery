@@ -370,7 +370,7 @@ function SeriesTable({ data, block }: { data: SeasonData; block: SeriesBlock }) 
 }
 
 const styles = StyleSheet.create({
-  tieButton: { marginLeft: Spacing.one, padding: 2 },
+  tieButton: { marginLeft: 2 },
   // Wide enough for "▼12".
   moveSlot: { width: 28, alignItems: 'flex-end' },
   move: { fontSize: 11, lineHeight: 14, fontWeight: 700, fontVariant: ['tabular-nums'] },
