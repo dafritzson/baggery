@@ -82,7 +82,7 @@ export function BoxScoreSheet({ data, game, onClose }: { data: SeasonData; game:
   );
 
   return (
-    <PopupSheet open onClose={onClose} maxWidth={900}>
+    <PopupSheet open onClose={onClose} maxWidth={900} tall>
       {(dragHandlers) => (
         // Its players open over it, not behind it under the app's own player popup.
         <PlayerProvider stacked>

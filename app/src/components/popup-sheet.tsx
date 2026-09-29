@@ -25,12 +25,15 @@ const nativeDriver = Platform.OS !== 'web';
  * header to close (the player popup, a game's box score). `children` gets the drag handlers for
  * that header (none on desktops), to spread on it with `SheetHandle`. `dialog` makes it a centered
  * dialog on phones too, for a popup opened over another one, so there's never a stack of sheets.
+ * `tall` keeps the phone sheet at its full height whatever it holds, so switching what it shows
+ * (a box score's team tabs) doesn't make it jump.
  */
 export function PopupSheet({
   open,
   onClose,
   maxWidth = 760,
   dialog = false,
+  tall = false,
   children,
 }: {
   open: boolean;
@@ -38,6 +41,7 @@ export function PopupSheet({
   /** The dialog's width on desktops. */
   maxWidth?: number;
   dialog?: boolean;
+  tall?: boolean;
   children: (dragHandlers: GestureResponderHandlers | undefined) => ReactNode;
 }) {
   const theme = useTheme();
@@ -58,7 +62,7 @@ export function PopupSheet({
           onPress={() => {}}
           style={[
             styles.panel,
-            wide ? [styles.panelWide, { maxWidth }] : styles.panelCompact,
+            wide ? [styles.panelWide, { maxWidth }] : [styles.panelCompact, tall && styles.panelTall],
             { backgroundColor: theme.background, boxShadow: theme.floating },
             !wide && { transform: [{ translateY: drag }] },
           ]}>
@@ -132,6 +136,7 @@ const styles = StyleSheet.create({
   panel: { width: '100%', overflow: 'hidden' },
   panelWide: { maxHeight: '90%', borderRadius: Radius.lg },
   panelCompact: { maxHeight: '92%', borderTopLeftRadius: Radius.lg, borderTopRightRadius: Radius.lg },
+  panelTall: { height: '92%' },
   // Web: keep the browser from scrolling or selecting text while the header is dragged.
   dragHandle: Platform.select({ web: { touchAction: 'none', userSelect: 'none', cursor: 'grab' } as object, default: {} }),
   grabber: { position: 'absolute', top: 6, alignSelf: 'center', left: '50%', marginLeft: -18, width: 36, height: 5, borderRadius: 3 },
