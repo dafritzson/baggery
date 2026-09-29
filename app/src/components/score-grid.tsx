@@ -38,6 +38,7 @@ export interface GridRow {
 
 const ROW = 38;
 const CELL = 34;
+const TOTAL = 52;
 
 /**
  * A spreadsheet-like grid: labels pinned on the left, the round total pinned on the right, and
@@ -49,6 +50,7 @@ export function ScoreGrid({
   labelHeader,
   totalHeader,
   labelWidth,
+  labelMaxWidth,
   rowHeight = ROW,
   follow,
 }: {
@@ -57,6 +59,11 @@ export function ScoreGrid({
   labelHeader: string;
   totalHeader: string;
   labelWidth: number;
+  /**
+   * Lets the labels widen past `labelWidth`, up to this, into whatever room the game columns
+   * don't need, so long names aren't cut off when the columns fit anyway.
+   */
+  labelMaxWidth?: number;
   /** Body rows' height; the header stays at the default. */
   rowHeight?: number;
   /** A column to keep scrolled into view (the latest one filled in, when the standings are scrubbed). */
@@ -65,6 +72,9 @@ export function ScoreGrid({
   const theme = useTheme();
   const scroller = useRef<ScrollView>(null);
   const [viewWidth, setViewWidth] = useState(0);
+  const [gridWidth, setGridWidth] = useState(0);
+  const spare = gridWidth - TOTAL - columns.length * CELL - 2 * Spacing.one;
+  const labels = labelMaxWidth && gridWidth ? Math.min(labelMaxWidth, Math.max(labelWidth, spare)) : labelWidth;
   useEffect(() => {
     if (follow === undefined || follow < 0 || !viewWidth) return;
     scroller.current?.scrollTo({ x: Math.max(0, (follow + 1) * CELL + Spacing.one - viewWidth), animated: true });
@@ -103,8 +113,11 @@ export function ScoreGrid({
     );
 
   return (
-    <ThemedView type="backgroundElement" style={styles.grid}>
-      <View style={[{ width: labelWidth, borderRightColor: theme.border }, styles.labels]}>
+    <ThemedView
+      type="backgroundElement"
+      style={styles.grid}
+      onLayout={labelMaxWidth ? (e) => setGridWidth(e.nativeEvent.layout.width) : undefined}>
+      <View style={[{ width: labels, borderRightColor: theme.border }, styles.labels]}>
         <View style={[styles.header, styles.labelCell, { borderBottomColor: theme.border }]}>{header(labelHeader)}</View>
         {rows.map((r, i) => pressable(r, i, styles.labelCell, r.label))}
       </View>
@@ -159,7 +172,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: { flexGrow: 1 },
   fill: { flexGrow: 1 },
-  totals: { borderLeftWidth: StyleSheet.hairlineWidth, width: 52 },
+  totals: { borderLeftWidth: StyleSheet.hairlineWidth, width: TOTAL },
   header: { height: ROW, borderBottomWidth: StyleSheet.hairlineWidth },
   headerCell: { height: ROW },
   headerText: { fontSize: 12 },

@@ -345,6 +345,7 @@ function SeriesTable({ data, block }: { data: SeasonData; block: SeriesBlock }) 
         labelHeader="Player"
         totalHeader="Total"
         labelWidth={compact ? 150 : 184}
+        labelMaxWidth={280}
       />
     </View>
   );
