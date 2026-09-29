@@ -79,18 +79,21 @@ export function PlayerPopup({
   playerId,
   draftAction,
   onClose,
+  onLeave,
   dialog,
 }: {
   playerId: number | null;
   draftAction: DraftAction | null;
   onClose: () => void;
+  /** Also called when it goes to another screen (Standings), to close the popup it's over. */
+  onLeave?: () => void;
   /** A centered dialog on phones too (over another popup). */
   dialog?: boolean;
 }) {
   return (
     <PopupSheet open={playerId !== null} onClose={onClose} dialog={dialog}>
       {(dragHandlers) =>
-        playerId !== null && <PlayerDetails playerId={playerId} draftAction={draftAction} onClose={onClose} dragHandlers={dragHandlers} />
+        playerId !== null && <PlayerDetails playerId={playerId} draftAction={draftAction} onClose={onClose} onLeave={onLeave} dragHandlers={dragHandlers} />
       }
     </PopupSheet>
   );
@@ -105,12 +108,15 @@ export function PlayerDetails({
   playerId,
   draftAction = null,
   onClose,
+  onLeave,
   dragHandlers,
 }: {
   playerId: number;
   draftAction?: DraftAction | null;
   /** Shows a close button. */
   onClose?: () => void;
+  /** Called, after `onClose`, when it goes to another screen. */
+  onLeave?: () => void;
   /** Makes the header a handle for dragging the bottom sheet closed. */
   dragHandlers?: GestureResponderHandlers;
 }) {
@@ -162,7 +168,7 @@ export function PlayerDetails({
         }
       />
       <ScrollView contentContainerStyle={styles.body}>
-        {data && <BaggerySection data={data} playerId={playerId} requestedYear={requestedYear} onClose={onClose} />}
+        {data && <BaggerySection data={data} playerId={playerId} requestedYear={requestedYear} onClose={onClose} onLeave={onLeave} />}
         {data && <MatchupsSection data={data} playerId={playerId} />}
         {error && <ThemedText themeColor="danger">{error}</ThemedText>}
         {!stats && !error && <ActivityIndicator style={{ padding: Spacing.five }} />}
@@ -476,6 +482,7 @@ function BaggerySection({
   playerId,
   requestedYear,
   onClose,
+  onLeave,
 }: {
   data: SeasonData;
   playerId: number;
@@ -483,6 +490,8 @@ function BaggerySection({
   requestedYear: number | undefined;
   /** Closes the popup before going to Standings. */
   onClose?: () => void;
+  /** Closes whatever popup it's over, too. */
+  onLeave?: () => void;
 }) {
   const mlbTeamId = data.poolByPlayer.get(playerId)?.mlb_team_id;
   const scores = usePlayerScores(playerId, mlbTeamId, data.season.year);
@@ -530,6 +539,7 @@ function BaggerySection({
   const owner = team && ownerName(data, team);
   const openTeam = (teamId: string) => {
     onClose?.();
+    onLeave?.();
     router.navigate({ pathname: '/standings', params: requestedYear ? { team: teamId, year: requestedYear } : { team: teamId } });
   };
 

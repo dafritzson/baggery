@@ -31,7 +31,16 @@ const OpenPlayerContext = createContext<{
  * score) hosts its own, `stacked`: a dialog over it rather than a second bottom sheet, mounted only
  * while open so it's created after, and so stacked above, the popup it came from.
  */
-export function PlayerProvider({ children, stacked = false }: { children: ReactNode; stacked?: boolean }) {
+export function PlayerProvider({
+  children,
+  stacked = false,
+  onLeave,
+}: {
+  children: ReactNode;
+  stacked?: boolean;
+  /** Closes the popup hosting a stacked one when the player popup goes to another screen. */
+  onLeave?: () => void;
+}) {
   const [playerId, setPlayerId] = useState<number | null>(null);
   const [draftAction, setDraftAction] = useState<DraftAction | null>(null);
   const [actions] = useState(() => ({ open: setPlayerId, setDraftAction }));
@@ -43,6 +52,7 @@ export function PlayerProvider({ children, stacked = false }: { children: ReactN
           playerId={playerId}
           draftAction={draftAction}
           onClose={() => setPlayerId(null)}
+          onLeave={onLeave}
           dialog={stacked}
         />
       )}
