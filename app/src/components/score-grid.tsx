@@ -51,6 +51,7 @@ export function ScoreGrid({
   totalHeader,
   labelWidth,
   labelMaxWidth,
+  keepColumns,
   rowHeight = ROW,
   follow,
 }: {
@@ -64,6 +65,11 @@ export function ScoreGrid({
    * don't need, so long names aren't cut off when the columns fit anyway.
    */
   labelMaxWidth?: number;
+  /**
+   * With `labelMaxWidth`: the labels widen only while this many game columns still show; the
+   * rest scroll. Defaults to all of them.
+   */
+  keepColumns?: number;
   /** Body rows' height; the header stays at the default. */
   rowHeight?: number;
   /** A column to keep scrolled into view (the latest one filled in, when the standings are scrubbed). */
@@ -73,7 +79,7 @@ export function ScoreGrid({
   const scroller = useRef<ScrollView>(null);
   const [viewWidth, setViewWidth] = useState(0);
   const [gridWidth, setGridWidth] = useState(0);
-  const spare = gridWidth - TOTAL - columns.length * CELL - 2 * Spacing.one;
+  const spare = gridWidth - TOTAL - Math.min(keepColumns ?? columns.length, columns.length) * CELL - 2 * Spacing.one;
   const labels = labelMaxWidth && gridWidth ? Math.min(labelMaxWidth, Math.max(labelWidth, spare)) : labelWidth;
   useEffect(() => {
     if (follow === undefined || follow < 0 || !viewWidth) return;

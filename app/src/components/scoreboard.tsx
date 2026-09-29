@@ -206,6 +206,8 @@ export function StandingsTable({
         labelHeader="Team"
         totalHeader={`RD ${round}`}
         labelWidth={compact ? 160 : 220}
+        labelMaxWidth={300}
+        keepColumns={4}
         rowHeight={48}
         follow={columns.findLastIndex((c) => c.started)}
       />
@@ -359,6 +361,7 @@ function SeriesTable({ data, block }: { data: SeasonData; block: SeriesBlock }) 
         totalHeader="Total"
         labelWidth={compact ? 150 : 184}
         labelMaxWidth={280}
+        keepColumns={4}
       />
     </View>
   );
