@@ -258,8 +258,8 @@ function GhostTurnHelp({ filling }: { filling: boolean }) {
     <Card title="Your pick for the 👻 Ghost" style={{ backgroundColor: theme.tint }}>
       <ThemedText type="small">
         {filling
-          ? "Fill one of its empty spots: add an undrafted hitter. There's no drop, and this turn can't be passed."
-          : 'An ordinary redraft pick for it: drop one of its hitters and add an undrafted one. Passing skips only this turn.'}
+          ? "Add an undrafted hitter to fill one of its empty spots. There's no drop, and this turn can't be passed."
+          : "A regular redraft pick: add an undrafted hitter to fill one of its empty spots or replace one of its hitters who's still playing. Passing skips only this turn."}
       </ThemedText>
       <Pressable
         accessibilityRole="link"

@@ -72,7 +72,7 @@ export default function RulesScreen() {
             </View>
           ))}
         </View>
-        <Bullet>Your team is 4 hitters, and its bags are their total bases. Only hitting counts, even for two-way players.</Bullet>
+        <Bullet>Your team is 4 hitters, and its bags are their total bases. Only hits count. Walks and errors do nothing.</Bullet>
         <Bullet>Bags reset every round. A hitter&apos;s bags count for you in games that start while he&apos;s on your roster, and stay yours after you drop him.</Bullet>
       </Section>
 
@@ -85,7 +85,10 @@ export default function RulesScreen() {
           ]}
         />
         <Bullet>A round ends by itself once every series in it has a winner, plus 3 hours for stat corrections. The teams below the cut are out.</Bullet>
-        <Bullet>Level on bags? Then team slugging, on-base, home runs, runs and RBIs decide it, in that order. Still level: a drink-off.</Bullet>
+        <Bullet>
+          Teams tied on bags are ranked by these tiebreakers, in order: team slugging percentage, team on-base percentage,
+          home runs, runs, then RBIs. Teams still tied after all five settle it with a drink-off.
+        </Bullet>
       </Section>
 
       <Section title="Drafts" {...fold('drafts')}>
@@ -98,24 +101,48 @@ export default function RulesScreen() {
           ]}
         />
         <Bullet>Every draft is a snake, up to 4 rounds. Picks aren&apos;t timed.</Bullet>
-        <Bullet>In Drafts 2 to 4 (redrafts), each pick drops one of your hitters and adds an undrafted one.</Bullet>
-        <Bullet>You can yield to sit out the rest of a redraft, but not while you have a hitter whose MLB team is out: fill his spot first.</Bullet>
+        <Bullet>
+          Drafts 2 to 4 are redrafts. A hitter whose MLB team has been eliminated, or who was left off its postseason roster,
+          leaves an empty spot on your roster.
+        </Bullet>
+        <Bullet>
+          Each redraft pick adds an undrafted hitter. He either fills one of your empty spots or replaces a hitter of yours
+          who&apos;s still playing.
+        </Bullet>
+        <Bullet>
+          You can yield to skip the rest of a redraft, but only once every empty spot on your roster is filled.
+        </Bullet>
         <Bullet>A hitter can be on one roster a season, ever. Once he&apos;s dropped, nobody can take him again.</Bullet>
         <Bullet>Draft 1&apos;s pool is every playoff team&apos;s active roster, plus hitters on their injured lists who could be back in time. Redrafts use the postseason rosters of MLB teams still alive.</Bullet>
       </Section>
 
-      <Section title="The Ghost" {...fold('ghost')}>
+      <Section title="The Ghost 👻" {...fold('ghost')}>
         <ThemedText type="small">Knocked out? You join the Ghost, a team shared by the eliminated managers that can still win it all.</ThemedText>
-        <Bullet><B>Draft 3:</B> after the survivors&apos; snake, the 2 managers out after round 1 each add an undrafted hitter to it, the higher-ranked first.</Bullet>
+        <Bullet>
+          <B>Draft 3:</B> after the survivors&apos; snake, the 2 managers eliminated in round 1 each add an undrafted hitter
+          to the Ghost. Of those 2 managers, the one who finished higher in round 1 picks first.
+        </Bullet>
         <Bullet><B>Round 2:</B> it plays the Championship Series with those 2 hitters. It&apos;s never cut and takes nobody&apos;s spot: the bottom {survivors[0] - survivors[1]} managers are out wherever the Ghost finishes.</Bullet>
-        <Bullet><B>Draft 4:</B> it joins the finalists&apos; snake, placed by round 2 bags. The 2 managers out after round 2 fill its empty spots (no drop, no pass). The 2 out after round 1 make an ordinary redraft pick each.</Bullet>
+        <Bullet>
+          <B>Draft 4:</B> the Ghost joins the finalists&apos; snake, placed by its round 2 bags like everyone else. Its first 2
+          turns fill its 2 empty spots, with no drop and no pass, and go to the 2 managers eliminated in round 2. Its last
+          2 turns are regular redraft picks and go to the 2 managers eliminated in round 1. In each pair, the manager who
+          finished higher in the round they went out picks first.
+        </Bullet>
         <Bullet><B>Round 3:</B> it&apos;s ranked with the finalists. If it finishes first, its 4 managers share the title.</Bullet>
         <Bullet>Passing a ghost turn skips only that turn. A ghost pick nobody makes is autodrafted.</Bullet>
       </Section>
 
       <Section title="Autodraft" {...fold('autodraft')}>
-        <Bullet>Turn it on in a draft room and it picks for you: your queue first, in order, then the hitter with the most regular-season total bases (skipping the injured list).</Bullet>
-        <Bullet>In a redraft it replaces your hitters whose MLB team is out, then yields.</Bullet>
+        <Bullet>Turn on autodraft in the draft room and it makes your picks for you.</Bullet>
+        <Bullet>
+          It takes the highest hitter in your queue who&apos;s still available. If nobody in your queue is available, it takes
+          the available hitter with the most regular-season total bases, skipping anyone on the injured list.
+        </Bullet>
+        <Bullet>
+          In a redraft, it fills your empty spots, then yields. A hitter in your queue can be set to replace one of yours
+          who&apos;s still playing instead.
+        </Bullet>
         <Bullet>Your queue is private. On a ghost turn it&apos;s the queue of the manager making the pick.</Bullet>
       </Section>
     </Screen>
