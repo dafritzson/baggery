@@ -28,7 +28,8 @@ export const savantUrl = (playId: string) => `https://baseballsavant.mlb.com/spo
  * A hitter's hits in one game, each with the videos that are up: MLB's official clip once one is
  * posted (most home runs, within a minute or two) and Savant's video of the play, which every hit
  * gets the day after the game (poll-games checks). A hit with neither yet is listed without links.
- * Loaded when opened, so it costs nothing until someone taps ▶. Both open in the browser. The sheet
+ * The ▶ only shows once one of them has a video. Loaded when opened, so it costs nothing until
+ * someone taps ▶. Both open in the browser. The sheet
  * opens once they're in, at its full height: around the loader it opened tall and then dropped.
  */
 export function HitVideosSheet({ gamePk, playerId, title, onClose }: { gamePk: number; playerId: number; title: string; onClose: () => void }) {

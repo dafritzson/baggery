@@ -127,7 +127,7 @@ function useLiveScores(data: SeasonData | null): ScoresState {
       gamePks.length && playerIds.length
         ? await supabase
             .from('mlb_hits')
-            .select('play_id, game_pk, mlb_player_id, event, ended_at')
+            .select('play_id, game_pk, mlb_player_id, event, ended_at, has_video')
             .in('game_pk', gamePks)
             .in('mlb_player_id', playerIds)
         : { data: [] };

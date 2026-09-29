@@ -142,8 +142,12 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   loads per game, a few hundred a day at most in the postseason, inside polls that already run.
 - **Bags hit by hit.** The scores load also brings rostered players' hits (play ID, game, player,
   type, time: ~120 bytes each), a few hundred rows by the World Series, so ~20–40 KB more per full
-  load late in the postseason. Each new hit rides in the poll's one broadcast; a clip turning up
-  doesn't send anything.
+  load late in the postseason. Each new hit rides in the poll's one broadcast. Each hit also
+  carries `has_video` (~20 bytes more in the load and in each broadcast row), so the Games tab's
+  ▶ only shows once there's a video: a clip turning up and a game's Savant videos being marked
+  ready now ride a poll's broadcast too. Clips come during or just after live polls that already
+  broadcast, and Savant marks one game at a time about hourly, so that's a few hundred extra
+  small broadcasts in a postseason month (~40 games × ~15 open apps × a few KB: under 5 MB).
 - **Sub and cut alerts.** No new MLB requests: a hitter coming off the bench (👀) or being
   replaced (😠) is read from the box score `poll-games` already fetches every 10 s. Each read runs
   one small query that finds the drafted hitters' new changes (usually none, so a few bytes back).
