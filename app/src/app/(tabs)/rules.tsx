@@ -1,23 +1,19 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { type ReactNode, useEffect, useRef } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Pressable, type ScrollView, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/card';
 import { Screen } from '@/components/screen';
+import { FoldChevron } from '@/components/team-roster';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useSeason } from '@/lib/season';
 
-/** The page's sections, in order: `?section=<id>` (a link from Standings or a draft room) jumps to one. */
-const SECTIONS = [
-  { id: 'bags', label: 'Bags' },
-  { id: 'rounds', label: 'Rounds' },
-  { id: 'drafts', label: 'Drafts' },
-  { id: 'ghost', label: 'Ghost' },
-  { id: 'autodraft', label: 'Autodraft' },
-] as const;
-type RulesSection = (typeof SECTIONS)[number]['id'];
+/** The page's sections: `?section=<id>` (a link from Standings or a draft room) opens one. */
+const SECTIONS = ['bags', 'rounds', 'drafts', 'ghost', 'autodraft'] as const;
+type RulesSection = (typeof SECTIONS)[number];
+const isSection = (id: string | undefined): id is RulesSection => SECTIONS.includes(id as RulesSection);
 
 /**
  * The rules for the league, in short: the players' version of docs/RULES.md, which has every
@@ -29,25 +25,23 @@ export default function RulesScreen() {
   const { data } = useSeason();
   const { section } = useLocalSearchParams<{ section?: string }>();
   const scroll = useRef<ScrollView>(null);
-  // Where each section is on the page, and a section to jump to once it's been laid out.
-  const offsets = useRef(new Map<string, number>());
-  const pending = useRef<string | null>(null);
-
-  const jump = (id: string) => jumpTo(scroll.current, offsets.current, id);
-  // A link's section is jumped to (once it's laid out, when the page has just opened), then
-  // cleared, so the same link works again later.
+  // Every section starts folded. A link opens just its section, at the top of the page; the link's
+  // param is then cleared, so the same link works again later.
+  const [open, setOpen] = useState<RulesSection[]>(() => (isSection(section) ? [section] : []));
+  const [seenLink, setSeenLink] = useState(section);
+  if (section !== seenLink) {
+    setSeenLink(section);
+    if (isSection(section)) setOpen([section]);
+  }
   useEffect(() => {
     if (!section) return;
-    pending.current = jumpTo(scroll.current, offsets.current, section) ? null : section;
+    scroll.current?.scrollTo({ y: 0, animated: false });
     router.setParams({ section: undefined });
   }, [section]);
-  const place = (id: RulesSection, y: number) => {
-    offsets.current.set(id, y);
-    if (pending.current === id) {
-      pending.current = null;
-      jump(id);
-    }
-  };
+  const fold = (id: RulesSection) => ({
+    open: open.includes(id),
+    onToggle: () => setOpen((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id])),
+  });
 
   // This season's cut (5, 3, 1 so far), and how many managers start it.
   const survivors = data?.season.survivors_after_round ?? [5, 3, 1];
@@ -61,19 +55,8 @@ export default function RulesScreen() {
           Draft 4 hitters for the MLB postseason. Their bags decide who survives each round.
         </ThemedText>
       </View>
-      <View style={styles.chips}>
-        {SECTIONS.map((s) => (
-          <Pressable
-            key={s.id}
-            accessibilityRole="link"
-            onPress={() => jump(s.id)}
-            style={({ pressed }) => [styles.chip, { backgroundColor: theme.backgroundElement, boxShadow: pressed ? theme.sunken : theme.raised }]}>
-            <ThemedText type="smallBold">{s.label}</ThemedText>
-          </Pressable>
-        ))}
-      </View>
 
-      <Section title="Bags" id="bags" onPlace={place}>
+      <Section title="Bags" {...fold('bags')}>
         <View style={styles.bags}>
           {(
             [
@@ -93,7 +76,7 @@ export default function RulesScreen() {
         <Bullet>Bags reset every round. A hitter&apos;s bags count for you in games that start while he&apos;s on your roster, and stay yours after you drop him.</Bullet>
       </Section>
 
-      <Section title="Rounds and the cut" id="rounds" onPlace={place}>
+      <Section title="Rounds and the cut" {...fold('rounds')}>
         <Table
           rows={[
             ['Round 1', 'Wild Card + Division Series', `Top ${survivors[0]} of ${managers} go through`],
@@ -105,7 +88,7 @@ export default function RulesScreen() {
         <Bullet>Level on bags? Then team slugging, on-base, home runs, runs and RBIs decide it, in that order. Still level: a drink-off.</Bullet>
       </Section>
 
-      <Section title="Drafts" id="drafts" onPlace={place}>
+      <Section title="Drafts" {...fold('drafts')}>
         <Table
           rows={[
             ['Draft 1', 'Before the Wild Card', 'Random order, 4 picks each'],
@@ -121,7 +104,7 @@ export default function RulesScreen() {
         <Bullet>Draft 1&apos;s pool is every playoff team&apos;s active roster, plus hitters on their injured lists who could be back in time. Redrafts use the postseason rosters of MLB teams still alive.</Bullet>
       </Section>
 
-      <Section title="The Ghost" id="ghost" onPlace={place}>
+      <Section title="The Ghost" {...fold('ghost')}>
         <ThemedText type="small">Knocked out? You join the Ghost, a team shared by the eliminated managers that can still win it all.</ThemedText>
         <Bullet><B>Draft 3:</B> after the survivors&apos; snake, the 2 managers out after round 1 each add an undrafted hitter to it, the higher-ranked first.</Bullet>
         <Bullet><B>Round 2:</B> it plays the Championship Series with those 2 hitters. It&apos;s never cut and takes nobody&apos;s spot: the bottom {survivors[0] - survivors[1]} managers are out wherever the Ghost finishes.</Bullet>
@@ -130,7 +113,7 @@ export default function RulesScreen() {
         <Bullet>Passing a ghost turn skips only that turn. A ghost pick nobody makes is autodrafted.</Bullet>
       </Section>
 
-      <Section title="Autodraft" id="autodraft" onPlace={place}>
+      <Section title="Autodraft" {...fold('autodraft')}>
         <Bullet>Turn it on in a draft room and it picks for you: your queue first, in order, then the hitter with the most regular-season total bases (skipping the injured list).</Bullet>
         <Bullet>In a redraft it replaces your hitters whose MLB team is out, then yields.</Bullet>
         <Bullet>Your queue is private. On a ghost turn it&apos;s the queue of the manager making the pick.</Bullet>
@@ -139,29 +122,21 @@ export default function RulesScreen() {
   );
 }
 
-/** Scrolls to a section, if it's been laid out: whether it could. */
-function jumpTo(scroll: ScrollView | null, offsets: Map<string, number>, id: string): boolean {
-  const y = offsets.get(id);
-  if (y === undefined || !scroll) return false;
-  scroll.scrollTo({ y: Math.max(0, y - Spacing.three), animated: true });
-  return true;
-}
-
-function Section({
-  id,
-  title,
-  onPlace,
-  children,
-}: {
-  id: RulesSection;
-  title: string;
-  onPlace: (id: RulesSection, y: number) => void;
-  children: ReactNode;
-}) {
+/** A section: its title, tapped to open or fold it. */
+function Section({ title, open, onToggle, children }: { title: string; open: boolean; onToggle: () => void; children: ReactNode }) {
   return (
-    <View onLayout={(e) => onPlace(id, e.nativeEvent.layout.y)}>
-      <Card title={title}>{children}</Card>
-    </View>
+    <Card>
+      <Pressable
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        hitSlop={{ top: Spacing.three, bottom: Spacing.three }}
+        style={styles.sectionHead}>
+        <ThemedText type="smallBold" style={styles.sectionTitle}>{title}</ThemedText>
+        <FoldChevron open={open} />
+      </Pressable>
+      {open && children}
+    </Card>
   );
 }
 
@@ -199,8 +174,8 @@ function Table({ rows }: { rows: [string, string, string][] }) {
 
 const styles = StyleSheet.create({
   intro: { gap: Spacing.one },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-  chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: Radius.md },
+  sectionHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 28 },
+  sectionTitle: { flex: 1, fontSize: 16, lineHeight: 24 },
   bags: { flexDirection: 'row', gap: Spacing.two },
   bag: { flex: 1, alignItems: 'center', paddingVertical: Spacing.two, borderRadius: Radius.md },
   bullet: { flexDirection: 'row', gap: Spacing.two },
