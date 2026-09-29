@@ -12,6 +12,7 @@ import {
   ordinal,
   parseBagParam,
   rainCount,
+  shakeStrength,
 } from '../supabase/functions/_shared/core/bag-celebration.ts';
 import { type Row, type Scores, toGame } from '../supabase/functions/_shared/core/score-feed.ts';
 import type { RosterSpell } from '../supabase/functions/_shared/core/scoring.ts';
@@ -180,6 +181,20 @@ describe('rainCount', () => {
     const homer = rainCount(hit({ bags: 4, singles: 0, hr: 1 }));
     expect(single).toBeLessThan(double);
     expect(double).toBeLessThan(homer);
+  });
+});
+
+describe('shakeStrength', () => {
+  const hit = (over: Partial<BagHit>): BagHit => ({ gamePk: 1, playerId: 1, tb: 1, bags: 1, singles: 1, doubles: 0, triples: 0, hr: 0, ...over });
+
+  it('shakes harder and longer for more bags, hardest for a home run', () => {
+    const single = shakeStrength(hit({}));
+    const triple = shakeStrength(hit({ bags: 3, singles: 0, triples: 1 }));
+    const homer = shakeStrength(hit({ bags: 4, singles: 0, hr: 1 }));
+    expect(single.px).toBeLessThan(triple.px);
+    expect(single.ms).toBeLessThan(triple.ms);
+    expect(triple.px).toBeLessThan(homer.px);
+    expect(triple.ms).toBeLessThan(homer.ms);
   });
 });
 

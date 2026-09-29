@@ -162,7 +162,14 @@ export function hitBags(tb: number, events: (keyof typeof HIT_BASES)[], playerId
 
 /** How many bags rain down: more for more bags, a downpour for a home run. */
 export function rainCount(bag: BagHit): number {
-  return bag.hr > 0 ? 72 : Math.min(24 + 12 * (bag.bags - 1), 60);
+  return bag.hr > 0 ? 160 : Math.min(60 + 25 * (bag.bags - 1), 120);
+}
+
+/** How hard the screen shakes as the rain starts: further and longer for more bags and a home run. */
+export function shakeStrength(bag: BagHit): { px: number; ms: number } {
+  if (bag.hr > 0) return { px: 18, ms: 1400 };
+  const bags = Math.min(Math.max(bag.bags, 1), 3);
+  return { px: 4 + 3 * bags, ms: 500 + 200 * bags };
 }
 
 /** The popup's quick stats. */
