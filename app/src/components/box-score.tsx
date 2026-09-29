@@ -224,7 +224,7 @@ function TeamBox({ data, game, box, side }: { data: SeasonData; game: GameInfo; 
         return (
           <HitterRow key={row.playerId} bagger={bagger} atBat={tag === 'AB'} ringUndrafted style={[styles.row, styles.line, { borderTopColor: theme.border }]}>
             <ThemedText type="small" themeColor="textSecondary" style={[styles.spot, styles.spotText]}>{row.sub || row.spot === null ? '' : row.spot}</ThemedText>
-            <BatterCell row={row} bagger={bagger} owner={owner} tag={tag} bags={row.line?.tb ? hitBags(row.line.tb, hitsOf(row.playerId), row.playerId, game.gamePk).join('') : ''} />
+            <BatterCell row={row} bagger={bagger} owner={owner} tag={tag} bags={row.line?.tb ? hitBags(row.line.tb, hitsOf(row.playerId), row.playerId, game.gamePk, row.line).join('') : ''} />
             {COLUMNS.map((c) => number(row.line ? row.line[c.key] : '–', c.key))}
             <View style={styles.tb}>{number(row.line ? row.line.tb : '–', 'tb', true)}</View>
           </HitterRow>

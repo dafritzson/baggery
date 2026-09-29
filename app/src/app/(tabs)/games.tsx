@@ -291,6 +291,7 @@ function BaggerCard({
   team,
   tb,
   hits,
+  line,
   gamePk,
   gameLabel,
   bagWidth,
@@ -301,6 +302,8 @@ function BaggerCard({
   tb: number | null;
   /** His hits in the game, in order: each one's bags are drawn alike (core hitBags). */
   hits: ScoreHit[];
+  /** His batting line in the game, for hits no play is matched to yet. */
+  line: BattingLine | null;
   gamePk: number;
   /** "World Series · Game 3", for the videos sheet. */
   gameLabel: string;
@@ -314,7 +317,7 @@ function BaggerCard({
   const [ownerRoom, setOwnerRoom] = useState(0);
   const mine = team.id === data.myTeam?.id;
   const owner = ownerName(data, team);
-  const bags = tb ? hitBags(tb, hits.map((h) => h.event), playerId, gamePk) : [];
+  const bags = tb ? hitBags(tb, hits.map((h) => h.event), playerId, gamePk, line) : [];
   // ▶ only once there's a video to watch: MLB's clip (most home runs, within minutes) or Savant's.
   const hasVideo = !!tb && hits.some((h) => h.hasVideo);
   // Beside the name: only what the owner line can't hold.
@@ -632,6 +635,7 @@ function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; gam
           team={p.team}
           tb={p.tb}
           hits={hitsOf(p.id)}
+          line={scores.lines.find((l) => l.gamePk === game.gamePk && l.playerId === p.id) ?? null}
           gamePk={game.gamePk}
           gameLabel={seriesLabel(game)}
           bagWidth={bagWidth}

@@ -133,18 +133,30 @@ function bagHash(playerId: number, gamePk: number, i: number): number {
 /**
  * A player's bags in a game, one emoji per TB, hit by hit in the order they happened: every bag
  * of a hit is the same bag, picked at random for that hit but never the previous hit's. So a
- * double, a single and a homer read as 🎒🎒🧳👜👜👜👜.
+ * double, a single and a homer read as 🎒🎒🧳👜👜👜👜, and two singles never read as a double.
  *
  * Seeded by player, game and hit number, so a row stays put as scores refresh and a new hit just
- * adds its bags. TB the known hits don't cover yet (poll-games matches plays a few seconds after
- * the box score) are drawn as the next hit. With no hits known at all (a past season before its
- * videos are loaded), every bag is drawn as its own hit.
+ * adds its bags. Hits in the batting `line` that no play is matched to yet (poll-games matches
+ * plays a few seconds after the box score, and a past season may have none) are drawn next, the
+ * biggest first. TB still left over after that are drawn a bag per hit, so they can't pass for
+ * one bigger hit.
  */
-export function hitBags(tb: number, events: (keyof typeof HIT_BASES)[], playerId: number, gamePk: number): string[] {
+export function hitBags(
+  tb: number,
+  events: (keyof typeof HIT_BASES)[],
+  playerId: number,
+  gamePk: number,
+  line?: Line | null,
+): string[] {
   const sizes: number[] = events.map((e) => HIT_BASES[e]);
-  const known = sizes.reduce((a, b) => a + b, 0);
-  if (!sizes.length) sizes.push(...Array(Math.max(tb, 0)).fill(1));
-  else if (tb > known) sizes.push(tb - known);
+  if (line) {
+    const count = (e: keyof typeof HIT_BASES) => events.filter((x) => x === e).length;
+    const singles = line.h - line.doubles - line.triples - line.hr;
+    const missing: [number, number][] = [[4, line.hr - count('HR')], [3, line.triples - count('3B')], [2, line.doubles - count('2B')], [1, singles - count('1B')]];
+    for (const [size, n] of missing) for (let i = 0; i < n; i++) sizes.push(size);
+  }
+  const covered = sizes.reduce((a, b) => a + b, 0);
+  if (tb > covered) sizes.push(...Array(tb - covered).fill(1));
   const bags: string[] = [];
   let previous = -1;
   sizes.forEach((size, i) => {
@@ -158,6 +170,17 @@ export function hitBags(tb: number, events: (keyof typeof HIT_BASES)[], playerId
     previous = pick;
   });
   return bags;
+}
+
+/** A bag's hits as `hitBags` draws them: a different bag for each hit, like the Games tab. */
+export function bagHitBags(bag: BagHit): string[] {
+  const events: (keyof typeof HIT_BASES)[] = [
+    ...Array(Math.max(bag.singles, 0)).fill('1B'),
+    ...Array(Math.max(bag.doubles, 0)).fill('2B'),
+    ...Array(Math.max(bag.triples, 0)).fill('3B'),
+    ...Array(Math.max(bag.hr, 0)).fill('HR'),
+  ];
+  return hitBags(bag.bags, events, bag.playerId, bag.gamePk ^ bag.tb);
 }
 
 /** How many bags rain down: more for more bags, a downpour for a home run. */
