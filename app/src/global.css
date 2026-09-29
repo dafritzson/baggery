@@ -368,3 +368,25 @@
     transition: none;
   }
 }
+
+/*
+ * Bag celebrations shake the whole page as the rain starts (lib/screen-shake.web.ts sets
+ * data-shake on the body, with how far and how long). It dies down as it goes.
+ */
+body[data-shake] {
+  animation: bag-shake var(--shake-ms, 800ms) linear;
+}
+@keyframes bag-shake {
+  0% { transform: translate(0, 0) rotate(0); }
+  6% { transform: translate(calc(var(--shake-px) * -1), calc(var(--shake-px) * 0.5)) rotate(-0.6deg); }
+  12% { transform: translate(var(--shake-px), calc(var(--shake-px) * -0.6)) rotate(0.6deg); }
+  18% { transform: translate(calc(var(--shake-px) * -0.9), calc(var(--shake-px) * -0.3)) rotate(-0.5deg); }
+  25% { transform: translate(calc(var(--shake-px) * 0.8), calc(var(--shake-px) * 0.6)) rotate(0.4deg); }
+  33% { transform: translate(calc(var(--shake-px) * -0.7), calc(var(--shake-px) * 0.2)) rotate(-0.35deg); }
+  42% { transform: translate(calc(var(--shake-px) * 0.55), calc(var(--shake-px) * -0.4)) rotate(0.3deg); }
+  52% { transform: translate(calc(var(--shake-px) * -0.4), calc(var(--shake-px) * 0.3)) rotate(-0.2deg); }
+  63% { transform: translate(calc(var(--shake-px) * 0.3), calc(var(--shake-px) * -0.2)) rotate(0.15deg); }
+  75% { transform: translate(calc(var(--shake-px) * -0.18), calc(var(--shake-px) * 0.1)) rotate(-0.1deg); }
+  88% { transform: translate(calc(var(--shake-px) * 0.08), 0) rotate(0.05deg); }
+  100% { transform: translate(0, 0) rotate(0); }
+}

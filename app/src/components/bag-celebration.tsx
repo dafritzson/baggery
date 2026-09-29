@@ -15,7 +15,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { BAG_EMOJI, type BagHit, bagKey, bagSummary, hitHeadline, ordinal, rainCount } from '@core/bag-celebration.ts';
+import { BAG_EMOJI, type BagHit, bagKey, bagSummary, hitHeadline, ordinal, rainCount, shakeStrength } from '@core/bag-celebration.ts';
 
 import { GAME_FONT } from '@/components/bag-game';
 import { ThemedText } from '@/components/themed-text';
@@ -25,22 +25,25 @@ import { type Celebration, useBagCelebrations } from '@/lib/bag-celebrations';
 import { headshotUrl, mlbTeamAbbr, playerName } from '@/lib/format';
 import { useOpenPlayer } from '@/lib/player';
 import { coreSpells, useScores } from '@/lib/scores';
+import { shakeScreen } from '@/lib/screen-shake';
 import { useSeason } from '@/lib/season';
 import { teamName } from '@/lib/teams';
 
 /** How long the popup stays up, unless it's closed or held. */
 const SHOW_MS = 5000;
 const FADE_MS = 400;
-/** The popup comes in once the rain is going. */
+/** The popup comes in once the rain is going, and lands with a shake of the screen. */
 const POPUP_DELAY_MS = 500;
+/** Bags keep starting to fall for this long, so the last land about as the popup goes. */
+const RAIN_MS = 3200;
 /** The app icon's emerald grass. */
 const GRASS = '#0E7A4B';
 /** The countdown runs even with reduce motion on: it's a timer, not decoration. */
 const always = { reduceMotion: ReduceMotion.Never };
 
 /**
- * Bag celebrations over the whole app: bag emoji rain down and a popup says "You got 2 bags!",
- * for 5 seconds. One at a time; more wait their turn.
+ * Bag celebrations over the whole app: bag emoji pour down, the screen shakes and a popup says
+ * "You got 2 bags!", for 5 seconds. One at a time; more wait their turn.
  */
 export function BagCelebrations() {
   const { current, done } = useBagCelebrations();
@@ -83,7 +86,10 @@ function CelebrationView({ celebration, onDone }: { celebration: Celebration; on
     const delay = rain ? POPUP_DELAY_MS : 0;
     enter.set(withDelay(delay, withTiming(1, { duration: 450, easing: Easing.out(Easing.back(1.8)) })));
     progress.set(withDelay(delay, countdown(SHOW_MS), always.reduceMotion));
-  }, [rain, enter, progress, countdown]);
+    if (!rain) return;
+    const shake = setTimeout(() => shakeScreen(shakeStrength(bag)), POPUP_DELAY_MS);
+    return () => clearTimeout(shake);
+  }, [rain, bag, enter, progress, countdown]);
 
   // Holding the popup pauses the countdown; letting go picks it up where it was.
   const pause = () => cancelAnimation(progress);
@@ -236,9 +242,10 @@ function makeDrops(bag: BagHit, width: number): Drop[] {
   return Array.from({ length: rainCount(bag) }, () => ({
     emoji: BAG_EMOJI[Math.floor(Math.random() * BAG_EMOJI.length)],
     x: Math.random() * width,
-    size: 26 + Math.random() * 30,
-    delay: Math.random() * 1600,
-    duration: 1700 + Math.random() * 1100,
+    size: 24 + Math.random() * 44,
+    // Front-loaded, so it starts as a downpour and keeps going.
+    delay: Math.random() ** 1.4 * RAIN_MS,
+    duration: 1500 + Math.random() * 900,
     spin: (Math.random() - 0.5) * 2,
     sway: (Math.random() - 0.5) * 2,
   }));
