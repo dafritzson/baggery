@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { hitBags } from '@core/bag-celebration.ts';
 import { type BoxRow, type Linescore, boxTotals, extraBaseHits, teamBox } from '@core/box-score.ts';
@@ -8,6 +8,7 @@ import { type Bagger, HitterRow, UpTag } from '@/components/at-bat';
 import { Loader } from '@/components/loader';
 import { YouTag } from '@/components/owner-badge';
 import { PlayerName } from '@/components/player-name';
+import { PopupSheet, SheetHandle } from '@/components/popup-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Toggle } from '@/components/toggle';
@@ -79,57 +80,55 @@ export function BoxScoreSheet({ data, game, onClose }: { data: SeasonData; game:
   );
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={[styles.backdrop, wide && styles.backdropWide]} onPress={onClose} accessibilityLabel="Close">
-        <Pressable style={[styles.panelWrap, wide && styles.panelWrapWide]} onPress={() => {}}>
-          <ThemedView style={[styles.panel, wide ? styles.panelWide : styles.panelCompact, { boxShadow: theme.floating }]}>
-            <View style={[styles.head, { borderBottomColor: theme.border }]}>
-              <View style={styles.headTop}>
-                <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.headLabel}>
-                  {seriesLabel(game)} ·{' '}
-                  <ThemedText type="smallBold" style={{ color: live ? theme.danger : theme.textSecondary }}>
-                    {live ? '● ' : ''}
-                    {status}
-                  </ThemedText>
+    <PopupSheet open onClose={onClose} maxWidth={900}>
+      {(dragHandlers) => (
+        <>
+          <SheetHandle dragHandlers={dragHandlers} style={[styles.head, { borderBottomColor: theme.border }]}>
+            <View style={styles.headTop}>
+              <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.headLabel}>
+                {seriesLabel(game)} ·{' '}
+                <ThemedText type="smallBold" style={{ color: live ? theme.danger : theme.textSecondary }}>
+                  {live ? '● ' : ''}
+                  {status}
                 </ThemedText>
-                <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close box score">
-                  <ThemedText themeColor="textSecondary" style={styles.close}>✕</ThemedText>
-                </Pressable>
-              </View>
-              <View style={styles.scoreLine}>
-                {(['away', 'home'] as const).map((s, i) => {
-                  const score = s === 'away' ? game.awayScore : game.homeScore;
-                  const other = s === 'away' ? game.homeScore : game.awayScore;
-                  const ahead = !preview && score !== null && other !== null && score > other;
-                  return (
-                    <View key={s} style={styles.scoreSide}>
-                      {i === 1 && <ThemedText themeColor="textSecondary">{preview ? 'at' : '–'}</ThemedText>}
-                      <ThemedText style={[styles.scoreAbbr, { color: ahead || preview ? theme.text : theme.textSecondary }]}>{abbr(s)}</ThemedText>
-                      {!preview && <ThemedText style={[styles.scoreRuns, ahead && styles.bold]}>{score ?? ''}</ThemedText>}
-                    </View>
-                  );
-                })}
-              </View>
-              {!preview && box?.linescore && <LinescoreTable linescore={box.linescore} away={abbr('away')} home={abbr('home')} />}
-              {!preview && !wide && (
-                <Toggle
-                  options={(['away', 'home'] as const).map((s) => ({
-                    value: s,
-                    label: live && live.battingSide === s ? `${abbr(s)} · at bat` : name(s),
-                  }))}
-                  value={side}
-                  onChange={setSide}
-                />
-              )}
+              </ThemedText>
+              <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close box score">
+                <ThemedText themeColor="textSecondary" style={styles.close}>✕</ThemedText>
+              </Pressable>
             </View>
-            <ScrollView style={styles.scroll} contentContainerStyle={styles.body}>
-              {body}
-              {!failed && box && <Legend live={!!live} />}
-            </ScrollView>
-          </ThemedView>
-        </Pressable>
-      </Pressable>
-    </Modal>
+            <View style={styles.scoreLine}>
+              {(['away', 'home'] as const).map((s, i) => {
+                const score = s === 'away' ? game.awayScore : game.homeScore;
+                const other = s === 'away' ? game.homeScore : game.awayScore;
+                const ahead = !preview && score !== null && other !== null && score > other;
+                return (
+                  <View key={s} style={styles.scoreSide}>
+                    {i === 1 && <ThemedText themeColor="textSecondary">{preview ? 'at' : '–'}</ThemedText>}
+                    <ThemedText style={[styles.scoreAbbr, { color: ahead || preview ? theme.text : theme.textSecondary }]}>{abbr(s)}</ThemedText>
+                    {!preview && <ThemedText style={[styles.scoreRuns, ahead && styles.bold]}>{score ?? ''}</ThemedText>}
+                  </View>
+                );
+              })}
+            </View>
+            {!preview && box?.linescore && <LinescoreTable linescore={box.linescore} away={abbr('away')} home={abbr('home')} />}
+            {!preview && !wide && (
+              <Toggle
+                options={(['away', 'home'] as const).map((s) => ({
+                  value: s,
+                  label: live && live.battingSide === s ? `${abbr(s)} · at bat` : name(s),
+                }))}
+                value={side}
+                onChange={setSide}
+              />
+            )}
+          </SheetHandle>
+          <ScrollView contentContainerStyle={styles.body}>
+            {body}
+            {!failed && box && <Legend live={!!live} />}
+          </ScrollView>
+        </>
+      )}
+    </PopupSheet>
   );
 }
 
@@ -363,14 +362,7 @@ function Legend({ live }: { live: boolean }) {
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', alignItems: 'center' },
-  backdropWide: { justifyContent: 'center', padding: Spacing.four },
-  panelWrap: { width: '100%', maxWidth: 720, height: '92%' },
-  panelWrapWide: { maxWidth: 900, height: 'auto', maxHeight: '100%' },
-  panel: { flexGrow: 1, flexShrink: 1, overflow: 'hidden' },
-  panelCompact: { borderTopLeftRadius: Radius.lg * 2, borderTopRightRadius: Radius.lg * 2 },
-  panelWide: { borderRadius: Radius.lg * 2 },
-  head: { paddingHorizontal: Spacing.three, paddingTop: Spacing.three, paddingBottom: Spacing.two + 2, gap: Spacing.two, borderBottomWidth: StyleSheet.hairlineWidth },
+  head: { paddingHorizontal: Spacing.three, paddingTop: Spacing.three + 4, paddingBottom: Spacing.two + 2, gap: Spacing.two, borderBottomWidth: StyleSheet.hairlineWidth },
   headTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   headLabel: { flex: 1, minWidth: 0 },
   close: { fontSize: 18, lineHeight: 22 },
@@ -384,7 +376,6 @@ const styles = StyleSheet.create({
   lsCell: { width: 20, alignItems: 'center' },
   lsDivider: { borderLeftWidth: StyleSheet.hairlineWidth, width: 24 },
   lsText: { fontSize: 11, lineHeight: 16, fontVariant: ['tabular-nums'] },
-  scroll: { flexGrow: 1, flexShrink: 1 },
   body: { padding: Spacing.two + 2, paddingBottom: Spacing.five, gap: Spacing.three },
   columns: { flexDirection: 'row', gap: Spacing.four, alignItems: 'flex-start' },
   column: { flex: 1, minWidth: 0, gap: Spacing.two },
