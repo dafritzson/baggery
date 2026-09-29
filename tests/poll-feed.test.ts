@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boxscoreBatting, boxscoreSubs, clipsForHits, highlightClips, linescoreLive, linescoreRuns, playHits, playLines, savantHasVideo, scheduleGames, scheduleLineups } from '../supabase/functions/poll-games/feed.ts';
+import { boxscoreBatting, boxscoreSubs, clipsForHits, highlightClips, linescoreLive, linescoreRuns, linescoreTable, playHits, playLines, savantHasVideo, scheduleGames, scheduleLineups } from '../supabase/functions/poll-games/feed.ts';
 
 const team = (id: number, score?: number) => ({ team: { id }, score });
 
@@ -96,14 +96,16 @@ describe('box score feed', () => {
           players: {
             ID1: {
               person: { id: 1, fullName: 'Vladimir Guerrero Jr.' },
-              stats: { batting: { plateAppearances: 5, atBats: 4, hits: 2, doubles: 1, homeRuns: 1, totalBases: 7, runs: 2, rbi: 3, baseOnBalls: 1 } },
+              battingOrder: '300',
+              allPositions: [{ abbreviation: '1B' }],
+              stats: { batting: { plateAppearances: 5, atBats: 4, hits: 2, doubles: 1, homeRuns: 1, totalBases: 7, runs: 2, rbi: 3, baseOnBalls: 1, strikeOuts: 1 } },
             },
             ID2: { person: { id: 2, fullName: 'A Pitcher' }, stats: { batting: {}, pitching: { outs: 18 } } },
           },
         },
         home: {
           team: { id: 119 },
-          players: { ID3: { person: { id: 3, fullName: 'Shohei Ohtani' }, stats: { batting: { plateAppearances: 7, atBats: 5, hitByPitch: 1, sacFlies: 1 } } } },
+          players: { ID3: { person: { id: 3, fullName: 'Shohei Ohtani' }, battingOrder: '101', allPositions: [{ abbreviation: 'PH' }, { abbreviation: 'LF' }], stats: { batting: { plateAppearances: 7, atBats: 5, hitByPitch: 1, sacFlies: 1 } } } },
         },
       },
     };
@@ -115,16 +117,31 @@ describe('box score feed', () => {
     expect(rows[0]).toEqual({
       game_pk: 99, mlb_player_id: 1, mlb_team_id: 141,
       pa: 5, ab: 4, h: 2, doubles: 1, triples: 0, hr: 1, bb: 1, hbp: 0, sf: 0, tb: 7, r: 2, rbi: 3,
+      so: 1, batting_order: 300, position: '1B',
     });
-    expect(rows[1]).toMatchObject({ mlb_player_id: 3, mlb_team_id: 119, pa: 7, ab: 5, hbp: 1, sf: 1, tb: 0 });
+    expect(rows[1]).toMatchObject({
+      mlb_player_id: 3, mlb_team_id: 119, pa: 7, ab: 5, hbp: 1, sf: 1, tb: 0, so: 0, batting_order: 101, position: 'PH-LF',
+    });
   });
 });
 
 describe('schedule lineups', () => {
   it("reads each posted lineup, leadoff first, and skips a team that hasn't posted", () => {
-    const g = game(7, { lineups: { homePlayers: [{ id: 5 }, { id: 6 }], awayPlayers: [] } });
+    const g = game(7, {
+      lineups: { homePlayers: [{ id: 5, fullName: 'Mookie Betts', primaryPosition: { abbreviation: 'SS' } }, { id: 6 }], awayPlayers: [] },
+    });
     const games = scheduleGames({ dates: [{ games: [g] }] }, 2025, new Set([141, 119]));
-    expect(scheduleLineups({ dates: [{ games: [g] }] }, games)).toEqual([{ game_pk: 7, mlb_team_id: 119, player_ids: [5, 6] }]);
+    expect(scheduleLineups({ dates: [{ games: [g] }] }, games)).toEqual([
+      {
+        game_pk: 7,
+        mlb_team_id: 119,
+        player_ids: [5, 6],
+        players: [
+          { id: 5, name: 'Mookie Betts', pos: 'SS' },
+          { id: 6, name: 'Player 6', pos: null },
+        ],
+      },
+    ]);
   });
 
   it('leaves out games it does not keep', () => {
@@ -171,6 +188,18 @@ describe('box score lineup changes', () => {
 });
 
 describe('linescore feed', () => {
+  it('reads the line score by inning, with R-H-E', () => {
+    const data = {
+      innings: [
+        { num: 1, away: { runs: 2 }, home: { runs: 0 } },
+        { num: 2, away: { runs: 0 }, home: {} },
+      ],
+      teams: { away: { runs: 2, hits: 3, errors: 0 }, home: { runs: 0, hits: 1, errors: 1 } },
+    };
+    expect(linescoreTable(data)).toEqual({ innings: [[2, 0], [0, null]], away: [2, 3, 0], home: [0, 1, 1] });
+    expect(linescoreTable({ innings: [], teams: {} })).toBeNull();
+  });
+
   it('reads the runs so far', () => {
     expect(linescoreRuns({ teams: { home: { runs: 2 }, away: { runs: 3 } } })).toEqual({ home: 2, away: 3 });
     expect(linescoreRuns({ teams: { home: {}, away: {} } })).toBeNull();

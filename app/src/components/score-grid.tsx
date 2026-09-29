@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { FillSurface, useTheme } from '@/hooks/use-theme';
 
 export interface GridColumn {
   label: string;
@@ -23,7 +23,7 @@ export interface GridRow {
   strong?: boolean;
   /** Highlights the row (the team shown beside the standings). */
   selected?: boolean;
-  /** My team's row: tinted like my players on the Games tab, selected or not. */
+  /** My team's row: dark green like my hitters on the Games tab, selected or not. */
   mine?: boolean;
   /** Grays out the numbers, e.g. bags that counted for no fantasy team. */
   muted?: boolean;
@@ -87,7 +87,7 @@ export function ScoreGrid({
     i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border },
     rows[i - 1]?.cutAfter && [styles.cut, { borderTopColor: theme.danger }],
     r.selected && { backgroundColor: theme.backgroundSelected },
-    r.mine && { backgroundColor: theme.mine },
+    r.mine && { backgroundColor: theme.mineFill },
   ];
   const header = (text: string, live?: boolean) => (
     <>
@@ -105,12 +105,16 @@ export function ScoreGrid({
       {text}
     </ThemedText>
   );
-  const pressable = (r: GridRow, i: number, style: object, children: ReactNode) =>
-    r.onPress ? (
+  // My team's row is dark green, so what's in it reads the theme for that fill (light text). The
+  // total keeps the page's colors when it has a standing color of its own.
+  const pressable = (r: GridRow, i: number, style: object, content: ReactNode, onFill = true) => {
+    const children = <FillSurface fill={r.mine && onFill ? 'mineFill' : null}>{content}</FillSurface>;
+    return r.onPress ? (
       <Pressable key={r.key} onPress={r.onPress} style={[rowStyle(r, i), style]}>{children}</Pressable>
     ) : (
       <View key={r.key} style={[rowStyle(r, i), style]}>{children}</View>
     );
+  };
 
   return (
     <ThemedView
@@ -159,7 +163,7 @@ export function ScoreGrid({
       <View style={[styles.totals, { borderLeftColor: theme.border }]}>
         <View style={[styles.header, styles.totalCell, { borderBottomColor: theme.border }]}>{header(totalHeader)}</View>
         {rows.map((r, i) =>
-          pressable(r, i, [styles.totalCell, { backgroundColor: standingColor(r) }], cellText(r.total, true, r.muted)),
+          pressable(r, i, [styles.totalCell, { backgroundColor: standingColor(r) }], cellText(r.total, true, r.muted), !r.standing),
         )}
       </View>
     </ThemedView>

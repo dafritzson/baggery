@@ -179,6 +179,21 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   right after a poll on a busy day. One broadcast per poll keeps it to about one message per open
   app every 10 seconds. The draft room still uses Postgres Changes on low-traffic tables
   (`drafts`, `draft_actions`, …).
+- **Box scores.** Tapping a game on the Games tab opens its box score, loaded then in four small
+  requests: its batting lines with names (~20–26 rows), its line score, its posted lineups and
+  announced starters, ~3–5 KB in all. A finished game's is kept for the session. A live game's
+  then follows the scores broadcast the app already gets, with no refetching, and reloads only if
+  a hitter it has no name for bats (a sub), or on a reconnect. At ~15 people opening ~20 box
+  scores a day, that's ~50 MB a month. No new Edge Function calls, MLB requests, polling or
+  realtime channels.
+  What the poller saves grows a little. Batting lines gain batting order, positions and
+  strikeouts (~40 bytes more per broadcast row; a strikeout changes AB too, so no extra rows are
+  sent). `mlb_games` gains the line score by inning (~100 bytes), read from the linescore
+  `poll-games` already fetches; every broadcast `mlb_games` row carries it, so a live game's
+  broadcasts grow by ~100 bytes each: at 15 open apps, ~360 polls an hour and ~45 three-hour
+  games, up to ~70 MB a month, less since only changed rows are sent. The scores load doesn't
+  select it. Posted lineups go to their own table (`mlb_lineups`, not broadcast), written from
+  the schedule read that lineup alerts already use, only when a lineup changes.
 - **Photos.** Uploaded photos are cropped and shrunk to 256 px in the browser (up to 20 MB picked,
   5 MB bucket limit) and cached for a year (`cacheControl: '31536000'`, new file name per upload).
   They count against cached egress, not egress. Google photos load from Google and cost nothing.

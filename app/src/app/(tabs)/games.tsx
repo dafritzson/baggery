@@ -8,6 +8,8 @@ import { postseasonSeries } from '@core/schedule.ts';
 import { SERIES } from '@core/scoreboard.ts';
 import type { GameType } from '@core/types.ts';
 
+import { type Bagger, HitterRow } from '@/components/at-bat';
+import { BoxScoreSheet } from '@/components/box-score';
 import { Card } from '@/components/card';
 import { HitVideosSheet } from '@/components/hit-videos';
 import { Loader } from '@/components/loader';
@@ -21,6 +23,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { dayLabel, gameDay, useToday } from '@/lib/game-day';
+import { inningLabel, ownerOf, seriesLabel, statusLine } from '@/lib/game-labels';
 import { type BattingLine, type GameInfo, type ScoreHit, type Scores, useScores } from '@/lib/scores';
 import { type SeasonData, useSeason } from '@/lib/season';
 import { ownerName, teamName } from '@/lib/teams';
@@ -63,6 +66,8 @@ export default function GamesScreen() {
   const [picked, setPicked] = useState<string | null>(null);
   const [pickedRound, setPickedRound] = useState<GameType | null>(null);
   const [view, setView] = useState<Zoom>('day');
+  // The game whose box score is open.
+  const [boxPk, setBoxPk] = useState<number | null>(null);
 
   if (loading || (data && !scores)) {
     return <Screen width="wide"><Loader /></Screen>;
@@ -94,6 +99,8 @@ export default function GamesScreen() {
       setView('day');
     }, `game-${game.gamePk}`);
   const scheduleProps = { data, day, today, onPick: pickGame };
+  // From the live scores, so an open box score follows the game.
+  const boxGame = boxPk === null ? undefined : scores.games.find((g) => g.gamePk === boxPk);
 
   return (
     <Screen width="wide">
@@ -140,7 +147,7 @@ export default function GamesScreen() {
                       <View key={g.gamePk} style={styles.row}>
                         {games.slice(row * 2, row * 2 + 2).map((game) => (
                           <View key={game.gamePk} style={styles.cell} {...zoomKey(`game-${game.gamePk}`)}>
-                            <GameCard data={data} scores={scores} game={game} fill />
+                            <GameCard data={data} scores={scores} game={game} onOpen={() => setBoxPk(game.gamePk)} fill />
                           </View>
                         ))}
                         {row * 2 + 1 >= games.length && <View style={styles.cell} />}
@@ -148,7 +155,7 @@ export default function GamesScreen() {
                     ))
                 : games.map((g) => (
                     <View key={g.gamePk} {...zoomKey(`game-${g.gamePk}`)}>
-                      <GameCard data={data} scores={scores} game={g} />
+                      <GameCard data={data} scores={scores} game={g} onOpen={() => setBoxPk(g.gamePk)} />
                     </View>
                   ))}
             </View>
@@ -161,6 +168,7 @@ export default function GamesScreen() {
           </View>
         </>
       )}
+      {boxGame && <BoxScoreSheet data={data} game={boxGame} onClose={() => setBoxPk(null)} />}
     </Screen>
   );
 }
@@ -311,76 +319,49 @@ function BaggerCard({
   const high = Math.max(0, Math.min(bagsThatFit(nameRoom, bagWidth), bags.length - bagsThatFit(ownerRoom, bagWidth)));
   const low = bags.slice(high);
   return (
-    <View style={[styles.playerCard, { backgroundColor: mine ? theme.mine : theme.background }]}>
-      <View style={styles.playerLine}>
-        <PlayerName playerId={playerId} type="smallBold" numberOfLines={1} style={styles.playerName}>
-          {name}
-        </PlayerName>
-        <BagRoom bags={bags.slice(0, high).join('')} onWidth={setNameRoom} />
-        {!!tb && (
-          <Pressable onPress={() => setVideos(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Videos of ${name}'s hits`}>
-            <ThemedText type="smallBold" themeColor="accent">▶</ThemedText>
-          </Pressable>
-        )}
-      </View>
+    <>
       {videos && <HitVideosSheet gamePk={gamePk} playerId={playerId} title={`${name} · ${gameLabel}`} onClose={() => setVideos(false)} />}
-      <View style={[styles.playerLine, styles.playerSecondLine]}>
-        {/*
-          Like Standings: team and owner, or a YOU tag on my own players (already tinted).
-          Phones only have room for the owner's name.
-        */}
-        <View style={styles.ownerLine}>
-          {mine ? (
-            <YouTag />
-          ) : (
-            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.owner}>
-              {compact ? (owner ?? teamName(team)) : `${teamName(team)}${owner ? ` · ${owner}` : ''}`}
-            </ThemedText>
+      {/* Yours are dark green. Other managers' stay plain: the owner line already says whose. */}
+      <HitterRow bagger={mine ? 'mine' : null} style={[styles.playerCard, { backgroundColor: theme.background }]}>
+        <View style={styles.playerLine}>
+          <PlayerName playerId={playerId} type="smallBold" numberOfLines={1} style={styles.playerName}>
+            {name}
+          </PlayerName>
+          <BagRoom bags={bags.slice(0, high).join('')} onWidth={setNameRoom} />
+          {!!tb && (
+            <Pressable onPress={() => setVideos(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Videos of ${name}'s hits`}>
+              <ThemedText type="smallBold" themeColor="accent">▶</ThemedText>
+            </Pressable>
           )}
         </View>
-        {tb !== null && (
-          <BagRoom
-            bags={tb === 0 ? '–' : low.join('')}
-            // A long team or owner name gives way to the first few bags.
-            minWidth={Math.min(low.length, 4) * (bagWidth ?? 0)}
-            scroll={low.length > bagsThatFit(ownerRoom, bagWidth)}
-            label={`${tb} total bases`}
-            onWidth={setOwnerRoom}
-          />
-        )}
-      </View>
-    </View>
+        <View style={[styles.playerLine, styles.playerSecondLine]}>
+          {/*
+            Like Standings: team and owner, or a YOU tag on my own players (already green).
+            Phones only have room for the owner's name.
+          */}
+          <View style={styles.ownerLine}>
+            {mine ? (
+              <YouTag />
+            ) : (
+              <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.owner}>
+                {compact ? (owner ?? teamName(team)) : `${teamName(team)}${owner ? ` · ${owner}` : ''}`}
+              </ThemedText>
+            )}
+          </View>
+          {tb !== null && (
+            <BagRoom
+              bags={tb === 0 ? '–' : low.join('')}
+              // A long team or owner name gives way to the first few bags.
+              minWidth={Math.min(low.length, 4) * (bagWidth ?? 0)}
+              scroll={low.length > bagsThatFit(ownerRoom, bagWidth)}
+              label={`${tb} total bases`}
+              onWidth={setOwnerRoom}
+            />
+          )}
+        </View>
+      </HitterRow>
+    </>
   );
-}
-
-/** "Wild Card · Game 2", or "Division Series · Game 3". */
-function seriesLabel(game: GameInfo): string {
-  const series = SERIES.find((s) => s.gameType === game.gameType);
-  return `${series?.name ?? ''} · Game ${game.seriesGameNumber}`;
-}
-
-function statusLine(game: GameInfo): string {
-  if (game.status === 'Preview' && game.detailedState !== 'Postponed') {
-    if (game.startTimeTbd) return 'Time TBD';
-    // In the device's own time zone: "3:00 PM PT".
-    return new Date(game.start).toLocaleTimeString(undefined, {
-      hour: 'numeric',
-      minute: '2-digit',
-      timeZoneName: 'shortGeneric',
-    });
-  }
-  // "F/10" for extra innings (or a shortened game), like a box score.
-  if (game.status === 'Final' && game.detailedState === 'Final' && game.live && game.live.inning !== 9) {
-    return `F/${game.live.inning}`;
-  }
-  return game.detailedState ?? game.status;
-}
-
-/** "▲7", "▼7", "Mid 7", "End 7". */
-function inningLabel(live: LiveState): string {
-  if (live.inningState === 'Top') return `▲${live.inning}`;
-  if (live.inningState === 'Bottom') return `▼${live.inning}`;
-  return `${live.inningState === 'Middle' ? 'Mid' : 'End'} ${live.inning}`;
 }
 
 /** Runners on base as a little diamond: filled squares for occupied bases. */
@@ -426,17 +407,6 @@ function LiveStatus({ live }: { live: LiveState }) {
   );
 }
 
-/** Who owned the player when the game started (or owns him now, before it starts). */
-function ownerOf(data: SeasonData, playerId: number, game: GameInfo): string | undefined {
-  const t = Date.parse(game.start);
-  const started = game.status !== 'Preview';
-  return data.spells.find(
-    (s) =>
-      s.mlb_player_id === playerId &&
-      (started ? Date.parse(s.from_at) <= t && (s.to_at === null || t < Date.parse(s.to_at)) : s.to_at === null),
-  )?.fantasy_team_id;
-}
-
 /**
  * "1-3 HR 2B": hits-at bats, then the extra-base hits. Only what makes bags: a hit that isn't
  * listed is a single, and walks are left out. Empty before a first time up.
@@ -447,14 +417,38 @@ function lineScore(line: BattingLine | undefined): string {
   return [`${line.h}-${line.ab}`, ...times(line.hr, 'HR'), ...times(line.triples, '3B'), ...times(line.doubles, '2B')].join(' ');
 }
 
-/** `fill` stretches the card to the height of its row (desktop). */
-function GameCard({ data, scores, game, fill }: { data: SeasonData; scores: Scores; game: GameInfo; fill?: boolean }) {
-  if (game.status === 'Final') return <FinalCard data={data} scores={scores} game={game} fill={fill} />;
-  return <OpenCard data={data} scores={scores} game={game} fill={fill} />;
+interface CardProps {
+  data: SeasonData;
+  scores: Scores;
+  game: GameInfo;
+  /** Opens the game's box score. */
+  onOpen: () => void;
+  /** Stretches the card to the height of its row (desktop). */
+  fill?: boolean;
+}
+
+/**
+ * Tapping anywhere on a game opens its box score, except on a player's name (his popup) or ▶
+ * (his videos), which handle their own taps. The "Box score ›" link is the same for screen readers.
+ */
+function GameCard(props: CardProps) {
+  return (
+    <Pressable onPress={props.onOpen} accessible={false} style={props.fill && styles.fill}>
+      {props.game.status === 'Final' ? <FinalCard {...props} /> : <OpenCard {...props} />}
+    </Pressable>
+  );
+}
+
+function BoxScoreLink({ onOpen }: { onOpen: () => void }) {
+  return (
+    <Pressable onPress={onOpen} hitSlop={8} accessibilityRole="button" accessibilityLabel="Box score">
+      <ThemedText type="smallBold" themeColor="accent">Box score ›</ThemedText>
+    </Pressable>
+  );
 }
 
 /** A finished game: the final score on one line, then how the baggers did. */
-function FinalCard({ data, scores, game, fill }: { data: SeasonData; scores: Scores; game: GameInfo; fill?: boolean }) {
+function FinalCard({ data, scores, game, onOpen, fill }: CardProps) {
   const theme = useTheme();
   const compact = useLayout() === 'compact';
   const side = (which: 'away' | 'home') => {
@@ -473,8 +467,11 @@ function FinalCard({ data, scores, game, fill }: { data: SeasonData; scores: Sco
   return (
     <Card style={[fill && styles.fill, compact && styles.cardCompact]}>
       <View style={styles.cardHead}>
-        <ThemedText type="small" themeColor="textSecondary">{seriesLabel(game)}</ThemedText>
-        <ThemedText type="smallBold" themeColor="textSecondary">{statusLine(game)}</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.headLabel}>{seriesLabel(game)}</ThemedText>
+        <View style={styles.headRight}>
+          <ThemedText type="smallBold" themeColor="textSecondary">{statusLine(game)}</ThemedText>
+          <BoxScoreLink onOpen={onOpen} />
+        </View>
       </View>
       <View style={styles.finalScores}>
         {side('away')}
@@ -503,16 +500,20 @@ function LiveGlow({ live, fill, children }: { live: boolean; fill?: boolean; chi
 }
 
 /** A game that's on or still to come: who's up, the score, and the baggers so far. */
-function OpenCard({ data, scores, game, fill }: { data: SeasonData; scores: Scores; game: GameInfo; fill?: boolean }) {
+function OpenCard({ data, scores, game, onOpen, fill }: CardProps) {
   const theme = useTheme();
   const compact = useLayout() === 'compact';
   const live = game.status === 'Live';
-  // Who's on a fantasy roster now, for highlighting them in the due-up lines.
-  const currentOwner = new Map(data.spells.filter((s) => s.to_at === null).map((s) => [s.mlb_player_id, s.fantasy_team_id]));
+  const bagger = (playerId: number): Bagger => {
+    const owner = ownerOf(data, playerId, game);
+    return owner ? (owner === data.myTeam?.id ? 'mine' : 'other') : null;
+  };
   const lines = new Map(scores.lines.filter((l) => l.gamePk === game.gamePk).map((l) => [l.playerId, l]));
   /**
    * A small card per team listing who's up, one name per line: the batting team's batter, on
-   * deck and in the hole (tinted blue), and the fielding team's next three (plain).
+   * deck and in the hole (its card outlined in blue), and the fielding team's next three. Your
+   * hitters are dark green and other managers' dark blue, like the box score; the one at bat, if
+   * drafted, gets a pulsing ring.
    */
   const upNext = (which: 'away' | 'home') => {
     const state = game.live;
@@ -522,24 +523,24 @@ function OpenCard({ data, scores, game, fill }: { data: SeasonData; scores: Scor
     const labels = batting ? ['AB', 'OD', 'IH'] : ['1', '2', '3'];
     const abbr = data.mlbTeams.get(which === 'away' ? game.awayTeamId : game.homeTeamId)?.abbreviation ?? '';
     return (
-      <View style={[styles.upCard, { backgroundColor: batting ? theme.tint : theme.background }]}>
+      <View
+        style={[
+          styles.upCard,
+          batting ? [styles.upCardBatting, { borderColor: theme.otherRing }] : { backgroundColor: theme.background },
+        ]}>
         <ThemedText type="smallBold" style={[styles.upHead, { color: batting ? theme.accent : theme.textSecondary }]}>
           {abbr} {batting ? 'at bat' : 'due up'}
         </ThemedText>
         {up.map((p, i) => {
-          const owner = p ? currentOwner.get(p.id) : undefined;
-          const mine = owner !== undefined && owner === data.myTeam?.id;
+          const whose = p ? bagger(p.id) : null;
           return (
-            <View key={i} style={styles.upRow}>
+            <HitterRow key={i} bagger={whose} atBat={batting && i === 0} style={[styles.upRow, styles.upRowFill]}>
               <ThemedText type="small" themeColor="textSecondary" style={[styles.upLabel, !batting && styles.upLabelDigit]}>{labels[i]}</ThemedText>
-              <ThemedText
-                type={owner ? 'smallBold' : 'small'}
-                numberOfLines={1}
-                style={[styles.upName, mine && [styles.upMine, { backgroundColor: theme.mine }]]}>
+              <ThemedText type={whose ? 'smallBold' : 'small'} numberOfLines={1} style={styles.upName}>
                 {p ? p.name.split(' ').slice(1).join(' ') || p.name : '—'}
               </ThemedText>
               {p && <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.upLine}>{lineScore(lines.get(p.id))}</ThemedText>}
-            </View>
+            </HitterRow>
           );
         })}
       </View>
@@ -557,15 +558,18 @@ function OpenCard({ data, scores, game, fill }: { data: SeasonData; scores: Scor
     <LiveGlow live={live} fill={fill}>
       <Card style={[fill && styles.fill, compact && styles.cardCompact]}>
         <View style={styles.cardHead}>
-          <ThemedText type="small" themeColor="textSecondary">{seriesLabel(game)}</ThemedText>
-          {live && game.live ? (
-            <LiveStatus live={game.live} />
-          ) : (
-            <ThemedText type="smallBold" style={{ color: live ? theme.danger : theme.textSecondary }}>
-              {live ? '● ' : ''}
-              {statusLine(game)}
-            </ThemedText>
-          )}
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.headLabel}>{seriesLabel(game)}</ThemedText>
+          <View style={styles.headRight}>
+            {live && game.live ? (
+              <LiveStatus live={game.live} />
+            ) : (
+              <ThemedText type="smallBold" style={{ color: live ? theme.danger : theme.textSecondary }}>
+                {live ? '● ' : ''}
+                {statusLine(game)}
+              </ThemedText>
+            )}
+            <BoxScoreLink onOpen={onOpen} />
+          </View>
         </View>
         <View style={styles.teams}>
           <View style={styles.upCards}>
@@ -660,13 +664,19 @@ const styles = StyleSheet.create({
   finalScore: { fontSize: 22, lineHeight: 28, fontWeight: 600, fontVariant: ['tabular-nums'] },
   // Phones: a little less padding inside game cards leaves room for the up-next lines.
   cardCompact: { paddingHorizontal: Spacing.two + 2 },
-  cardHead: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.two },
+  cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: Spacing.two },
   // Who's up (two small cards) on the left, the scores on the right.
   teams: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   upCards: { flex: 1, minWidth: 0, flexDirection: 'row', gap: Spacing.one + 2 },
   upCard: { flex: 1, minWidth: 0, borderRadius: Radius.md, paddingVertical: Spacing.one, paddingHorizontal: Spacing.one + 2 },
   upHead: { fontSize: 9, lineHeight: 12, textTransform: 'uppercase', letterSpacing: 0.4 },
   upRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  // Room for a fill and its ring around the name, lined up with the plain rows.
+  upRowFill: { paddingHorizontal: 3, marginHorizontal: -3, borderRadius: Radius.sm },
+  // The batting team's card: outlined, no fill, so a filled row always means a bagger.
+  upCardBatting: { borderWidth: 1.5 },
+  headLabel: { flexShrink: 1, minWidth: 0 },
+  headRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexShrink: 0 },
   upLabel: { width: 18, flexShrink: 0, fontSize: 9, lineHeight: 14 },
   // 1, 2, 3 in the fielding team's card need less room than AB, OD, IH.
   upLabelDigit: { width: 7 },
@@ -674,7 +684,6 @@ const styles = StyleSheet.create({
   // Names left, lines right. The line is always shown in full; a long name gives way (…).
   upName: { flexShrink: 1, minWidth: 0, fontSize: 11, lineHeight: 14 },
   upLine: { marginLeft: 'auto', paddingLeft: 4, flexShrink: 0, textAlign: 'right', fontSize: 10, lineHeight: 14, fontVariant: ['tabular-nums'] },
-  upMine: { paddingHorizontal: 3, borderRadius: 3, overflow: 'hidden' },
   scores: { marginLeft: 'auto', flexDirection: 'row', gap: Spacing.two },
   scoreColumn: { alignItems: 'flex-end', gap: Spacing.half },
   teamAbbr: { fontWeight: 600, lineHeight: 28 },
