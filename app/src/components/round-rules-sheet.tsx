@@ -61,7 +61,7 @@ export function RoundRulesSheet({
       : ghost && round === 3
         ? ['The Ghost is ranked with the finalists. If it finishes first, its managers share the title.']
         : []),
-    'Level on bags? Team slugging, on-base, home runs, runs, then RBIs decide it. Still level: a drink-off.',
+    'Teams tied on bags are ranked by these tiebreakers, in order: team slugging percentage, team on-base percentage, home runs, runs, then RBIs. Teams still tied after all five settle it with a drink-off.',
   ];
   return (
     <Sheet visible={visible} title={`How round ${round} works`} onClose={onClose}>
