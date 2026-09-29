@@ -26,19 +26,26 @@ const OpenPlayerContext = createContext<{
   setDraftAction: (action: DraftAction | null) => void;
 }>({ open: () => {}, setDraftAction: () => {} });
 
-/** Hosts the player popup, which any screen opens with `useOpenPlayer()`. */
-export function PlayerProvider({ children }: { children: ReactNode }) {
+/**
+ * Hosts the player popup, which any screen opens with `useOpenPlayer()`. Another popup (the box
+ * score) hosts its own, `stacked`: a dialog over it rather than a second bottom sheet, mounted only
+ * while open so it's created after, and so stacked above, the popup it came from.
+ */
+export function PlayerProvider({ children, stacked = false }: { children: ReactNode; stacked?: boolean }) {
   const [playerId, setPlayerId] = useState<number | null>(null);
   const [draftAction, setDraftAction] = useState<DraftAction | null>(null);
   const [actions] = useState(() => ({ open: setPlayerId, setDraftAction }));
   return (
     <OpenPlayerContext value={actions}>
       {children}
-      <PlayerPopup
-        playerId={playerId}
-        draftAction={draftAction}
-        onClose={() => setPlayerId(null)}
-      />
+      {(!stacked || playerId !== null) && (
+        <PlayerPopup
+          playerId={playerId}
+          draftAction={draftAction}
+          onClose={() => setPlayerId(null)}
+          dialog={stacked}
+        />
+      )}
     </OpenPlayerContext>
   );
 }

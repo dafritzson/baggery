@@ -79,13 +79,16 @@ export function PlayerPopup({
   playerId,
   draftAction,
   onClose,
+  dialog,
 }: {
   playerId: number | null;
   draftAction: DraftAction | null;
   onClose: () => void;
+  /** A centered dialog on phones too (over another popup). */
+  dialog?: boolean;
 }) {
   return (
-    <PopupSheet open={playerId !== null} onClose={onClose}>
+    <PopupSheet open={playerId !== null} onClose={onClose} dialog={dialog}>
       {(dragHandlers) =>
         playerId !== null && <PlayerDetails playerId={playerId} draftAction={draftAction} onClose={onClose} dragHandlers={dragHandlers} />
       }

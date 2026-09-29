@@ -23,29 +23,33 @@ const nativeDriver = Platform.OS !== 'web';
 /**
  * A popup: a centered dialog on desktops, a bottom sheet on phones that's dragged down by its
  * header to close (the player popup, a game's box score). `children` gets the drag handlers for
- * that header (none on desktops), to spread on it with `SheetHandle`.
+ * that header (none on desktops), to spread on it with `SheetHandle`. `dialog` makes it a centered
+ * dialog on phones too, for a popup opened over another one, so there's never a stack of sheets.
  */
 export function PopupSheet({
   open,
   onClose,
   maxWidth = 760,
+  dialog = false,
   children,
 }: {
   open: boolean;
   onClose: () => void;
   /** The dialog's width on desktops. */
   maxWidth?: number;
+  dialog?: boolean;
   children: (dragHandlers: GestureResponderHandlers | undefined) => ReactNode;
 }) {
   const theme = useTheme();
-  const wide = useLayout() === 'wide';
+  const layout = useLayout();
+  const wide = layout === 'wide' || dialog;
   const { drag, handlers } = useDragToClose(open, onClose);
   // The backdrop fades as the sheet is dragged down.
   const dim = drag.interpolate({ inputRange: [0, 400], outputRange: [1, 0], extrapolate: 'clamp' });
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable
-        style={[styles.backdrop, wide ? styles.backdropWide : styles.backdropCompact]}
+        style={[styles.backdrop, wide ? styles.backdropWide : styles.backdropCompact, dialog && layout !== 'wide' && styles.backdropDialog]}
         onPress={onClose}
         accessibilityLabel="Close">
         <Animated.View style={[StyleSheet.absoluteFill, styles.dim, { opacity: wide ? 1 : dim }]} pointerEvents="none" />
@@ -124,6 +128,7 @@ const styles = StyleSheet.create({
   dim: { backgroundColor: 'rgba(0,0,0,0.5)' },
   backdropWide: { justifyContent: 'center', padding: Spacing.four },
   backdropCompact: { justifyContent: 'flex-end' },
+  backdropDialog: { padding: Spacing.three },
   panel: { width: '100%', overflow: 'hidden' },
   panelWide: { maxHeight: '90%', borderRadius: Radius.lg },
   panelCompact: { maxHeight: '92%', borderTopLeftRadius: Radius.lg, borderTopRightRadius: Radius.lg },
