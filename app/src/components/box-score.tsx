@@ -2,9 +2,11 @@ import { type ReactNode, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { hitBags } from '@core/bag-celebration.ts';
-import { type BoxRow, type Linescore, boxTotals, extraBaseHits, teamBox } from '@core/box-score.ts';
+import { type BoxLine, type BoxRow, type Linescore, boxTotals, extraBaseHits, teamBox } from '@core/box-score.ts';
+import type { LivePlayer, LiveState } from '@core/live.ts';
 
 import { type Bagger, HitterRow, UpTag } from '@/components/at-bat';
+import { betweenInnings, LiveStatus, LiveStatusStack } from '@/components/live-status';
 import { Loader } from '@/components/loader';
 import { YouTag } from '@/components/owner-badge';
 import { PlayerName } from '@/components/player-name';
@@ -16,7 +18,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { type BoxScore, useBoxScore } from '@/lib/box-score';
-import { inningLabel, nickname, ownerOf, seriesLabel, statusLine } from '@/lib/game-labels';
+import { lineScore, nickname, ownerOf, seriesLabel, statusLine } from '@/lib/game-labels';
 import { PlayerProvider } from '@/lib/player';
 import { type GameInfo, useScores } from '@/lib/scores';
 import type { SeasonData } from '@/lib/season';
@@ -52,9 +54,23 @@ export function BoxScoreSheet({ data, game, onClose }: { data: SeasonData; game:
   const abbr = (s: Side) => data.mlbTeams.get(s === 'away' ? game.awayTeamId : game.homeTeamId)?.abbreviation ?? '—';
   const teamId = (s: Side) => (s === 'away' ? game.awayTeamId : game.homeTeamId);
   const name = (s: Side) => data.mlbTeams.get(teamId(s))?.name ?? abbr(s);
-  const status = live
-    ? [inningLabel(live), `${live.outs} out`, `${live.balls}-${live.strikes}`].join(' · ')
-    : statusLine(game);
+
+  const scoreLine = (
+    <View style={styles.scoreLine}>
+      {(['away', 'home'] as const).map((s, i) => {
+        const score = s === 'away' ? game.awayScore : game.homeScore;
+        const other = s === 'away' ? game.homeScore : game.awayScore;
+        const ahead = !preview && score !== null && other !== null && score > other;
+        return (
+          <View key={s} style={styles.scoreSide}>
+            {i === 1 && <ThemedText themeColor="textSecondary">{preview ? 'at' : '–'}</ThemedText>}
+            <ThemedText style={[styles.scoreAbbr, { color: ahead || preview ? theme.text : theme.textSecondary }]}>{abbr(s)}</ThemedText>
+            {!preview && <ThemedText style={[styles.scoreRuns, ahead && styles.bold]}>{score ?? ''}</ThemedText>}
+          </View>
+        );
+      })}
+    </View>
+  );
 
   const body = failed ? (
     <ThemedText type="small" themeColor="textSecondary">Couldn&apos;t load the box score. Close it and try again.</ThemedText>
@@ -89,31 +105,45 @@ export function BoxScoreSheet({ data, game, onClose }: { data: SeasonData; game:
           <SheetHandle dragHandlers={dragHandlers} style={[styles.head, { borderBottomColor: theme.border }]}>
             <View style={styles.headTop}>
               <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.headLabel}>
-                {seriesLabel(game)} ·{' '}
-                <ThemedText type="smallBold" style={{ color: live ? theme.danger : theme.textSecondary }}>
-                  {live ? '● ' : ''}
-                  {status}
-                </ThemedText>
+                {seriesLabel(game)}
+                {/* A live game's inning, count and outs are drawn by the score instead. */}
+                {!live && (
+                  <>
+                    {' · '}
+                    <ThemedText type="smallBold" themeColor="textSecondary">{statusLine(game)}</ThemedText>
+                  </>
+                )}
               </ThemedText>
               <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close box score">
                 <ThemedText themeColor="textSecondary" style={styles.close}>✕</ThemedText>
               </Pressable>
             </View>
-            <View style={styles.scoreLine}>
-              {(['away', 'home'] as const).map((s, i) => {
-                const score = s === 'away' ? game.awayScore : game.homeScore;
-                const other = s === 'away' ? game.homeScore : game.awayScore;
-                const ahead = !preview && score !== null && other !== null && score > other;
-                return (
-                  <View key={s} style={styles.scoreSide}>
-                    {i === 1 && <ThemedText themeColor="textSecondary">{preview ? 'at' : '–'}</ThemedText>}
-                    <ThemedText style={[styles.scoreAbbr, { color: ahead || preview ? theme.text : theme.textSecondary }]}>{abbr(s)}</ThemedText>
-                    {!preview && <ThemedText style={[styles.scoreRuns, ahead && styles.bold]}>{score ?? ''}</ThemedText>}
+            {wide && live ? (
+              // Desktops: the score and linescore, then the inning, runners, count and outs, then who's up, all on one row.
+              <View style={styles.band}>
+                <View style={styles.bandScore}>
+                  {scoreLine}
+                  {box?.linescore && <LinescoreTable linescore={box.linescore} away={abbr('away')} home={abbr('home')} />}
+                </View>
+                <View style={[styles.bandPart, { borderLeftColor: theme.border }]}>
+                  <LiveStatusStack live={live} />
+                </View>
+                {!betweenInnings(live) && (
+                  <View style={[styles.bandPart, styles.bandUp, { borderLeftColor: theme.border }]}>
+                    <UpNow live={live} box={box} />
                   </View>
-                );
-              })}
-            </View>
-            {!preview && box?.linescore && <LinescoreTable linescore={box.linescore} away={abbr('away')} home={abbr('home')} />}
+                )}
+              </View>
+            ) : (
+              <>
+                <View style={styles.scoreRow}>
+                  {scoreLine}
+                  {live && <LiveStatus live={live} />}
+                </View>
+                {live && !betweenInnings(live) && <UpNow live={live} box={box} compact />}
+                {!preview && box?.linescore && <LinescoreTable linescore={box.linescore} away={abbr('away')} home={abbr('home')} />}
+              </>
+            )}
             {!preview && !wide && (
               <Toggle
                 options={(['away', 'home'] as const).map((s) => ({
@@ -134,6 +164,66 @@ export function BoxScoreSheet({ data, game, onClose }: { data: SeasonData; game:
         </PlayerProvider>
       )}
     </PopupSheet>
+  );
+}
+
+/** "1-3, 2B, RBI, 2 TB": hits-at bats, then extra-base hits, RBIs, walks and total bases. */
+function gameLine(line: BoxLine): string {
+  const times = (n: number, label: string) => (n === 0 ? [] : [n === 1 ? label : `${n} ${label}`]);
+  return [
+    `${line.h}-${line.ab}`,
+    ...times(line.hr, 'HR'),
+    ...times(line.triples, '3B'),
+    ...times(line.doubles, '2B'),
+    ...times(line.rbi, 'RBI'),
+    ...times(line.bb, 'BB'),
+    ...(line.tb ? [`${line.tb} TB`] : []),
+  ].join(', ');
+}
+
+/**
+ * The hitter at bat and his game so far, then who's on deck (and, on desktops, in the hole). One
+ * line under the score on phones.
+ */
+function UpNow({ live, box, compact }: { live: LiveState; box: BoxScore | null; compact?: boolean }) {
+  const [batter, onDeck, inHole] = live.batting;
+  if (!batter) return null;
+  const lineOf = (id: number) => box?.lines.find((l) => l.playerId === id);
+  const line = lineOf(batter.id);
+  const position = line?.position?.split('-').pop();
+  const lastName = (name: string) => name.split(' ').slice(1).join(' ') || name;
+  const next = (label: string, p: LivePlayer | null) =>
+    p && (
+      <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={compact && styles.upNext}>
+        {label}{' '}
+        <ThemedText type="smallBold">{compact ? lastName(p.name) : p.name}</ThemedText>
+        {!compact && ` ${lineScore(lineOf(p.id))}`}
+      </ThemedText>
+    );
+  const atBat = (
+    <View style={styles.upBatter}>
+      <UpTag label="AB" />
+      <PlayerName playerId={batter.id} type="smallBold" numberOfLines={1} style={!compact && styles.upName}>
+        {batter.name}
+      </PlayerName>
+      {!!position && <ThemedText themeColor="textSecondary" style={styles.pos}>{position}</ThemedText>}
+      {line && <ThemedText type="small" numberOfLines={1} style={styles.upLine}>{gameLine(line)}</ThemedText>}
+    </View>
+  );
+  if (compact) {
+    return (
+      <View style={styles.upRow}>
+        {atBat}
+        {next('On deck', onDeck)}
+      </View>
+    );
+  }
+  return (
+    <View style={styles.upColumn}>
+      {atBat}
+      {next('On deck', onDeck)}
+      {next('In the hole', inHole)}
+    </View>
   );
 }
 
@@ -371,7 +461,19 @@ const styles = StyleSheet.create({
   headTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   headLabel: { flex: 1, minWidth: 0 },
   close: { fontSize: 18, lineHeight: 22 },
+  scoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two },
   scoreLine: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.three },
+  // Desktops, live: score and linescore | inning, runners, count, outs | who's up.
+  band: { flexDirection: 'row', alignItems: 'stretch' },
+  bandScore: { flexShrink: 1, minWidth: 0, gap: Spacing.two, paddingRight: Spacing.four },
+  bandPart: { justifyContent: 'center', paddingHorizontal: Spacing.four, borderLeftWidth: StyleSheet.hairlineWidth },
+  bandUp: { flex: 1, minWidth: 0, paddingRight: 0 },
+  upRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  upColumn: { gap: Spacing.one + 2 },
+  upBatter: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, minWidth: 0 },
+  upName: { fontSize: 15, lineHeight: 20 },
+  upLine: { flexShrink: 1, fontVariant: ['tabular-nums'] },
+  upNext: { marginLeft: 'auto', flexShrink: 1 },
   scoreSide: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.two },
   scoreAbbr: { fontSize: 17, lineHeight: 24, fontWeight: 600 },
   scoreRuns: { fontSize: 22, lineHeight: 28, fontWeight: 600, fontVariant: ['tabular-nums'] },
