@@ -41,7 +41,7 @@ export default function RulesScreen() {
     pending.current = jumpTo(scroll.current, offsets.current, section) ? null : section;
     router.setParams({ section: undefined });
   }, [section]);
-  const place = (id: RulesSection) => (y: number) => {
+  const place = (id: RulesSection, y: number) => {
     offsets.current.set(id, y);
     if (pending.current === id) {
       pending.current = null;
@@ -73,7 +73,7 @@ export default function RulesScreen() {
         ))}
       </View>
 
-      <Section title="Bags" onPlace={place('bags')}>
+      <Section title="Bags" id="bags" onPlace={place}>
         <View style={styles.bags}>
           {(
             [
@@ -90,10 +90,10 @@ export default function RulesScreen() {
           ))}
         </View>
         <Bullet>Your team is 4 hitters, and its bags are their total bases. Only hitting counts, even for two-way players.</Bullet>
-        <Bullet>Bags reset every round. A hitter's bags count for you in games that start while he's on your roster, and stay yours after you drop him.</Bullet>
+        <Bullet>Bags reset every round. A hitter&apos;s bags count for you in games that start while he&apos;s on your roster, and stay yours after you drop him.</Bullet>
       </Section>
 
-      <Section title="Rounds and the cut" onPlace={place('rounds')}>
+      <Section title="Rounds and the cut" id="rounds" onPlace={place}>
         <Table
           rows={[
             ['Round 1', 'Wild Card + Division Series', `Top ${survivors[0]} of ${managers} go through`],
@@ -105,7 +105,7 @@ export default function RulesScreen() {
         <Bullet>Level on bags? Then team slugging, on-base, home runs, runs and RBIs decide it, in that order. Still level: a drink-off.</Bullet>
       </Section>
 
-      <Section title="Drafts" onPlace={place('drafts')}>
+      <Section title="Drafts" id="drafts" onPlace={place}>
         <Table
           rows={[
             ['Draft 1', 'Before the Wild Card', 'Random order, 4 picks each'],
@@ -114,26 +114,26 @@ export default function RulesScreen() {
             ['Draft 4', 'Before the World Series', 'Round 2 standings, the Ghost included'],
           ]}
         />
-        <Bullet>Every draft is a snake, up to 4 rounds. Picks aren't timed.</Bullet>
+        <Bullet>Every draft is a snake, up to 4 rounds. Picks aren&apos;t timed.</Bullet>
         <Bullet>In Drafts 2 to 4 (redrafts), each pick drops one of your hitters and adds an undrafted one.</Bullet>
         <Bullet>You can yield to sit out the rest of a redraft, but not while you have a hitter whose MLB team is out: fill his spot first.</Bullet>
-        <Bullet>A hitter can be on one roster a season, ever. Once he's dropped, nobody can take him again.</Bullet>
-        <Bullet>Draft 1's pool is every playoff team's active roster, plus hitters on their injured lists who could be back in time. Redrafts use the postseason rosters of MLB teams still alive.</Bullet>
+        <Bullet>A hitter can be on one roster a season, ever. Once he&apos;s dropped, nobody can take him again.</Bullet>
+        <Bullet>Draft 1&apos;s pool is every playoff team&apos;s active roster, plus hitters on their injured lists who could be back in time. Redrafts use the postseason rosters of MLB teams still alive.</Bullet>
       </Section>
 
-      <Section title="The Ghost" onPlace={place('ghost')}>
+      <Section title="The Ghost" id="ghost" onPlace={place}>
         <ThemedText type="small">Knocked out? You join the Ghost, a team shared by the eliminated managers that can still win it all.</ThemedText>
-        <Bullet><B>Draft 3:</B> after the survivors' snake, the 2 managers out after round 1 each add an undrafted hitter to it, the higher-ranked first.</Bullet>
-        <Bullet><B>Round 2:</B> it plays the Championship Series with those 2 hitters. It's never cut and takes nobody's spot: the bottom {survivors[0] - survivors[1]} managers are out wherever the Ghost finishes.</Bullet>
-        <Bullet><B>Draft 4:</B> it joins the finalists' snake, placed by round 2 bags. The 2 managers out after round 2 fill its empty spots (no drop, no pass). The 2 out after round 1 make an ordinary redraft pick each.</Bullet>
-        <Bullet><B>Round 3:</B> it's ranked with the finalists. If it finishes first, its 4 managers share the title.</Bullet>
+        <Bullet><B>Draft 3:</B> after the survivors&apos; snake, the 2 managers out after round 1 each add an undrafted hitter to it, the higher-ranked first.</Bullet>
+        <Bullet><B>Round 2:</B> it plays the Championship Series with those 2 hitters. It&apos;s never cut and takes nobody&apos;s spot: the bottom {survivors[0] - survivors[1]} managers are out wherever the Ghost finishes.</Bullet>
+        <Bullet><B>Draft 4:</B> it joins the finalists&apos; snake, placed by round 2 bags. The 2 managers out after round 2 fill its empty spots (no drop, no pass). The 2 out after round 1 make an ordinary redraft pick each.</Bullet>
+        <Bullet><B>Round 3:</B> it&apos;s ranked with the finalists. If it finishes first, its 4 managers share the title.</Bullet>
         <Bullet>Passing a ghost turn skips only that turn. A ghost pick nobody makes is autodrafted.</Bullet>
       </Section>
 
-      <Section title="Autodraft" onPlace={place('autodraft')}>
+      <Section title="Autodraft" id="autodraft" onPlace={place}>
         <Bullet>Turn it on in a draft room and it picks for you: your queue first, in order, then the hitter with the most regular-season total bases (skipping the injured list).</Bullet>
         <Bullet>In a redraft it replaces your hitters whose MLB team is out, then yields.</Bullet>
-        <Bullet>Your queue is private. On a ghost turn it's the queue of the manager making the pick.</Bullet>
+        <Bullet>Your queue is private. On a ghost turn it&apos;s the queue of the manager making the pick.</Bullet>
       </Section>
     </Screen>
   );
@@ -147,9 +147,19 @@ function jumpTo(scroll: ScrollView | null, offsets: Map<string, number>, id: str
   return true;
 }
 
-function Section({ title, onPlace, children }: { title: string; onPlace: (y: number) => void; children: ReactNode }) {
+function Section({
+  id,
+  title,
+  onPlace,
+  children,
+}: {
+  id: RulesSection;
+  title: string;
+  onPlace: (id: RulesSection, y: number) => void;
+  children: ReactNode;
+}) {
   return (
-    <View onLayout={(e) => onPlace(e.nativeEvent.layout.y)}>
+    <View onLayout={(e) => onPlace(id, e.nativeEvent.layout.y)}>
       <Card title={title}>{children}</Card>
     </View>
   );
