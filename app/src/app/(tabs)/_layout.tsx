@@ -12,7 +12,7 @@ import { SeasonProvider } from '@/lib/season';
 
 /**
  * The signed-in app: the header over a tab navigator, with a tab for each section in the tab bar
- * (Draft and Almanac each a stack, for the pages opened from them), and Home and Settings, which
+ * (Draft and Almanac each a stack, for the pages opened from them), and Home, Settings and Rules, which
  * have no button in the bar. Like a phone app's tabs, each one is only mounted when first opened
  * and then kept (TabScreen), so switching back to it is immediate and finds it as it was left.
  */
@@ -40,6 +40,7 @@ export default function TabsLayout() {
                   <Tabs.Screen name="research" options={{ title: 'Research · Baggery' }} />
                   <Tabs.Screen name="almanac" />
                   <Tabs.Screen name="settings" options={{ title: 'Settings · Baggery' }} />
+                  <Tabs.Screen name="rules" options={{ title: 'Rules · Baggery' }} />
                 </Tabs>
               </UnderAppHeader>
               <BagCelebrations />

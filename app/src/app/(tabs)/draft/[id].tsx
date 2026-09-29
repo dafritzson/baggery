@@ -118,6 +118,8 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
         onPress={() => run({ action: 'yield' })}
       />
     ));
+  // On your ghost turn: what kind of turn it is, and a link to how ghost turns work.
+  const ghostHelp = myTurn && turn?.ghost && <GhostTurnHelp filling={filling} />;
   // The Queue tab goes away once you have no turns left to queue for.
   const tab = chosenTab === 'queue' && !target ? 'players' : chosenTab;
   const queued = queue.entries.filter((e) => draftable.has(e.playerId)).length;
@@ -162,6 +164,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
             <>
               <OnTheClock status={status} myTurn={myTurn} />
               {errorText}
+              {ghostHelp}
               {yieldButton}
               {tabs}
             </>
@@ -182,6 +185,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
           {commissioner?.canStart && (
             <Button label="Start the draft (randomizes the order)" onPress={() => commissioner.confirm('start')} />
           )}
+          {ghostHelp}
           {yieldButton}
           {tabs}
         </>
@@ -242,6 +246,29 @@ function clockStatus(data: SeasonData, draft: Draft, turn: Turn | null, myTurn: 
     detail: `${turn.round > draft.rounds ? `Ghost pick ${pickLabel(turn.slot, n, draft.rounds)}` : `Round ${turn.round} · Pick ${(turn.slot % n) + 1}`} · #${actionCount + 1} overall`,
     last,
   };
+}
+
+/**
+ * On your turn for the ghost team: whether it fills an empty spot (no drop, no pass) or is an
+ * ordinary redraft pick, with a link to the ghost's rules.
+ */
+function GhostTurnHelp({ filling }: { filling: boolean }) {
+  const theme = useTheme();
+  return (
+    <Card title="Your pick for the 👻 Ghost" style={{ backgroundColor: theme.tint }}>
+      <ThemedText type="small">
+        {filling
+          ? "Fill one of its empty spots: add an undrafted hitter. There's no drop, and this turn can't be passed."
+          : 'An ordinary redraft pick for it: drop one of its hitters and add an undrafted one. Passing skips only this turn.'}
+      </ThemedText>
+      <Pressable
+        accessibilityRole="link"
+        hitSlop={8}
+        onPress={() => router.navigate({ pathname: '/rules', params: { section: 'ghost' } })}>
+        <ThemedText type="smallBold" style={{ color: theme.accent }}>How ghost turns work ›</ThemedText>
+      </Pressable>
+    </Card>
+  );
 }
 
 /** Desktop: the big clock card at the top of the main column. */

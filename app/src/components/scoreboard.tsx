@@ -15,6 +15,7 @@ import type { FantasyRound } from '@core/types.ts';
 
 import { OwnerBadge, YouTag } from '@/components/owner-badge';
 import { PlayerName } from '@/components/player-name';
+import { RoundRulesButton, RoundRulesSheet } from '@/components/round-rules-sheet';
 import { type GridRow, ScoreGrid } from '@/components/score-grid';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -98,6 +99,7 @@ export function StandingsTable({
   const byId = new Map(playing.map((t) => [t.id, t]));
   const theme = useTheme();
   const [tieGroup, setTieGroup] = useState<number | null>(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
   // Who's through: once the round is closed, whatever was recorded (a drink-off included);
   // until then, the ranking with its tiebreakers. Full ties across the cut are a drink-off.
   const closed = settled && teams.some((t) => t.eliminated_after_round === round);
@@ -182,11 +184,22 @@ export function StandingsTable({
     <View style={styles.section}>
       <View style={styles.sectionHead}>
         <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionTitle}>{info.series}</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          {anyLive ? '● Live · ' : ''}
-          {round === 3 ? 'Winner takes it' : `Top ${survivors} advance`}
-        </ThemedText>
+        <View style={styles.cutNote}>
+          <ThemedText type="small" themeColor="textSecondary">
+            {anyLive ? '● Live · ' : ''}
+            {round === 3 ? 'Winner takes it' : `Top ${survivors} advance`}
+          </ThemedText>
+          <RoundRulesButton onPress={() => setRulesOpen(true)} />
+        </View>
       </View>
+      <RoundRulesSheet
+        round={round}
+        visible={rulesOpen}
+        ranked={teams.length}
+        survivors={survivors}
+        ghost={playing.some((t) => t.is_ghost)}
+        onClose={() => setRulesOpen(false)}
+      />
       <ScoreGrid
         columns={columns.map((c, i) => ({ label: c.label, live: c.live, divider: i > 0 && c.number === 1 }))}
         rows={rows}
@@ -361,6 +374,7 @@ const styles = StyleSheet.create({
   // Section heads are one line of fixed height, so tables side by side start level.
   section: { gap: Spacing.three },
   sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: Spacing.two, height: 16 },
+  cutNote: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   sectionTitle: { textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 12, lineHeight: 16 },
   rank: { width: 24, textAlign: 'center', fontSize: 13, fontVariant: ['tabular-nums'] },
   badge: { marginRight: Spacing.one },
