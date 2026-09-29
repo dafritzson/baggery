@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BAG_EMOJI,
   type BagHit,
+  bagHitBags,
   bagKey,
   bagParam,
   bagSummary,
@@ -275,14 +276,24 @@ describe('hitBags', () => {
     expect(hitBags(7, ['2B', '1B', 'HR'], OHTANI, 1).slice(0, 3)).toEqual(before);
   });
 
-  it("draws TB the hits don't cover yet as the next hit, and stops at the box score's TB", () => {
+  it("draws the line's hits no play is matched to yet next, the same bags once they are", () => {
     // The box score has a homer that isn't matched to a play yet: drawn as one hit already,
     // and the same bags once it is.
-    const early = hitBags(6, ['2B'], OHTANI, 1);
+    const line = { h: 2, doubles: 1, triples: 0, hr: 1 };
+    const early = hitBags(6, ['2B'], OHTANI, 1, line);
     expect(runs(early).map((r) => r.length)).toEqual([2, 4]);
-    expect(hitBags(6, ['2B', 'HR'], OHTANI, 1)).toEqual(early);
+    expect(hitBags(6, ['2B', 'HR'], OHTANI, 1, line)).toEqual(early);
     // A scoring change took bags away before the plays were read again.
-    expect(hitBags(2, ['2B', 'HR'], OHTANI, 1)).toEqual(early.slice(0, 2));
+    expect(hitBags(2, ['2B', 'HR'], OHTANI, 1, line)).toEqual(early.slice(0, 2));
+  });
+
+  it('never draws two unmatched singles as a double', () => {
+    for (let player = 1; player <= 200; player++) {
+      const withLine = hitBags(3, ['1B'], player, 1, { h: 3, doubles: 0, triples: 0, hr: 0 });
+      expect(runs(withLine).map((r) => r.length)).toEqual([1, 1, 1]);
+      // Without the line, TB no hit covers are drawn a bag per hit.
+      expect(runs(hitBags(3, ['1B'], player, 1)).map((r) => r.length)).toEqual([1, 1, 1]);
+    }
   });
 
   it('draws each bag as its own hit when no hits are known', () => {
@@ -290,5 +301,30 @@ describe('hitBags', () => {
     expect(bags).toHaveLength(5);
     for (let i = 1; i < bags.length; i++) expect(bags[i]).not.toBe(bags[i - 1]);
     expect(hitBags(0, [], OHTANI, 1)).toEqual([]);
+  });
+
+  it("draws a past season's hits from its lines when no plays are known", () => {
+    const bags = hitBags(4, [], OHTANI, 1, { h: 3, doubles: 1, triples: 0, hr: 0 });
+    // Biggest first: the double, then the two singles, each its own bag.
+    expect(runs(bags).map((r) => r.length)).toEqual([2, 1, 1]);
+  });
+});
+
+describe('bagHitBags', () => {
+  const bag = { gamePk: 813032, playerId: OHTANI, tb: 4, bags: 2, singles: 0, doubles: 0, triples: 0, hr: 0 };
+
+  it('draws two singles as two different bags, and a double as two alike', () => {
+    for (let tb = 2; tb < 200; tb++) {
+      const singles = bagHitBags({ ...bag, tb, singles: 2 });
+      expect(singles).toHaveLength(2);
+      expect(singles[0]).not.toBe(singles[1]);
+      const double = bagHitBags({ ...bag, tb, doubles: 1 });
+      expect(double[0]).toBe(double[1]);
+    }
+  });
+
+  it('draws a bag per TB when a scoring change leaves the hits short', () => {
+    // A single scored a double instead: +1 bag, -1 single, +1 double.
+    expect(bagHitBags({ ...bag, bags: 1, singles: -1, doubles: 1 })).toHaveLength(1);
   });
 });

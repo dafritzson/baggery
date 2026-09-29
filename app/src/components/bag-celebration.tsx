@@ -15,7 +15,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { BAG_EMOJI, type BagHit, bagKey, bagSummary, hitHeadline, ordinal, rainCount, shakeStrength } from '@core/bag-celebration.ts';
+import { BAG_EMOJI, type BagHit, bagHitBags, bagKey, bagSummary, hitHeadline, ordinal, rainCount, shakeStrength } from '@core/bag-celebration.ts';
 
 import { GAME_FONT } from '@/components/bag-game';
 import { ThemedText } from '@/components/themed-text';
@@ -208,7 +208,7 @@ function Card({
           <ThemedText type="small" themeColor="textSecondary">{mlbTeamAbbr(data, bag.playerId)}</ThemedText>
         </View>
         <Text style={[styles.hit, { color: theme.success }, titleFont ? { fontFamily: titleFont } : styles.titleFallback]}>
-          {hitHeadline(bag)} {'👜'.repeat(Math.min(Math.max(bag.bags, 1), 4))}
+          {hitHeadline(bag)} {bagHitBags(bag).join('')}
         </Text>
         {rows.length > 0 && (
           <View style={[styles.rows, { borderTopColor: theme.border }]}>
