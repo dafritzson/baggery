@@ -300,7 +300,7 @@ function BaggerCard({
   team: SeasonData['teams'][number];
   tb: number | null;
   /** His hits in the game, in order: each one's bags are drawn alike (core hitBags). */
-  hits: ScoreHit['event'][];
+  hits: ScoreHit[];
   gamePk: number;
   /** "World Series · Game 3", for the videos sheet. */
   gameLabel: string;
@@ -314,7 +314,9 @@ function BaggerCard({
   const [ownerRoom, setOwnerRoom] = useState(0);
   const mine = team.id === data.myTeam?.id;
   const owner = ownerName(data, team);
-  const bags = tb ? hitBags(tb, hits, playerId, gamePk) : [];
+  const bags = tb ? hitBags(tb, hits.map((h) => h.event), playerId, gamePk) : [];
+  // ▶ only once there's a video to watch: MLB's clip (most home runs, within minutes) or Savant's.
+  const hasVideo = !!tb && hits.some((h) => h.hasVideo);
   // Beside the name: only what the owner line can't hold.
   const high = Math.max(0, Math.min(bagsThatFit(nameRoom, bagWidth), bags.length - bagsThatFit(ownerRoom, bagWidth)));
   const low = bags.slice(high);
@@ -328,7 +330,7 @@ function BaggerCard({
             {name}
           </PlayerName>
           <BagRoom bags={bags.slice(0, high).join('')} onWidth={setNameRoom} />
-          {!!tb && (
+          {hasVideo && (
             <Pressable onPress={() => setVideos(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Videos of ${name}'s hits`}>
               <ThemedText type="smallBold" themeColor="accent">▶</ThemedText>
             </Pressable>
@@ -595,8 +597,7 @@ function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; gam
   const hitsOf = (playerId: number) =>
     (scores.hits ?? [])
       .filter((h) => h.gamePk === game.gamePk && h.playerId === playerId)
-      .sort((a, b) => (a.endedAt ?? '').localeCompare(b.endedAt ?? ''))
-      .map((h) => h.event);
+      .sort((a, b) => (a.endedAt ?? '').localeCompare(b.endedAt ?? ''));
   const playerIds = [...new Set(data.spells.map((s) => s.mlb_player_id))];
   const players = playerIds
     .filter((id) => {

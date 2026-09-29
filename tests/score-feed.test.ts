@@ -122,15 +122,22 @@ describe('score feed', () => {
 });
 
 describe('hits in the score feed', () => {
-  const hitRow = (playId: string, gamePk: number, player: number, event = 'HR') => ({
-    play_id: playId, game_pk: gamePk, mlb_player_id: player, event, ended_at: '2026-10-04T23:00:00Z',
+  const hitRow = (playId: string, gamePk: number, player: number, event = 'HR', hasVideo = false) => ({
+    play_id: playId, game_pk: gamePk, mlb_player_id: player, event, ended_at: '2026-10-04T23:00:00Z', has_video: hasVideo,
   });
 
   it("folds rostered players' hits in this season's games into the scores", () => {
     const next = applyChanges(scores(), { hits: [hitRow('p1', 1, OHTANI), hitRow('p2', 1, HARPER), hitRow('p3', 99, OHTANI)] }, 2026, rostered);
-    expect(next.hits).toEqual([{ playId: 'p1', gamePk: 1, playerId: OHTANI, event: 'HR', endedAt: '2026-10-04T23:00:00Z' }]);
+    expect(next.hits).toEqual([{ playId: 'p1', gamePk: 1, playerId: OHTANI, event: 'HR', endedAt: '2026-10-04T23:00:00Z', hasVideo: false }]);
     // The same play again (say its type changed) replaces it.
     const again = applyChanges(next, { hits: [hitRow('p1', 1, OHTANI, '2B')] }, 2026, rostered);
     expect(again.hits!.map((h) => h.event)).toEqual(['2B']);
+  });
+
+  it('marks a hit once its video turns up, so the Games tab can show its ▶', () => {
+    const next = applyChanges(scores(), { hits: [hitRow('p1', 1, OHTANI)] }, 2026, rostered);
+    expect(next.hits!.map((h) => h.hasVideo)).toEqual([false]);
+    const clipped = applyChanges(next, { hits: [hitRow('p1', 1, OHTANI, 'HR', true)] }, 2026, rostered);
+    expect(clipped.hits!.map((h) => h.hasVideo)).toEqual([true]);
   });
 });

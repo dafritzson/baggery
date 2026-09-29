@@ -43,6 +43,8 @@ export interface ScoreHit {
   event: '1B' | '2B' | '3B' | 'HR';
   /** When the play ended, which orders a player's hits in a game. */
   endedAt: string | null;
+  /** MLB's clip or Savant's video of it is up. */
+  hasVideo: boolean;
 }
 
 export interface Scores {
@@ -80,7 +82,7 @@ export function toGame(g: Row): GameInfo {
 }
 
 export function toHit(h: Row): ScoreHit {
-  return { playId: h.play_id, gamePk: h.game_pk, playerId: h.mlb_player_id, event: h.event, endedAt: h.ended_at ?? null };
+  return { playId: h.play_id, gamePk: h.game_pk, playerId: h.mlb_player_id, event: h.event, endedAt: h.ended_at ?? null, hasVideo: h.has_video ?? false };
 }
 
 export function toLine(l: Row): BattingLine {
