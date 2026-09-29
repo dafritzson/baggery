@@ -121,6 +121,22 @@ The Games tab's bags come from the same hits: one emoji per TB, hit by hit in or
 a hit alike and never the previous hit's (`hitBags` in `core/bag-celebration.ts`). So the scores
 load and broadcast carry rostered players' hits.
 
+## Box scores
+
+Tapping a game on the Games tab opens its box score (`components/box-score.tsx`). Before first
+pitch it shows both teams' posted starting lineups side by side (`mlb_lineups`, which `poll-games`
+writes from the schedule it reads for lineup alerts), each team's announced starter and its
+drafted hitters on the bench. Once the game starts it shows every hitter's line in batting order
+with subs under the hitter they replaced (`core/box-score.ts`; `player_game_stats` keeps each
+hitter's `batting_order`, `position` and `so` from the box score), the line score by inning
+(`mlb_games.linescore`) and the extra-base hits: a team at a time on phones, both side by side on
+wider screens. A live game's box score follows the scores broadcast.
+
+Your hitters are dark green on the Games tab (bagger cards, due-up lists, box scores), and your
+team's row on Standings is too. Other managers' hitters are dark blue in box scores and due-up
+lists, where nothing else says whose they are. The drafted hitter at bat gets a ring in his color
+that pulses (`HitterRow` in `components/at-bat.tsx`, `data-at-bat-ring` in `global.css`).
+
 ## Phases
 
 | Phase | Deadline | Scope |

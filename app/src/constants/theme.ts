@@ -38,8 +38,20 @@ export const Colors = {
     standingSafe: '#D3E2F4',
     standingTied: '#DCD5EC',
     standingOut: '#F3D0D0',
-    /** Your own team and players (Standings rows, Games cards): a soft blue-gray. */
+    /** Your own team in the draft: a soft blue-gray. */
     mine: '#DCE5F4',
+    /**
+     * Your hitters and team on the Games and Standings tabs: dark green, white text on it
+     * (FillSurface), and a brighter green ring that pulses while one of them is at bat.
+     */
+    mineFill: '#14532D',
+    mineRing: '#22C55E',
+    /** Other managers' hitters in box scores and due-up lists: dark blue, with a blue ring at bat. */
+    otherFill: '#1E3A8A',
+    otherRing: '#3B82F6',
+    /** Text on those fills. */
+    onFill: '#ffffff',
+    onFillSecondary: 'rgba(255, 255, 255, 0.72)',
     /** An on/off switch's track when off (on, it's the accent). */
     switchOff: '#C4C6CC',
   },
@@ -67,6 +79,12 @@ export const Colors = {
     standingTied: '#30284A',
     standingOut: '#4A2228',
     mine: '#223047',
+    mineFill: '#0E3B20',
+    mineRing: '#34D399',
+    otherFill: '#172554',
+    otherRing: '#60A5FA',
+    onFill: '#ffffff',
+    onFillSecondary: 'rgba(255, 255, 255, 0.72)',
     switchOff: '#4A4D52',
   },
 } as const;

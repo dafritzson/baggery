@@ -1,6 +1,7 @@
 // Turns MLB Stats API responses into rows for mlb_games and player_game_stats. Pure, so the
 // unit tests can run it on sample responses.
 
+import type { Linescore, LineupPlayer } from '../_shared/core/box-score.ts';
 import type { LivePlayer, LiveState } from '../_shared/core/live.ts';
 
 export type GameType = 'F' | 'D' | 'L' | 'W';
@@ -43,6 +44,11 @@ export interface BattingRow {
   tb: number;
   r: number;
   rbi: number;
+  so: number;
+  /** His spot and who took it: "300" batted third, 301 replaced him. Null if he wasn't in the order. */
+  batting_order: number | null;
+  /** The positions he played, as a box score lists them: "PH-3B". */
+  position: string | null;
 }
 
 /**
@@ -123,7 +129,10 @@ export interface LineupRow {
   game_pk: number;
   mlb_team_id: number;
   player_ids: number[];
+  /** The same hitters with their names and positions, for the box score's lineups. */
+  players: LineupPlayer[];
 }
+
 
 /**
  * The starting lineups posted for the games scheduleGames keeps, from the same schedule read with
@@ -139,9 +148,13 @@ export function scheduleLineups(data: any, games: GameRow[]): LineupRow[] {
     for (const side of ['home', 'away'] as const) {
       const teamId: number | undefined = g.teams?.[side]?.team?.id;
       // deno-lint-ignore no-explicit-any
-      const ids: number[] = (g.lineups?.[`${side}Players`] ?? []).map((p: any) => p?.id).filter(Boolean);
-      if (!teamId || !ids.length) continue;
-      rows.set(`${g.gamePk}:${teamId}`, { game_pk: g.gamePk, mlb_team_id: teamId, player_ids: ids });
+      const players: LineupPlayer[] = (g.lineups?.[`${side}Players`] ?? [])
+        // deno-lint-ignore no-explicit-any
+        .filter((p: any) => p?.id)
+        // deno-lint-ignore no-explicit-any
+        .map((p: any) => ({ id: p.id, name: p.fullName ?? `Player ${p.id}`, pos: p.primaryPosition?.abbreviation ?? null }));
+      if (!teamId || !players.length) continue;
+      rows.set(`${g.gamePk}:${teamId}`, { game_pk: g.gamePk, mlb_team_id: teamId, player_ids: players.map((p) => p.id), players });
     }
   }
   return [...rows.values()];
@@ -178,10 +191,20 @@ export function boxscoreBatting(gamePk: number, data: any): { rows: BattingRow[]
         tb: b.totalBases ?? 0,
         r: b.runs ?? 0,
         rbi: b.rbi ?? 0,
+        so: b.strikeOuts ?? 0,
+        batting_order: battingOrder(p),
+        // deno-lint-ignore no-explicit-any
+        position: (p.allPositions ?? []).map((pos: any) => pos?.abbreviation).filter(Boolean).join('-') || p.position?.abbreviation || null,
       });
     }
   }
   return { rows, players };
+}
+
+// deno-lint-ignore no-explicit-any
+function battingOrder(p: any): number | null {
+  const order = Number(p?.battingOrder);
+  return Number.isInteger(order) && order >= 100 ? order : null;
 }
 
 /** A lineup change for sub alerts: a player who came off the bench, or one who was replaced. */
@@ -249,6 +272,25 @@ export function linescoreRuns(data: any): { home: number; away: number } | null 
   const home = data?.teams?.home?.runs;
   const away = data?.teams?.away?.runs;
   return typeof home === 'number' && typeof away === 'number' ? { home, away } : null;
+}
+
+/**
+ * The line score for the box score, from `/game/{gamePk}/linescore`: runs by inning and each
+ * team's runs, hits and errors. Null before the game has an inning.
+ */
+// deno-lint-ignore no-explicit-any
+export function linescoreTable(data: any): Linescore | null {
+  // deno-lint-ignore no-explicit-any
+  const innings: any[] = data?.innings ?? [];
+  if (!innings.length) return null;
+  const runs = (half: unknown) => (typeof half === 'number' ? half : null);
+  // deno-lint-ignore no-explicit-any
+  const rhe = (t: any): [number, number, number] => [t?.runs ?? 0, t?.hits ?? 0, t?.errors ?? 0];
+  return {
+    innings: innings.map((i) => [runs(i?.away?.runs), runs(i?.home?.runs)]),
+    away: rhe(data?.teams?.away),
+    home: rhe(data?.teams?.home),
+  };
 }
 
 /** The live state from `/game/{gamePk}/linescore`, or null before the game has an inning. */

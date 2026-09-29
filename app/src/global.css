@@ -214,6 +214,26 @@
 }
 
 /*
+ * The hitter at bat on the Games tab (AtBatRing in components/at-bat.tsx): a ring around his row,
+ * green if he's yours and blue if he's another manager's, that fades in and out. Only the ring
+ * pulses, not the row, and only its opacity, which the GPU animates without repainting.
+ */
+[data-at-bat-ring] {
+  will-change: opacity;
+  animation: at-bat-pulse 1.4s ease-in-out infinite;
+}
+@keyframes at-bat-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-at-bat-ring] {
+    animation: none;
+  }
+}
+
+/*
  * Zooming between the Games tab's Day, Round and Postseason views (lib/zoom.web.ts), while
  * <html> has data-zoom. The page scales around the focused game, cut off at its own edges, and
  * that game morphs into its place in the new view. The controls above it and the phone tab bar

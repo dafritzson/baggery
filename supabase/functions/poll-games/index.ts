@@ -26,8 +26,10 @@ import {
   boxscoreSubs,
   clipsForHits,
   highlightClips,
+  type LineupRow,
   linescoreLive,
   linescoreRuns,
+  linescoreTable,
   playHits,
   playLines,
   savantHasVideo,
@@ -76,16 +78,20 @@ async function saveGame(gamePk: number, alerts: boolean): Promise<number> {
   // during games), in one update.
   const live = linescoreLive(linescore);
   const runs = linescoreRuns(linescore);
-  if (live || runs) {
+  const table = linescoreTable(linescore);
+  if (live || runs || table) {
     const liveJson = live ? sql.json(JSON.parse(JSON.stringify(live))) : null;
+    const tableJson = table ? sql.json(JSON.parse(JSON.stringify(table))) : null;
     await sql`
       update mlb_games set
         live = coalesce(${liveJson}::jsonb, live),
+        linescore = coalesce(${tableJson}::jsonb, linescore),
         home_score = coalesce(${runs?.home ?? null}::smallint, home_score),
         away_score = coalesce(${runs?.away ?? null}::smallint, away_score)
       where game_pk = ${gamePk}
-        and (live, home_score, away_score) is distinct from
+        and (live, linescore, home_score, away_score) is distinct from
             (coalesce(${liveJson}::jsonb, live),
+             coalesce(${tableJson}::jsonb, linescore),
              coalesce(${runs?.home ?? null}::smallint, home_score),
              coalesce(${runs?.away ?? null}::smallint, away_score))`;
   }
@@ -104,16 +110,20 @@ async function saveGame(gamePk: number, alerts: boolean): Promise<number> {
       insert into player_game_stats ${tx(
         rows,
         'game_pk', 'mlb_player_id', 'mlb_team_id', 'pa', 'ab', 'h', 'doubles', 'triples', 'hr', 'bb', 'hbp', 'sf', 'tb', 'r', 'rbi',
+        'so', 'batting_order', 'position',
       )}
       on conflict (game_pk, mlb_player_id) do update set
         mlb_team_id = excluded.mlb_team_id, pa = excluded.pa, ab = excluded.ab, h = excluded.h, doubles = excluded.doubles,
         triples = excluded.triples, hr = excluded.hr, bb = excluded.bb, hbp = excluded.hbp, sf = excluded.sf,
-        tb = excluded.tb, r = excluded.r, rbi = excluded.rbi, updated_at = now()
+        tb = excluded.tb, r = excluded.r, rbi = excluded.rbi, so = excluded.so, batting_order = excluded.batting_order,
+        position = excluded.position, updated_at = now()
       where (player_game_stats.pa, player_game_stats.ab, player_game_stats.h, player_game_stats.doubles, player_game_stats.triples,
              player_game_stats.hr, player_game_stats.bb, player_game_stats.hbp, player_game_stats.sf,
-             player_game_stats.tb, player_game_stats.r, player_game_stats.rbi)
+             player_game_stats.tb, player_game_stats.r, player_game_stats.rbi, player_game_stats.so,
+             player_game_stats.batting_order, player_game_stats.position)
         is distinct from (excluded.pa, excluded.ab, excluded.h, excluded.doubles, excluded.triples, excluded.hr, excluded.bb,
-                          excluded.hbp, excluded.sf, excluded.tb, excluded.r, excluded.rbi)`;
+                          excluded.hbp, excluded.sf, excluded.tb, excluded.r, excluded.rbi, excluded.so,
+                          excluded.batting_order, excluded.position)`;
   });
   return rows.length;
 }
@@ -312,6 +322,19 @@ async function syncProbables(rows: ProbableRow[], gamePks: number[]) {
 }
 
 /**
+ * Saves the posted lineups for the box score (mlb_lineups), only those that changed. A lineup
+ * that's taken down again is kept: the box score shows the last one posted.
+ */
+async function syncLineups(lineups: LineupRow[]) {
+  if (!lineups.length) return;
+  const rows = lineups.map((l) => ({ game_pk: l.game_pk, mlb_team_id: l.mlb_team_id, players: sql.json(JSON.parse(JSON.stringify(l.players))) }));
+  await sql`
+    insert into mlb_lineups ${sql(rows, 'game_pk', 'mlb_team_id', 'players')}
+    on conflict (game_pk, mlb_team_id) do update set players = excluded.players, updated_at = now()
+    where mlb_lineups.players is distinct from excluded.players`;
+}
+
+/**
  * Reads the postseason schedule into mlb_games. Rows are only rewritten when something changed,
  * so open apps don't refetch for nothing. A live game keeps the score its linescore gave (read
  * every few seconds) over the schedule's, which can lag behind.
@@ -355,9 +378,11 @@ async function syncSchedule(year: number, all: boolean): Promise<number> {
              and (mlb_games.home_score, mlb_games.away_score) is distinct from (excluded.home_score, excluded.away_score))`;
   }
   await syncProbables(scheduleProbables(schedule, games), games.map((g) => g.game_pk));
+  const lineups = scheduleLineups(schedule, games);
+  await syncLineups(lineups);
   if (!all) {
     // A failure here mustn't stop the scores.
-    await queueLineupAlerts(scheduleLineups(schedule, games)).catch((e) => console.error('lineup alerts', e));
+    await queueLineupAlerts(lineups).catch((e) => console.error('lineup alerts', e));
   }
   // Only the latest season's read counts for the cron job's schedule; reloading a past season
   // mustn't delay the next read of the one being played.
