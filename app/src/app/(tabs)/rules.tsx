@@ -139,10 +139,7 @@ export default function RulesScreen() {
           It takes the highest hitter in your queue who&apos;s still available. If nobody in your queue is available, it takes
           the available hitter with the most regular-season total bases, skipping anyone on the injured list.
         </Bullet>
-        <Bullet>
-          In a redraft, it fills your empty spots, then yields. A hitter in your queue can be set to replace one of yours
-          who&apos;s still playing instead.
-        </Bullet>
+        <Bullet>In a redraft, it fills your empty spots, then yields.</Bullet>
         <Bullet>Your queue is private. On a ghost turn it&apos;s the queue of the manager making the pick.</Bullet>
       </Section>
     </Screen>
