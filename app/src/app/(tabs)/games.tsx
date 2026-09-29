@@ -429,26 +429,22 @@ interface CardProps {
 
 /**
  * Tapping anywhere on a game opens its box score, except on a player's name (his popup) or ▶
- * (his videos), which handle their own taps. The "Box score ›" link is the same for screen readers.
+ * (his videos), which handle their own taps.
  */
 function GameCard(props: CardProps) {
   return (
-    <Pressable onPress={props.onOpen} accessible={false} style={props.fill && styles.fill}>
+    <Pressable
+      onPress={props.onOpen}
+      accessibilityRole="button"
+      accessibilityLabel={`${seriesLabel(props.game)}, box score`}
+      style={props.fill && styles.fill}>
       {props.game.status === 'Final' ? <FinalCard {...props} /> : <OpenCard {...props} />}
     </Pressable>
   );
 }
 
-function BoxScoreLink({ onOpen }: { onOpen: () => void }) {
-  return (
-    <Pressable onPress={onOpen} hitSlop={8} accessibilityRole="button" accessibilityLabel="Box score">
-      <ThemedText type="smallBold" themeColor="accent">Box score ›</ThemedText>
-    </Pressable>
-  );
-}
-
 /** A finished game: the final score on one line, then how the baggers did. */
-function FinalCard({ data, scores, game, onOpen, fill }: CardProps) {
+function FinalCard({ data, scores, game, fill }: CardProps) {
   const theme = useTheme();
   const compact = useLayout() === 'compact';
   const side = (which: 'away' | 'home') => {
@@ -468,10 +464,7 @@ function FinalCard({ data, scores, game, onOpen, fill }: CardProps) {
     <Card style={[fill && styles.fill, compact && styles.cardCompact]}>
       <View style={styles.cardHead}>
         <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.headLabel}>{seriesLabel(game)}</ThemedText>
-        <View style={styles.headRight}>
-          <ThemedText type="smallBold" themeColor="textSecondary">{statusLine(game)}</ThemedText>
-          <BoxScoreLink onOpen={onOpen} />
-        </View>
+        <ThemedText type="smallBold" themeColor="textSecondary">{statusLine(game)}</ThemedText>
       </View>
       <View style={styles.finalScores}>
         {side('away')}
@@ -500,7 +493,7 @@ function LiveGlow({ live, fill, children }: { live: boolean; fill?: boolean; chi
 }
 
 /** A game that's on or still to come: who's up, the score, and the baggers so far. */
-function OpenCard({ data, scores, game, onOpen, fill }: CardProps) {
+function OpenCard({ data, scores, game, fill }: CardProps) {
   const theme = useTheme();
   const compact = useLayout() === 'compact';
   const live = game.status === 'Live';
@@ -559,17 +552,14 @@ function OpenCard({ data, scores, game, onOpen, fill }: CardProps) {
       <Card style={[fill && styles.fill, compact && styles.cardCompact]}>
         <View style={styles.cardHead}>
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.headLabel}>{seriesLabel(game)}</ThemedText>
-          <View style={styles.headRight}>
-            {live && game.live ? (
-              <LiveStatus live={game.live} />
-            ) : (
-              <ThemedText type="smallBold" style={{ color: live ? theme.danger : theme.textSecondary }}>
-                {live ? '● ' : ''}
-                {statusLine(game)}
-              </ThemedText>
-            )}
-            <BoxScoreLink onOpen={onOpen} />
-          </View>
+          {live && game.live ? (
+            <LiveStatus live={game.live} />
+          ) : (
+            <ThemedText type="smallBold" style={{ color: live ? theme.danger : theme.textSecondary }}>
+              {live ? '● ' : ''}
+              {statusLine(game)}
+            </ThemedText>
+          )}
         </View>
         <View style={styles.teams}>
           <View style={styles.upCards}>
@@ -676,7 +666,6 @@ const styles = StyleSheet.create({
   // The batting team's card: outlined, no fill, so a filled row always means a bagger.
   upCardBatting: { borderWidth: 1.5 },
   headLabel: { flexShrink: 1, minWidth: 0 },
-  headRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexShrink: 0 },
   upLabel: { width: 18, flexShrink: 0, fontSize: 9, lineHeight: 14 },
   // 1, 2, 3 in the fielding team's card need less room than AB, OD, IH.
   upLabelDigit: { width: 7 },
