@@ -38,7 +38,8 @@ function baggersFor(data: SeasonData, game: GameInfo) {
  * A game's box score, opened by tapping its card on the Games tab. Before first pitch: both
  * starting lineups side by side. Once it starts: every hitter's line in batting order, a team at a
  * time on phones (both side by side on wider screens), with the line score on top. Your hitters
- * are dark green, other managers' dark blue, and the drafted hitter at bat gets a pulsing ring.
+ * are dark green, other managers' dark blue, and the hitter at bat gets a pulsing ring (blue with no
+ * fill if nobody drafted him).
  */
 export function BoxScoreSheet({ data, game, onClose }: { data: SeasonData; game: GameInfo; onClose: () => void }) {
   const theme = useTheme();
@@ -217,7 +218,7 @@ function TeamBox({ data, game, box, side }: { data: SeasonData; game: GameInfo; 
         const { bagger, owner } = baggers(row.playerId);
         const tag = up.get(row.playerId);
         return (
-          <HitterRow key={row.playerId} bagger={bagger} atBat={tag === 'AB'} style={[styles.row, styles.line, { borderTopColor: theme.border }]}>
+          <HitterRow key={row.playerId} bagger={bagger} atBat={tag === 'AB'} ringUndrafted style={[styles.row, styles.line, { borderTopColor: theme.border }]}>
             <ThemedText type="small" themeColor="textSecondary" style={[styles.spot, styles.spotText]}>{row.sub || row.spot === null ? '' : row.spot}</ThemedText>
             <BatterCell row={row} bagger={bagger} owner={owner} tag={tag} bags={row.line?.tb ? hitBags(row.line.tb, hitsOf(row.playerId), row.playerId, game.gamePk).join('') : ''} />
             {COLUMNS.map((c) => number(row.line ? row.line[c.key] : '–', c.key))}
@@ -356,7 +357,7 @@ function Legend({ live }: { live: boolean }) {
     <View style={styles.legend}>
       {item(swatch(theme.mineFill), 'Your hitters')}
       {item(swatch(theme.otherFill), 'Drafted by others')}
-      {live && item(swatch('transparent', theme.mineRing), 'At bat (green if yours)')}
+      {live && item(swatch('transparent', theme.otherRing), 'At bat (green ring if yours)')}
     </View>
   );
 }
