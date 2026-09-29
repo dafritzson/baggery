@@ -3,6 +3,10 @@
 This is the source of truth the app implements. It is the 2024 rules PDF plus every
 clarification agreed since. When code and this file disagree, one of them is a bug.
 
+The app's Rules page (`app/src/app/(tabs)/rules.tsx`, from the account menu) is the players'
+short version, and the help on Standings (`round-rules-sheet.tsx`) and in the draft room explains
+a round or a ghost turn. Update them with this file when a rule changes.
+
 ## Vocabulary
 
 - **Bag**: a base. Single = 1 bag, double = 2, triple = 3, home run = 4. A team's bags

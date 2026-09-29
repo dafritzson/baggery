@@ -1,5 +1,5 @@
 import { useScrollToTop } from 'expo-router';
-import { type ReactNode, use, useRef } from 'react';
+import { type ReactNode, type RefObject, use, useRef } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -17,6 +17,7 @@ export function Screen({
   header,
   width = 'narrow',
   tight = false,
+  scrollRef,
 }: {
   children: ReactNode;
   onRefresh?: () => void;
@@ -27,6 +28,8 @@ export function Screen({
   width?: 'narrow' | 'wide';
   /** Phones: narrower side margins, for screens that need the width (Research's table). */
   tight?: boolean;
+  /** The page's scroll view, for a screen that scrolls to a spot on it (Rules' sections). */
+  scrollRef?: RefObject<ScrollView | null>;
 }) {
   const underHeader = use(UnderAppHeader);
   const layout = useLayout();
@@ -36,7 +39,8 @@ export function Screen({
   const paddingBottom = underHeader && layout === 'compact' ? BOTTOM_TAB_BAR_SPACE + bottom : Spacing.six;
   const gutter = tight && layout === 'compact' ? { paddingHorizontal: Spacing.two, paddingTop: Spacing.two } : null;
   // Tapping the tab that's already on show scrolls back up, like a phone app's tab bar.
-  const scroll = useRef<ScrollView>(null);
+  const ownScroll = useRef<ScrollView>(null);
+  const scroll = scrollRef ?? ownScroll;
   useScrollToTop(scroll);
   return (
     <ThemedView style={styles.fill}>

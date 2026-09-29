@@ -249,6 +249,9 @@ function AccountButton() {
           onSelect={() => router.push(requestedYear ? { pathname: '/settings', params: { year: requestedYear } } : '/settings')}>
           <DropdownMenu.ItemTitle>Settings</DropdownMenu.ItemTitle>
         </DropdownMenu.Item>
+        <DropdownMenu.Item key="rules" className="menu-item" onSelect={() => router.push('/rules')}>
+          <DropdownMenu.ItemTitle>Rules</DropdownMenu.ItemTitle>
+        </DropdownMenu.Item>
         <DropdownMenu.Item
           key="sign-out"
           className="menu-item menu-item-danger"
