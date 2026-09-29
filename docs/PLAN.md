@@ -135,7 +135,8 @@ wider screens. A live game's box score follows the scores broadcast.
 Your hitters are dark green on the Games tab (bagger cards, due-up lists, box scores), and your
 team's row on Standings is too. Other managers' hitters are dark blue in box scores and due-up
 lists, where nothing else says whose they are. The drafted hitter at bat gets a ring in his color
-that pulses (`HitterRow` in `components/at-bat.tsx`, `data-at-bat-ring` in `global.css`).
+that pulses (`HitterRow` in `components/at-bat.tsx`, `data-at-bat-ring` in `global.css`); in a box
+score, an undrafted hitter at bat gets a pulsing blue ring with no fill.
 
 ## Phases
 

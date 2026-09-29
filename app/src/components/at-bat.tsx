@@ -11,26 +11,30 @@ export type Bagger = 'mine' | 'other' | null;
 /**
  * A hitter's row on the Games tab. Yours are dark green; another manager's are dark blue where
  * nothing else says whose he is (`other`); the hitter at bat, if drafted, gets a ring in the same
- * color that pulses (global.css). Text inside turns light on its own (FillSurface).
+ * color that pulses (global.css). With `ringUndrafted` (box scores), an undrafted hitter at bat
+ * gets a pulsing blue ring with no fill. Text inside turns light on its own (FillSurface).
  */
 export function HitterRow({
   bagger,
   atBat,
+  ringUndrafted,
   style,
   children,
 }: {
   bagger: Bagger;
   atBat?: boolean;
+  ringUndrafted?: boolean;
   style?: StyleProp<ViewStyle>;
   children: ReactNode;
 }) {
   const theme = useTheme();
   const fill = bagger === 'mine' ? 'mineFill' : bagger === 'other' ? 'otherFill' : null;
   const radius = StyleSheet.flatten(style)?.borderRadius ?? Radius.md;
+  const ring = !!atBat && (!!fill || !!ringUndrafted);
   return (
-    <View style={[style, fill && { backgroundColor: theme[fill], borderRadius: radius }]}>
+    <View style={[style, (fill || ring) && { borderRadius: radius }, fill && { backgroundColor: theme[fill] }]}>
       <FillSurface fill={fill}>{children}</FillSurface>
-      {atBat && fill && (
+      {ring && (
         <View
           pointerEvents="none"
           style={[StyleSheet.absoluteFill, styles.ring, { borderRadius: radius, borderColor: bagger === 'mine' ? theme.mineRing : theme.otherRing }]}
