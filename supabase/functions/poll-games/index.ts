@@ -76,7 +76,7 @@ async function saveGame(gamePk: number, alerts: boolean): Promise<number> {
   const [boxscore, linescore] = await Promise.all([mlb(`/game/${gamePk}/boxscore`), mlb(`/game/${gamePk}/linescore`)]);
   // The live state and the score (the schedule, which also has it, is only read once a minute
   // during games), in one update.
-  const live = linescoreLive(linescore);
+  const live = linescoreLive(linescore, boxscore?.teams?.home?.team?.id);
   const runs = linescoreRuns(linescore);
   const table = linescoreTable(linescore);
   if (live || runs || table) {
