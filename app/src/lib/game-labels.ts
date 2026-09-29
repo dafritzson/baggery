@@ -44,3 +44,11 @@ export function ownerOf(data: SeasonData, playerId: number, game: GameInfo): str
       (started ? Date.parse(s.from_at) <= t && (s.to_at === null || t < Date.parse(s.to_at)) : s.to_at === null),
   )?.fantasy_team_id;
 }
+
+/** Two-word club names; every other club's nickname is its last word ("Atlanta Braves" → "Braves"). */
+const TWO_WORD = ['Red Sox', 'White Sox', 'Blue Jays'];
+
+/** A club's nickname, short enough for two to sit side by side on a phone. */
+export function nickname(name: string): string {
+  return TWO_WORD.find((n) => name.endsWith(` ${n}`)) ?? name.split(' ').pop() ?? name;
+}
