@@ -8,7 +8,8 @@ import { createContext, createElement, type ReactNode, use, useMemo } from 'reac
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-type Theme = (typeof Colors)['light' | 'dark'];
+// Any color per key, not the palette's exact values, so a fill's theme can swap some of them.
+type Theme = Record<keyof (typeof Colors)['light'], string>;
 
 /** The fill of the surface around, when it's one of the dark highlight fills (FillSurface). */
 const FillContext = createContext<'mineFill' | 'otherFill' | null>(null);
@@ -30,7 +31,7 @@ function onFill(base: Theme, fill: string): Theme {
     accentText: fill,
     success: '#86EFAC',
     danger: '#FCA5A5',
-  } as Theme;
+  };
 }
 
 /** Whether this is drawn on one of the dark highlight fills. */
