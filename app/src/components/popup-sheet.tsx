@@ -47,13 +47,15 @@ export function PopupSheet({
   const theme = useTheme();
   const layout = useLayout();
   const wide = layout === 'wide' || dialog;
+  // A dialog on a phone: inset and shorter, so the popup under it shows around it.
+  const phoneDialog = dialog && layout !== 'wide';
   const { drag, handlers } = useDragToClose(open, onClose);
   // The backdrop fades as the sheet is dragged down.
   const dim = drag.interpolate({ inputRange: [0, 400], outputRange: [1, 0], extrapolate: 'clamp' });
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable
-        style={[styles.backdrop, wide ? styles.backdropWide : styles.backdropCompact, dialog && layout !== 'wide' && styles.backdropDialog]}
+        style={[styles.backdrop, wide ? styles.backdropWide : styles.backdropCompact, phoneDialog && styles.backdropDialog]}
         onPress={onClose}
         accessibilityLabel="Close">
         <Animated.View style={[StyleSheet.absoluteFill, styles.dim, { opacity: wide ? 1 : dim }]} pointerEvents="none" />
@@ -62,7 +64,7 @@ export function PopupSheet({
           onPress={() => {}}
           style={[
             styles.panel,
-            wide ? [styles.panelWide, { maxWidth }] : [styles.panelCompact, tall && styles.panelTall],
+            wide ? [styles.panelWide, { maxWidth }, phoneDialog && styles.panelDialog] : [styles.panelCompact, tall && styles.panelTall],
             { backgroundColor: theme.background, boxShadow: theme.floating },
             !wide && { transform: [{ translateY: drag }] },
           ]}>
@@ -132,9 +134,10 @@ const styles = StyleSheet.create({
   dim: { backgroundColor: 'rgba(0,0,0,0.5)' },
   backdropWide: { justifyContent: 'center', padding: Spacing.four },
   backdropCompact: { justifyContent: 'flex-end' },
-  backdropDialog: { padding: Spacing.three },
+  backdropDialog: { paddingHorizontal: Spacing.four, paddingVertical: Spacing.five },
   panel: { width: '100%', overflow: 'hidden' },
   panelWide: { maxHeight: '90%', borderRadius: Radius.lg },
+  panelDialog: { maxHeight: '75%' },
   panelCompact: { maxHeight: '92%', borderTopLeftRadius: Radius.lg, borderTopRightRadius: Radius.lg },
   panelTall: { height: '92%' },
   // Web: keep the browser from scrolling or selecting text while the header is dragged.
