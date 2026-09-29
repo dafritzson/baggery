@@ -17,6 +17,7 @@ import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { type BoxScore, useBoxScore } from '@/lib/box-score';
 import { inningLabel, nickname, ownerOf, seriesLabel, statusLine } from '@/lib/game-labels';
+import { PlayerProvider } from '@/lib/player';
 import { type GameInfo, useScores } from '@/lib/scores';
 import type { SeasonData } from '@/lib/season';
 import { ownerName, teamName } from '@/lib/teams';
@@ -83,7 +84,8 @@ export function BoxScoreSheet({ data, game, onClose }: { data: SeasonData; game:
   return (
     <PopupSheet open onClose={onClose} maxWidth={900}>
       {(dragHandlers) => (
-        <>
+        // Its players open over it, not behind it under the app's own player popup.
+        <PlayerProvider stacked>
           <SheetHandle dragHandlers={dragHandlers} style={[styles.head, { borderBottomColor: theme.border }]}>
             <View style={styles.headTop}>
               <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.headLabel}>
@@ -129,7 +131,7 @@ export function BoxScoreSheet({ data, game, onClose }: { data: SeasonData; game:
             {body}
             {!failed && box && <Legend live={!!live} />}
           </ScrollView>
-        </>
+        </PlayerProvider>
       )}
     </PopupSheet>
   );
