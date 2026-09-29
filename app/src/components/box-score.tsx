@@ -16,7 +16,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { type BoxScore, useBoxScore } from '@/lib/box-score';
-import { inningLabel, ownerOf, seriesLabel, statusLine } from '@/lib/game-labels';
+import { inningLabel, nickname, ownerOf, seriesLabel, statusLine } from '@/lib/game-labels';
 import { type GameInfo, useScores } from '@/lib/scores';
 import type { SeasonData } from '@/lib/season';
 import { ownerName, teamName } from '@/lib/teams';
@@ -116,10 +116,12 @@ export function BoxScoreSheet({ data, game, onClose }: { data: SeasonData; game:
               <Toggle
                 options={(['away', 'home'] as const).map((s) => ({
                   value: s,
-                  label: live && live.battingSide === s ? `${abbr(s)} · at bat` : name(s),
+                  label: nickname(name(s)),
+                  note: live ? (live.battingSide === s ? 'At bat' : '') : undefined,
                 }))}
                 value={side}
                 onChange={setSide}
+                fill
               />
             )}
           </SheetHandle>
