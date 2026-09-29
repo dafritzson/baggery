@@ -238,9 +238,11 @@ export function StandingsTable({
 
 /** Team name over the owner line (see ownerLine), with a YOU tag on my team. */
 function TeamLabel({ name, owner, mine }: { name: string; owner: string | null; mine: boolean }) {
+  // A size smaller on phones, where the names otherwise get cut off.
+  const compact = useLayout() === 'compact';
   return (
     <View style={styles.teamLabel}>
-      <ThemedText numberOfLines={1} style={styles.teamName}>{name}</ThemedText>
+      <ThemedText numberOfLines={1} style={[styles.teamName, compact && styles.teamNameCompact]}>{name}</ThemedText>
       <View style={styles.ownerLine}>
         {owner && <ThemedText numberOfLines={1} themeColor="textSecondary" style={styles.owner}>{owner}</ThemedText>}
         {mine && <YouTag />}
@@ -383,6 +385,7 @@ const styles = StyleSheet.create({
   badge: { marginRight: Spacing.one },
   teamLabel: { flex: 1, minWidth: 0, gap: 1 },
   teamName: { fontSize: 15, lineHeight: 19, fontWeight: 600 },
+  teamNameCompact: { fontSize: 13, lineHeight: 17 },
   ownerLine: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   owner: { fontSize: 12, lineHeight: 15, flexShrink: 1 },
   team: { gap: Spacing.four },
