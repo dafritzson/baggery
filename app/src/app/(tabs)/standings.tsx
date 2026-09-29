@@ -240,8 +240,9 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
       </Screen>
     );
   }
+  // Narrower side margins on phones, so the tables have room for team and player names.
   return (
-    <Screen width="wide">
+    <Screen width="wide" tight>
       <View style={[styles.toggle, { backgroundColor: theme.backgroundElement, boxShadow: theme.sunken }]} accessibilityRole="tablist">
         {(['standings', 'team'] as const).map((v) => {
           const active = view === v;
