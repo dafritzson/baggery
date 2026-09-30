@@ -120,7 +120,7 @@ export default function GamesScreen() {
                 })}
                 value={day}
                 onChange={showDay}
-                stepper
+                stepper={days.map((d) => dayLabel(d, today))}
               />
             )}
             {/* The chip says "Championship", not "Championship Series", to fit beside the toggle on phones. */}
@@ -176,8 +176,9 @@ export default function GamesScreen() {
 
 /**
  * The current choice as a chip, opening a menu of them all (on web, scrolled to the current one).
- * `stepper` adds arrows inside the chip to step to the previous or next choice; at either end
- * that arrow is hidden but keeps its place.
+ * `stepper` adds arrows inside the chip to step to the previous or next choice. The chip is as wide
+ * as the longest label it can show, so the arrows never move; at either end an arrow is hidden but
+ * keeps its place.
  */
 function MenuChip<T extends string>({
   label,
@@ -193,7 +194,8 @@ function MenuChip<T extends string>({
   options: { value: T; label: string }[];
   value?: T;
   onChange: (value: T) => void;
-  stepper?: boolean;
+  /** Every label the chip can show, to size it to the longest. */
+  stepper?: string[];
 }) {
   const theme = useTheme();
   // By the World Series the list of days is long.
@@ -217,6 +219,13 @@ function MenuChip<T extends string>({
       <DropdownMenu.Trigger className="menu-trigger menu-trigger-chip" aria-label={`Showing ${label}, change ${title}`}>
         <View style={[styles.chip, !stepper && surface, stepper && styles.chipInStepper]}>
           <ThemedText type="smallBold">{stepper ? label : `${label} ▾`}</ThemedText>
+          {/* Every label, invisible and flat: they set the width but take no height. */}
+          {stepper &&
+            [...new Set(stepper)].map((l) => (
+              <ThemedText key={l} type="smallBold" aria-hidden style={styles.sizer}>
+                {l}
+              </ThemedText>
+            ))}
         </View>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content className="menu-content menu-content-scroll chip-menu" align="start" sideOffset={6} collisionPadding={8}>
@@ -633,7 +642,8 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: Spacing.two + 4, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
   // The day chip with its arrows: one raised surface, split by hairlines.
   stepper: { flexDirection: 'row', alignItems: 'stretch', borderRadius: Radius.md },
-  chipInStepper: { paddingHorizontal: Spacing.two + 2 },
+  chipInStepper: { paddingHorizontal: Spacing.two + 2, alignItems: 'center' },
+  sizer: { height: 0, overflow: 'hidden' },
   step: { width: 26, alignItems: 'center', justifyContent: 'center' },
   stepPrev: { borderRightWidth: StyleSheet.hairlineWidth },
   stepNext: { borderLeftWidth: StyleSheet.hairlineWidth },
