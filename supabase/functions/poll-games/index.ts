@@ -5,8 +5,9 @@
 //                            games. The cron job calls every 10 seconds while there's something to
 //                            fetch (private.poll_due): live games every call, the schedule every
 //                            minute while games are on (10 otherwise), finished games every 10.
-//                            Then queues the cut alerts of games just finished and sends the
-//                            alerts that are due (bag, sub and cut alerts: alerts.ts).
+//                            Then queues the cut alerts of games just finished and the stat
+//                            correction alerts, and sends the alerts that are due (bag, sub, cut,
+//                            lineup and stat correction alerts: alerts.ts).
 // POST { setup: true }       from the deploy: records this function's URL for the cron job.
 // POST { seasonId }          commissioner: reloads every game of that season's postseason.
 // POST { seasonId, videos: true, after? }
@@ -19,7 +20,7 @@ import { autoCloseRounds } from '../_shared/close-round.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
 import { logCommissioner } from '../_shared/league-log.ts';
-import { queueCutAlerts, queueLineupAlerts, queueSubAlerts, sendBagAlerts, sendQueuedAlerts } from './alerts.ts';
+import { queueCorrectionAlerts, queueCutAlerts, queueLineupAlerts, queueSubAlerts, sendBagAlerts, sendQueuedAlerts } from './alerts.ts';
 import {
   type ProbableRow,
   boxscoreBatting,
@@ -432,7 +433,7 @@ serve(async (req) => {
           console.error('auto-close', e);
         }
         // Push notifications for the bags this poll (or an earlier one, after a spoiler delay) found,
-        // and the lineup changes and cut line crossings.
+        // and the lineup changes, cut line crossings and stat corrections.
         let bagAlerts = 0;
         try {
           bagAlerts = await sendBagAlerts();
@@ -443,6 +444,11 @@ serve(async (req) => {
           await queueCutAlerts();
         } catch (e) {
           console.error('cut alerts', e);
+        }
+        try {
+          await queueCorrectionAlerts();
+        } catch (e) {
+          console.error('correction alerts', e);
         }
         let otherAlerts = 0;
         try {

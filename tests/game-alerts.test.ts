@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { Owner } from '../supabase/functions/_shared/core/bag-alerts.ts';
 import {
+  type Correction,
   type CutSpot,
   type LineupHitter,
   type Sub,
+  correctionAlert,
   cutAlert,
   cutFlips,
   cutSpots,
@@ -177,5 +179,46 @@ describe('scratchAlert', () => {
       title: '🪑 Freddie Freeman is out of the lineup',
       body: 'A late change for the Los Angeles Dodgers · Bag Boys (Mike)',
     });
+  });
+});
+
+describe('correctionAlert', () => {
+  const none = { singles: 0, doubles: 0, triples: 0, hr: 0 };
+  const correction = (over: Partial<Correction> = {}): Correction => ({
+    player: 'Mookie Betts',
+    before: { ...none, doubles: 1 },
+    after: { ...none, singles: 1 },
+    team: 'Bag Boys',
+    manager: 'Mike',
+    yours: false,
+    ...over,
+  });
+
+  it('names a hit scored as another', () => {
+    expect(correctionAlert(correction())).toEqual({
+      title: '✏️ Stat correction for Mookie Betts',
+      body: 'Double changed to a single: −1 bag for Bag Boys (Mike)',
+    });
+    expect(correctionAlert(correction({ before: { ...none, singles: 1 }, after: { ...none, doubles: 1 } })).body).toBe(
+      'Single changed to a double: +1 bag for Bag Boys (Mike)',
+    );
+  });
+
+  it('names a hit taken away', () => {
+    expect(correctionAlert(correction({ before: { ...none, singles: 2, hr: 1 }, after: { ...none, singles: 1, hr: 1 }, yours: true })).body).toBe(
+      'Single taken away: −1 bag for Bag Boys',
+    );
+    expect(correctionAlert(correction({ before: { ...none, doubles: 2 }, after: none })).body).toBe(
+      '2 doubles taken away: −4 bags for Bag Boys (Mike)',
+    );
+  });
+
+  it('names a hit given', () => {
+    expect(correctionAlert(correction({ before: none, after: { ...none, doubles: 1 } })).body).toBe(
+      'Credited with a double: +2 bags for Bag Boys (Mike)',
+    );
+    expect(correctionAlert(correction({ before: none, after: { ...none, singles: 1, hr: 1 } })).body).toBe(
+      'Credited with a single and a home run: +5 bags for Bag Boys (Mike)',
+    );
   });
 });

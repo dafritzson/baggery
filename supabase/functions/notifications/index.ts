@@ -1,8 +1,8 @@
-// Alerts on this device (Settings): game alerts (bag, sub, cut and lineup) and draft alerts (on the
+// Alerts on this device (Settings): game alerts (bag, sub, cut, lineup and stat correction) and draft alerts (on the
 // clock, draft started, autodraft picked, draft done). poll-games sends the game alerts themselves, and the draft function the draft alerts.
 //
 // POST { action: 'key' }                          the public key browsers subscribe with.
-// POST { action: 'subscribe', subscription, scope, delaySeconds, bags?, subs?, cut?, lineups?,
+// POST { action: 'subscribe', subscription, scope, delaySeconds, bags?, subs?, cut?, lineups?, corrections?,
 //                   draft?, draftStarted?, autopicks?, draftDone? }
 //                                                 signed in: saves this browser's subscription and
 //                                                 its choices (also to change them). `scope` is
@@ -31,6 +31,7 @@ interface Body {
   subs?: boolean;
   cut?: boolean;
   lineups?: boolean;
+  corrections?: boolean;
   draft?: boolean;
   draftStarted?: boolean;
   autopicks?: boolean;
@@ -58,16 +59,17 @@ serve(async (req) => {
       const subs = typeof body.subs === 'boolean' ? body.subs : null;
       const cut = typeof body.cut === 'boolean' ? body.cut : null;
       const lineups = typeof body.lineups === 'boolean' ? body.lineups : null;
+      const corrections = typeof body.corrections === 'boolean' ? body.corrections : null;
       const draft = typeof body.draft === 'boolean' ? body.draft : null;
       const draftStarted = typeof body.draftStarted === 'boolean' ? body.draftStarted : null;
       const autopicks = typeof body.autopicks === 'boolean' ? body.autopicks : null;
       const draftDone = typeof body.draftDone === 'boolean' ? body.draftDone : null;
       // An endpoint belongs to one browser; whoever signs in there last gets its alerts.
       await sql`
-        insert into push_subscriptions (endpoint, user_id, p256dh, auth, scope, delay_seconds, bag_alerts, sub_alerts, cut_alerts, lineup_alerts, draft_alerts,
+        insert into push_subscriptions (endpoint, user_id, p256dh, auth, scope, delay_seconds, bag_alerts, sub_alerts, cut_alerts, lineup_alerts, correction_alerts, draft_alerts,
                                      draft_started_alerts, autopick_alerts, draft_done_alerts)
         values (${endpoint}, ${userId}, ${keys.p256dh}, ${keys.auth}, ${body.scope}, ${delay},
-                coalesce(${bags}::boolean, true), coalesce(${subs}::boolean, true), coalesce(${cut}::boolean, true), coalesce(${lineups}::boolean, false), coalesce(${draft}::boolean, true),
+                coalesce(${bags}::boolean, true), coalesce(${subs}::boolean, true), coalesce(${cut}::boolean, true), coalesce(${lineups}::boolean, false), coalesce(${corrections}::boolean, true), coalesce(${draft}::boolean, true),
                 coalesce(${draftStarted}::boolean, true), coalesce(${autopicks}::boolean, false), coalesce(${draftDone}::boolean, true))
         on conflict (endpoint) do update set
           user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth,
@@ -76,6 +78,7 @@ serve(async (req) => {
           sub_alerts = coalesce(${subs}::boolean, push_subscriptions.sub_alerts),
           cut_alerts = coalesce(${cut}::boolean, push_subscriptions.cut_alerts),
           lineup_alerts = coalesce(${lineups}::boolean, push_subscriptions.lineup_alerts),
+          correction_alerts = coalesce(${corrections}::boolean, push_subscriptions.correction_alerts),
           draft_alerts = coalesce(${draft}::boolean, push_subscriptions.draft_alerts),
           draft_started_alerts = coalesce(${draftStarted}::boolean, push_subscriptions.draft_started_alerts),
           autopick_alerts = coalesce(${autopicks}::boolean, push_subscriptions.autopick_alerts),

@@ -169,6 +169,11 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   from MLB, not Supabase egress. Each read compares the lineups of games starting within a day with
   `private.lineups` (a couple of dozen small rows) and only looks up drafted hitters and devices
   when one changed: a few times a game. Off by default; the pushes are ~1 KB each.
+- **Stat correction alerts.** No new MLB requests, Edge Function calls or realtime traffic: the
+  finished-game box scores `poll-games` already re-reads every 10 minutes for 6 hours are what
+  bring scoring changes in. A trigger records a drafted hitter's changed total bases (a handful
+  a postseason), and each cron call takes them in one small query (usually nothing back). The
+  pushes are ~1 KB each, a few per correction. On by default.
 - **Draft alerts.** No new Edge Function calls, polling or realtime traffic: the draft function,
   already called for each pick, pass or start, sends "⏰ You're on the clock" to the next manager's
   devices after it answers (one small `push_subscriptions` lookup and ~1 KB per device). Four
