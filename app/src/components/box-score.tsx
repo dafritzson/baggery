@@ -21,20 +21,41 @@ import { type BoxScore, useBoxScore } from '@/lib/box-score';
 import { lineScore, nickname, ownerOf, seriesLabel, statusLine } from '@/lib/game-labels';
 import { PlayerProvider } from '@/lib/player';
 import { type GameInfo, useScores } from '@/lib/scores';
-import type { SeasonData } from '@/lib/season';
+import { type SeasonData, ghostManagers } from '@/lib/season';
 import { ownerName, teamName } from '@/lib/teams';
 
 type Side = 'away' | 'home';
 
-/** Whose hitter he is in this game, and the name to show for another manager. */
+type Owner = { bagger: Bagger; owner: string | null; out?: boolean };
+
+/**
+ * Whose hitter he is in this game, and the name to show for another manager. An eliminated
+ * manager's hitter isn't highlighted and their name is struck through; the ghost shows a 👻 for
+ * each manager behind it.
+ */
 function baggersFor(data: SeasonData, game: GameInfo) {
-  return (playerId: number): { bagger: Bagger; owner: string | null } => {
+  const ghosts = '👻'.repeat(Math.max(1, ghostManagers(data).length));
+  return (playerId: number): Owner => {
     const teamId = ownerOf(data, playerId, game);
     if (!teamId) return { bagger: null, owner: null };
-    if (teamId === data.myTeam?.id) return { bagger: 'mine', owner: null };
     const team = data.teams.find((t) => t.id === teamId);
-    return { bagger: 'other', owner: team ? (ownerName(data, team) ?? teamName(team)) : null };
+    if (team?.is_ghost) return { bagger: 'other', owner: ghosts };
+    const owner = team ? (ownerName(data, team) ?? teamName(team)) : null;
+    if (team && team.eliminated_after_round !== null) return { bagger: null, owner, out: true };
+    if (teamId === data.myTeam?.id) return { bagger: 'mine', owner: null };
+    return { bagger: 'other', owner };
   };
+}
+
+/** The owner under a hitter's name: YOU, another manager, or an eliminated one struck through. */
+function OwnerLabel({ bagger, owner, out }: Owner) {
+  if (bagger === 'mine') return <YouTag />;
+  if (!owner) return null;
+  return (
+    <ThemedText themeColor="textSecondary" numberOfLines={1} style={[styles.owner, out && styles.out]}>
+      {owner}
+    </ThemedText>
+  );
 }
 
 /**
@@ -309,12 +330,12 @@ function TeamBox({ data, game, box, side }: { data: SeasonData; game: GameInfo; 
         <ThemedText type="smallBold" themeColor="textSecondary" style={[styles.headText, styles.num, styles.tb]}>TB</ThemedText>
       </View>
       {rows.map((row) => {
-        const { bagger, owner } = baggers(row.playerId);
+        const who = baggers(row.playerId);
         const tag = up.get(row.playerId);
         return (
-          <HitterRow key={row.playerId} bagger={bagger} atBat={tag === 'AB'} ringUndrafted style={[styles.row, styles.line, { borderTopColor: theme.border }]}>
+          <HitterRow key={row.playerId} bagger={who.bagger} atBat={tag === 'AB'} ringUndrafted style={[styles.row, styles.line, { borderTopColor: theme.border }]}>
             <ThemedText type="small" themeColor="textSecondary" style={[styles.spot, styles.spotText]}>{row.sub || row.spot === null ? '' : row.spot}</ThemedText>
-            <BatterCell row={row} bagger={bagger} owner={owner} tag={tag} bags={row.line?.tb ? hitBags(row.line.tb, hitsOf(row.playerId), row.playerId, game.gamePk, row.line).join('') : ''} />
+            <BatterCell row={row} who={who} tag={tag} bags={row.line?.tb ? hitBags(row.line.tb, hitsOf(row.playerId), row.playerId, game.gamePk, row.line).join('') : ''} />
             {COLUMNS.map((c) => number(row.line ? row.line[c.key] : '–', c.key))}
             <View style={styles.tb}>{number(row.line ? row.line.tb : '–', 'tb', true)}</View>
           </HitterRow>
@@ -339,14 +360,12 @@ function TeamBox({ data, game, box, side }: { data: SeasonData; game: GameInfo; 
 /** Name and position, a sub indented under the hitter he replaced; for a drafted hitter, his owner and bags below. */
 function BatterCell({
   row,
-  bagger,
-  owner,
+  who,
   tag,
   bags,
 }: {
   row: BoxRow;
-  bagger: Bagger;
-  owner: string | null;
+  who: Owner;
   tag?: string;
   bags: string;
 }) {
@@ -360,10 +379,10 @@ function BatterCell({
         {!!row.position && <ThemedText themeColor="textSecondary" style={styles.pos}>{row.position}</ThemedText>}
         {tag && <UpTag label={tag} />}
       </View>
-      {bagger && (
+      {(!!who.bagger || !!who.owner) && (
         <View style={styles.ownerLine}>
-          {bagger === 'mine' ? <YouTag /> : <ThemedText themeColor="textSecondary" numberOfLines={1} style={styles.owner}>{owner}</ThemedText>}
-          {!!row.line && (
+          <OwnerLabel {...who} />
+          {!!who.bagger && !!row.line && (
             <ThemedText numberOfLines={1} style={styles.bags} accessibilityLabel={`${row.line.tb} total bases`}>
               {row.line.tb ? bags : '–'}
             </ThemedText>
@@ -387,18 +406,16 @@ function Lineup({ data, game, box, teamId, title }: { data: SeasonData; game: Ga
   const inLineup = new Set(lineup.map((p) => p.id));
   const bench = drafted.filter((id) => !inLineup.has(id));
   const benchLabel = (id: number) => {
-    const { bagger, owner } = baggers(id);
-    return `${data.players.get(id)?.full_name ?? `Player ${id}`} · ${bagger === 'mine' ? 'you' : owner}`;
+    const { bagger, owner, out } = baggers(id);
+    return `${data.players.get(id)?.full_name ?? `Player ${id}`} · ${bagger === 'mine' ? 'you' : out ? `${owner} (out)` : owner}`;
   };
   return (
     <View style={styles.lineup}>
       <ThemedText type="smallBold" numberOfLines={1}>{title}</ThemedText>
-      {probable && (
-        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.note}>
-          SP <ThemedText type="smallBold" style={styles.note}>{probable.name}</ThemedText>
-          {probable.hand ? ` (${probable.hand})` : ''}
-        </ThemedText>
-      )}
+      <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.note}>
+        SP <ThemedText type="smallBold" style={styles.note}>{probable?.name ?? 'TBD'}</ThemedText>
+        {probable?.hand ? ` (${probable.hand})` : ''}
+      </ThemedText>
       {lineup.length === 0 ? (
         <ThemedView type="background" style={[styles.pending, { borderColor: theme.border }]}>
           <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
@@ -407,20 +424,19 @@ function Lineup({ data, game, box, teamId, title }: { data: SeasonData; game: Ga
         </ThemedView>
       ) : (
         lineup.map((p, i) => {
-          const { bagger, owner } = baggers(p.id);
+          const who = baggers(p.id);
           return (
-            <HitterRow key={p.id} bagger={bagger} style={[styles.lineupRow, { borderTopColor: theme.border }]}>
+            <HitterRow key={p.id} bagger={who.bagger} style={[styles.lineupRow, { borderTopColor: theme.border }]}>
               <ThemedText type="small" themeColor="textSecondary" style={[styles.spot, styles.spotText]}>{i + 1}</ThemedText>
               <View style={styles.who}>
                 <View style={styles.nameLine}>
                   <PlayerName playerId={p.id} type="smallBold" numberOfLines={1} style={styles.nameText}>{p.name}</PlayerName>
                   {!!p.pos && <ThemedText themeColor="textSecondary" style={styles.pos}>{p.pos}</ThemedText>}
                 </View>
-                {bagger && (
-                  <View style={styles.ownerLine}>
-                    {bagger === 'mine' ? <YouTag /> : <ThemedText themeColor="textSecondary" numberOfLines={1} style={styles.owner}>{owner}</ThemedText>}
-                  </View>
-                )}
+                {/* Every row keeps the owner line, empty when undrafted, so the two teams' rows line up side by side. */}
+                <View style={[styles.ownerLine, styles.ownerSlot]}>
+                  <OwnerLabel {...who} />
+                </View>
               </View>
             </HitterRow>
           );
@@ -499,7 +515,9 @@ const styles = StyleSheet.create({
   nameText: { fontSize: 12.5, lineHeight: 17 },
   pos: { fontSize: 10, lineHeight: 14, fontWeight: 600, flexShrink: 0 },
   ownerLine: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
+  ownerSlot: { minHeight: 15 },
   owner: { fontSize: 10.5, lineHeight: 14, flexShrink: 1 },
+  out: { textDecorationLine: 'line-through' },
   bags: { marginLeft: 'auto', fontSize: 11, lineHeight: 14, letterSpacing: -1 },
   num: { width: 24, textAlign: 'right', fontSize: 12, lineHeight: 17, fontVariant: ['tabular-nums'] },
   tb: { width: 30, paddingRight: 4, alignItems: 'flex-end' },
