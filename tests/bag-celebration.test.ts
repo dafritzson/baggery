@@ -70,7 +70,7 @@ function scores(over: Partial<Scores> = {}): Scores {
     games: [toGame(gameRow(1))],
     // Ohtani has a single so far.
     stats: [{ gamePk: 1, playerId: OHTANI, tb: 1 }],
-    lines: [{ gamePk: 1, playerId: OHTANI, ab: 2, h: 1, doubles: 0, triples: 0, hr: 0, bb: 0 }],
+    lines: [{ gamePk: 1, playerId: OHTANI, ab: 2, h: 1, doubles: 0, triples: 0, hr: 0, bb: 0, spot: 3 }],
     ...over,
   };
 }

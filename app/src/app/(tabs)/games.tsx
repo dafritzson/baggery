@@ -7,7 +7,7 @@ import { postseasonSeries } from '@core/schedule.ts';
 import { SERIES } from '@core/scoreboard.ts';
 import type { GameType } from '@core/types.ts';
 
-import { type Bagger, HitterRow } from '@/components/at-bat';
+import { type Bagger, HitterRow, UpTag } from '@/components/at-bat';
 import { BoxScoreSheet } from '@/components/box-score';
 import { Card } from '@/components/card';
 import { HitVideosSheet } from '@/components/hit-videos';
@@ -456,7 +456,9 @@ function OpenCard({ data, scores, game, fill }: CardProps) {
   const lines = new Map(scores.lines.filter((l) => l.gamePk === game.gamePk).map((l) => [l.playerId, l]));
   /**
    * A small card per team listing who's up, one name per line: the batting team's batter, on
-   * deck and in the hole (its card outlined in blue), and the fielding team's next three. Your
+   * deck and in the hole (its card outlined in blue), and the fielding team's next three. Each
+   * shows his spot in the batting order (blank until the box score has him), except the batter,
+   * who gets the red AB tag the box score uses. Your
    * hitters are dark green and other managers' dark blue, like the box score; the one at bat, if
    * drafted, gets a pulsing ring.
    */
@@ -465,7 +467,6 @@ function OpenCard({ data, scores, game, fill }: CardProps) {
     if (!live || !state) return null;
     const batting = state.battingSide === which;
     const up = batting ? state.batting : state.dueUp;
-    const labels = batting ? ['AB', 'OD', 'IH'] : ['1', '2', '3'];
     const abbr = data.mlbTeams.get(which === 'away' ? game.awayTeamId : game.homeTeamId)?.abbreviation ?? '';
     return (
       <View
@@ -480,7 +481,15 @@ function OpenCard({ data, scores, game, fill }: CardProps) {
           const whose = p ? bagger(p.id) : null;
           return (
             <HitterRow key={i} bagger={whose} atBat={batting && i === 0} style={[styles.upRow, styles.upRowFill]}>
-              <ThemedText type="small" themeColor="textSecondary" style={[styles.upLabel, !batting && styles.upLabelDigit]}>{labels[i]}</ThemedText>
+              <View style={[styles.upLabel, batting && styles.upLabelWide]}>
+                {batting && i === 0 ? (
+                  <UpTag label="AB" />
+                ) : (
+                  <ThemedText type="small" themeColor="textSecondary" style={styles.upSpot}>
+                    {(p && lines.get(p.id)?.spot) ?? ''}
+                  </ThemedText>
+                )}
+              </View>
               <ThemedText type={whose ? 'smallBold' : 'small'} numberOfLines={1} style={styles.upName}>
                 {p ? p.name.split(' ').slice(1).join(' ') || p.name : '—'}
               </ThemedText>
@@ -618,9 +627,10 @@ const styles = StyleSheet.create({
   // The batting team's card: outlined, no fill, so a filled row always means a bagger.
   upCardBatting: { borderWidth: 1.5 },
   headLabel: { flexShrink: 1, minWidth: 0 },
-  upLabel: { width: 18, flexShrink: 0, fontSize: 9, lineHeight: 14 },
-  // 1, 2, 3 in the fielding team's card need less room than AB, OD, IH.
-  upLabelDigit: { width: 7 },
+  // The batting order spot, or the batter's AB tag (so the batting team's card needs more room).
+  upLabel: { width: 7, flexShrink: 0, alignItems: 'center' },
+  upLabelWide: { width: 20 },
+  upSpot: { fontSize: 9, lineHeight: 14, fontVariant: ['tabular-nums'] },
   // The name keeps its width; the line score after it gets cut off first.
   // Names left, lines right. The line is always shown in full; a long name gives way (…).
   upName: { flexShrink: 1, minWidth: 0, fontSize: 11, lineHeight: 14 },

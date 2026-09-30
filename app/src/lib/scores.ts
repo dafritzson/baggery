@@ -133,7 +133,7 @@ function useLiveScores(data: SeasonData | null): ScoresState {
         : { data: [] };
     const livePks = (games ?? []).filter((g) => g.status === 'Live').map((g) => g.game_pk as number);
     const { data: lines } = livePks.length
-      ? await supabase.from('player_game_stats').select('game_pk, mlb_player_id, ab, h, doubles, triples, hr, bb').in('game_pk', livePks)
+      ? await supabase.from('player_game_stats').select('game_pk, mlb_player_id, ab, h, doubles, triples, hr, bb, batting_order').in('game_pk', livePks)
       : { data: [] };
     if (fetchId !== latest.current) return;
     setScores({

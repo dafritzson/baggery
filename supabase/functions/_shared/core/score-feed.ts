@@ -33,6 +33,8 @@ export interface BattingLine {
   triples: number;
   hr: number;
   bb: number;
+  /** His spot in the batting order (1–9), or null before the box score has him. */
+  spot: number | null;
 }
 
 /** One hit by a player who has been on a fantasy roster, from mlb_hits: the bags come in these. */
@@ -86,7 +88,13 @@ export function toHit(h: Row): ScoreHit {
 }
 
 export function toLine(l: Row): BattingLine {
-  return { gamePk: l.game_pk, playerId: l.mlb_player_id, ab: l.ab, h: l.h, doubles: l.doubles, triples: l.triples, hr: l.hr, bb: l.bb };
+  return { gamePk: l.game_pk, playerId: l.mlb_player_id, ab: l.ab, h: l.h, doubles: l.doubles, triples: l.triples, hr: l.hr, bb: l.bb, spot: battingSpot(l.batting_order) };
+}
+
+/** MLB's batting order is 100 × the spot, plus 1, 2, ... for each sub in it: 701 bats 7th. */
+export function battingSpot(order: unknown): number | null {
+  const n = Number(order);
+  return Number.isInteger(n) && n >= 100 && n < 1000 ? Math.floor(n / 100) : null;
 }
 
 /** Replaces the item with the same key, or adds it. */
