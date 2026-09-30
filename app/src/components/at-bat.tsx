@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import { type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Radius } from '@/constants/theme';
+import { Colors, Radius } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { FillSurface, useOnFill, useTheme } from '@/hooks/use-theme';
 
 /** Whose hitter a row is: yours, another manager's, or nobody's. */
@@ -50,12 +51,14 @@ export function HitterRow({
 export function UpTag({ label }: { label: string }) {
   const theme = useTheme();
   const onFill = useOnFill();
+  const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
   const atBat = label === 'AB';
-  // On a fill: white, in the fill's color. On the page: red for the batter, gray for the next two.
-  const [background, color] = onFill
-    ? [theme.onFill, theme.accentText]
-    : atBat
-      ? [theme.danger, '#ffffff']
+  // The batter: red everywhere, fill or not. The next two: gray on the page, white in the fill's
+  // color on a fill. (On a fill the theme's danger is a pale red, so AB takes the page's.)
+  const [background, color] = atBat
+    ? [Colors[scheme].danger, '#ffffff']
+    : onFill
+      ? [theme.onFill, theme.accentText]
       : [theme.backgroundSelected, theme.textSecondary];
   return (
     <View style={[styles.tag, { backgroundColor: background }]}>

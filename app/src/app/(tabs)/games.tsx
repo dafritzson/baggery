@@ -335,7 +335,9 @@ function BaggerCard({
           <BagRoom bags={bags.slice(0, high).join('')} onWidth={setNameRoom} />
           {hasVideo && (
             <Pressable onPress={() => setVideos(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Videos of ${name}'s hits`}>
-              <ThemedText type="smallBold" themeColor="accent">▶</ThemedText>
+              <View style={[styles.playButton, { backgroundColor: theme.playButton }]}>
+                <View style={styles.playTriangle} />
+              </View>
             </Pressable>
           )}
         </View>
@@ -657,6 +659,20 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
   },
   playerLine: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
+  // ▶ for a hitter's videos: a white triangle in a solid blue circle, so it reads as a button on
+  // the page and on your green or another manager's blue alike.
+  playButton: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  playTriangle: {
+    width: 0,
+    height: 0,
+    marginLeft: 2,
+    borderLeftWidth: 8,
+    borderTopWidth: 5,
+    borderBottomWidth: 5,
+    borderLeftColor: '#ffffff',
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+  },
   playerSecondLine: { minHeight: 18 },
   playerName: { fontSize: 13, lineHeight: 17 },
   ownerLine: { flexShrink: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
