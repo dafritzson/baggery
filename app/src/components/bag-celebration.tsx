@@ -1,7 +1,7 @@
 import { LuckiestGuy_400Regular, useFonts } from '@expo-google-fonts/luckiest-guy';
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -15,9 +15,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { BAG_EMOJI, type BagHit, bagHitBags, bagKey, bagSummary, hitHeadline, ordinal, rainCount, shakeStrength } from '@core/bag-celebration.ts';
+import { bagHitBags, bagKey, bagSummary, hitHeadline, ordinal, shakeStrength } from '@core/bag-celebration.ts';
 
 import { GAME_FONT } from '@/components/bag-game';
+import { BagRain } from '@/components/bag-rain';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -34,8 +35,6 @@ const SHOW_MS = 5000;
 const FADE_MS = 400;
 /** The popup comes in once the rain is going, and lands with a shake of the screen. */
 const POPUP_DELAY_MS = 500;
-/** Bags keep starting to fall for this long, so the last land about as the popup goes. */
-const RAIN_MS = 3200;
 /** The app icon's emerald grass. */
 const GRASS = '#0E7A4B';
 /** The countdown runs even with reduce motion on: it's a timer, not decoration. */
@@ -108,7 +107,7 @@ function CelebrationView({ celebration, onDone }: { celebration: Celebration; on
       <Animated.View style={[StyleSheet.absoluteFill, styles.dim, backdropStyle]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Close" />
       </Animated.View>
-      {rain && <Rain bag={bag} />}
+      {rain && <BagRain bag={bag} />}
       <View style={styles.center} pointerEvents="box-none">
         <Animated.View style={[styles.cardWrap, cardStyle]}>
           <Pressable
@@ -148,7 +147,8 @@ function Card({
   const theme = useTheme();
   const { data } = useSeason();
   const { scores } = useScores();
-  const barStyle = useAnimatedStyle(() => ({ width: `${(1 - progress.value) * 100}%` }));
+  // Shrunk with a transform rather than its width, so the card isn't laid out and redrawn every frame.
+  const barStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: 1 - progress.value }] }));
   const summary = useMemo(
     () =>
       data && scores
@@ -228,68 +228,17 @@ function Card({
   );
 }
 
-interface Drop {
-  emoji: string;
-  x: number;
-  size: number;
-  delay: number;
-  duration: number;
-  spin: number;
-  sway: number;
-}
-
-function makeDrops(bag: BagHit, width: number): Drop[] {
-  return Array.from({ length: rainCount(bag) }, () => ({
-    emoji: BAG_EMOJI[Math.floor(Math.random() * BAG_EMOJI.length)],
-    x: Math.random() * width,
-    size: 24 + Math.random() * 44,
-    // Front-loaded, so it starts as a downpour and keeps going.
-    delay: Math.random() ** 1.4 * RAIN_MS,
-    duration: 1500 + Math.random() * 900,
-    spin: (Math.random() - 0.5) * 2,
-    sway: (Math.random() - 0.5) * 2,
-  }));
-}
-
-/** Bag emoji falling past the whole screen, harder for more bags. */
-function Rain({ bag }: { bag: BagHit }) {
-  const { width, height } = useWindowDimensions();
-  // Once per celebration: a resize doesn't reshuffle the rain.
-  const [drops] = useState(() => makeDrops(bag, width));
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {drops.map((drop, i) => (
-        <FallingEmoji key={i} drop={drop} height={height} />
-      ))}
-    </View>
-  );
-}
-
-function FallingEmoji({ drop, height }: { drop: Drop; height: number }) {
-  const fall = useSharedValue(0);
-  useEffect(() => {
-    fall.set(withDelay(drop.delay, withTiming(1, { duration: drop.duration, easing: Easing.in(Easing.quad) })));
-  }, [drop, fall]);
-  const style = useAnimatedStyle(() => ({
-    opacity: fall.value > 0 ? 1 : 0,
-    transform: [
-      { translateY: -drop.size * 1.5 + fall.value * (height + drop.size * 3) },
-      { translateX: drop.sway * 40 * Math.sin(fall.value * Math.PI) },
-      { rotate: `${drop.spin * 200 * fall.value}deg` },
-    ],
-  }));
-  return (
-    <Animated.View style={[styles.drop, { left: drop.x - drop.size / 2 }, style]}>
-      <Text style={{ fontSize: drop.size, lineHeight: drop.size * 1.25 }}>{drop.emoji}</Text>
-    </Animated.View>
-  );
-}
-
 const styles = StyleSheet.create({
   layer: { zIndex: 1000 },
   dim: { backgroundColor: 'rgba(0, 0, 0, 0.35)' },
   center: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center', padding: Spacing.three },
-  cardWrap: { width: '100%', maxWidth: 360 },
+  cardWrap: {
+    width: '100%',
+    maxWidth: 360,
+    // Web: its own layer, always, so it isn't repainted with the rain behind it or moved between
+    // layers as the drops pass under it.
+    ...(Platform.OS === 'web' ? ({ willChange: 'transform, opacity' } as object) : null),
+  },
   card: { borderRadius: Radius.lg, overflow: 'hidden' },
   band: {
     backgroundColor: GRASS,
@@ -319,7 +268,13 @@ const styles = StyleSheet.create({
   label: { flexShrink: 1 },
   value: { textAlign: 'right' },
   track: { height: 4 },
-  bar: { height: 4, backgroundColor: GRASS },
+  bar: {
+    height: 4,
+    backgroundColor: GRASS,
+    transformOrigin: 'left',
+    // Web: its own layer too, so shrinking it doesn't repaint the card.
+    ...(Platform.OS === 'web' ? ({ willChange: 'transform' } as object) : null),
+  },
   close: {
     position: 'absolute',
     top: Spacing.two,
@@ -332,5 +287,4 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.25)',
   },
   closeText: { color: '#FFFFFF', fontSize: 16, fontWeight: 700 },
-  drop: { position: 'absolute', top: 0 },
 });
