@@ -52,7 +52,7 @@ export const Colors = {
     /** Text on those fills. */
     onFill: '#ffffff',
     onFillSecondary: 'rgba(255, 255, 255, 0.72)',
-    /** The ▶ button for a hitter's videos: the same bright blue on the page and on either fill. */
+    /** The ▶ for a hitter's videos: blue on the page, and a light blue on the fills (use-theme). */
     playButton: '#2563EB',
     /** An on/off switch's track when off (on, it's the accent). */
     switchOff: '#C4C6CC',
@@ -87,7 +87,7 @@ export const Colors = {
     otherRing: '#60A5FA',
     onFill: '#ffffff',
     onFillSecondary: 'rgba(255, 255, 255, 0.72)',
-    playButton: '#2563EB',
+    playButton: '#60A5FA',
     switchOff: '#4A4D52',
   },
 } as const;

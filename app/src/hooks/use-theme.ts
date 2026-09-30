@@ -29,6 +29,8 @@ function onFill(base: Theme, fill: string): Theme {
     textSecondary: base.onFillSecondary,
     accent: base.onFill,
     accentText: fill,
+    // The ▶ stays blue, not white like other accents, so it still looks tappable.
+    playButton: '#60A5FA',
     success: '#86EFAC',
     danger: '#FCA5A5',
   };
