@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from 'react';
-import { type LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { type LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { BAG_EMOJI, hitBags } from '@core/bag-celebration.ts';
@@ -120,6 +120,7 @@ export default function GamesScreen() {
                 })}
                 value={day}
                 onChange={showDay}
+                stepper
               />
             )}
             {/* The chip says "Championship", not "Championship Series", to fit beside the toggle on phones. */}
@@ -173,13 +174,18 @@ export default function GamesScreen() {
   );
 }
 
-/** The current choice as a chip, opening a menu of them all (on web, scrolled to the current one). */
+/**
+ * The current choice as a chip, opening a menu of them all (on web, scrolled to the current one).
+ * `stepper` adds arrows inside the chip to step to the previous or next choice; at either end
+ * that arrow is hidden.
+ */
 function MenuChip<T extends string>({
   label,
   title,
   options,
   value,
   onChange,
+  stepper,
 }: {
   label: string;
   /** What's being picked, for screen readers: "day". */
@@ -187,6 +193,7 @@ function MenuChip<T extends string>({
   options: { value: T; label: string }[];
   value?: T;
   onChange: (value: T) => void;
+  stepper?: boolean;
 }) {
   const theme = useTheme();
   // By the World Series the list of days is long.
@@ -194,11 +201,22 @@ function MenuChip<T extends string>({
     if (!open || Platform.OS !== 'web') return;
     requestAnimationFrame(() => document.querySelector('.chip-menu [data-state="checked"]')?.scrollIntoView({ block: 'center' }));
   };
-  return (
+  const surface = { backgroundColor: theme.backgroundElement, boxShadow: theme.raised };
+  const i = options.findIndex((o) => o.value === value);
+  const prev = stepper && i > 0 ? options[i - 1] : undefined;
+  const next = stepper && i >= 0 && i < options.length - 1 ? options[i + 1] : undefined;
+  const arrow = (to: T, glyph: string, name: string, side: ViewStyle) => (
+    <Pressable onPress={() => onChange(to)} accessibilityRole="button" aria-label={`${name} ${title}`} style={[styles.step, { borderColor: theme.border }, side]}>
+      <ThemedText type="smallBold" themeColor="textSecondary" style={styles.stepGlyph}>
+        {glyph}
+      </ThemedText>
+    </Pressable>
+  );
+  const menu = (
     <DropdownMenu.Root onOpenChange={scrollToChecked}>
       <DropdownMenu.Trigger className="menu-trigger menu-trigger-chip" aria-label={`Showing ${label}, change ${title}`}>
-        <View style={[styles.chip, { backgroundColor: theme.backgroundElement, boxShadow: theme.raised }]}>
-          <ThemedText type="smallBold">{label} ▾</ThemedText>
+        <View style={[styles.chip, !stepper && surface, stepper && styles.chipInStepper]}>
+          <ThemedText type="smallBold">{stepper ? label : `${label} ▾`}</ThemedText>
         </View>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content className="menu-content menu-content-scroll chip-menu" align="start" sideOffset={6} collisionPadding={8}>
@@ -210,6 +228,14 @@ function MenuChip<T extends string>({
         ))}
       </DropdownMenu.Content>
     </DropdownMenu.Root>
+  );
+  if (!stepper) return menu;
+  return (
+    <View style={[styles.stepper, surface]}>
+      {prev && arrow(prev.value, '‹', 'Previous', styles.stepPrev)}
+      {menu}
+      {next && arrow(next.value, '›', 'Next', styles.stepNext)}
+    </View>
   );
 }
 
@@ -604,6 +630,13 @@ function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; gam
 const styles = StyleSheet.create({
   controls: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.two },
   chip: { paddingHorizontal: Spacing.two + 4, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
+  // The day chip with its arrows: one raised surface, split by hairlines.
+  stepper: { flexDirection: 'row', alignItems: 'stretch', borderRadius: Radius.md },
+  chipInStepper: { paddingHorizontal: Spacing.two + 2 },
+  step: { width: 26, alignItems: 'center', justifyContent: 'center' },
+  stepPrev: { borderRightWidth: StyleSheet.hairlineWidth },
+  stepNext: { borderLeftWidth: StyleSheet.hairlineWidth },
+  stepGlyph: { fontSize: 20, lineHeight: 20 },
   column: { gap: Spacing.three },
   hidden: { display: 'none' },
   row: { flexDirection: 'row', gap: Spacing.three },
