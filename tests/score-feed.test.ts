@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { type Row, type Scores, applyChanges, toGame } from '../supabase/functions/_shared/core/score-feed.ts';
+import { type Row, type Scores, applyChanges, battingSpot, toGame } from '../supabase/functions/_shared/core/score-feed.ts';
 
 // Rows as poll-games' broadcast sends them: whole table rows, extra columns and all.
 const gameRow = (gamePk: number, over: Row = {}): Row => ({
@@ -38,6 +38,7 @@ const statRow = (gamePk: number, playerId: number, over: Row = {}): Row => ({
   tb: 4,
   r: 1,
   rbi: 1,
+  batting_order: 200,
   ...over,
 });
 
@@ -105,7 +106,7 @@ describe('score feed', () => {
     expect(next.stats[0]).toMatchObject({ ab: 2, h: 1, hr: 1, bb: 0, hbp: 0, sf: 0, r: 1, rbi: 1 });
     // Lines for everyone who batted, but only in game 1, the live one.
     expect(next.lines.map((l) => [l.gamePk, l.playerId])).toEqual([[1, OHTANI], [1, HARPER]]);
-    expect(next.lines[0]).toEqual({ gamePk: 1, playerId: OHTANI, ab: 2, h: 1, doubles: 0, triples: 0, hr: 1, bb: 0 });
+    expect(next.lines[0]).toEqual({ gamePk: 1, playerId: OHTANI, ab: 2, h: 1, doubles: 0, triples: 0, hr: 1, bb: 0, spot: 2 });
   });
 
   it('keeps lines for a game that went live in the same message', () => {
@@ -139,5 +140,19 @@ describe('hits in the score feed', () => {
     expect(next.hits!.map((h) => h.hasVideo)).toEqual([false]);
     const clipped = applyChanges(next, { hits: [hitRow('p1', 1, OHTANI, 'HR', true)] }, 2026, rostered);
     expect(clipped.hits!.map((h) => h.hasVideo)).toEqual([true]);
+  });
+});
+
+describe('battingSpot', () => {
+  it('reads the spot from MLB batting order, subs included', () => {
+    expect(battingSpot(100)).toBe(1);
+    expect(battingSpot(701)).toBe(7);
+    expect(battingSpot(900)).toBe(9);
+  });
+
+  it('is null before the box score has him', () => {
+    expect(battingSpot(null)).toBeNull();
+    expect(battingSpot(undefined)).toBeNull();
+    expect(battingSpot(7)).toBeNull();
   });
 });
