@@ -177,7 +177,7 @@ export default function GamesScreen() {
 /**
  * The current choice as a chip, opening a menu of them all (on web, scrolled to the current one).
  * `stepper` adds arrows inside the chip to step to the previous or next choice; at either end
- * that arrow is hidden.
+ * that arrow is hidden but keeps its place.
  */
 function MenuChip<T extends string>({
   label,
@@ -232,9 +232,10 @@ function MenuChip<T extends string>({
   if (!stepper) return menu;
   return (
     <View style={[styles.stepper, surface]}>
-      {prev && arrow(prev.value, '‹', 'Previous', styles.stepPrev)}
+      {/* A missing arrow leaves its space empty, so the date doesn't slide over. */}
+      {prev ? arrow(prev.value, '‹', 'Previous', styles.stepPrev) : <View style={styles.step} />}
       {menu}
-      {next && arrow(next.value, '›', 'Next', styles.stepNext)}
+      {next ? arrow(next.value, '›', 'Next', styles.stepNext) : <View style={styles.step} />}
     </View>
   );
 }
