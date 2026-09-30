@@ -1,12 +1,12 @@
 // Push notifications. Bag alerts are queued by the collect_bag trigger when a batting line's total
 // bases go up (private.bag_alerts); sub alerts by saveGame from each box score it reads, and cut
-// alerts after each game of the round ends, and lineup alerts from each schedule read (all
-// private.push_queue). poll-games sends the ones
-// that are due after each poll.
+// alerts after each game of the round ends, lineup alerts from each schedule read, and stat
+// correction alerts from the scoring changes the collect_correction trigger records (all
+// private.push_queue). poll-games sends the ones that are due after each poll.
 
 import { bagAlert } from '../_shared/core/bag-alerts.ts';
 import { bagParam } from '../_shared/core/bag-celebration.ts';
-import { type LineupHitter, cutAlert, cutFlips, cutSpots, lineupAlert, lineupNews, scratchAlert, subAlert } from '../_shared/core/game-alerts.ts';
+import { type LineupHitter, correctionAlert, cutAlert, cutFlips, cutSpots, lineupAlert, lineupNews, scratchAlert, subAlert } from '../_shared/core/game-alerts.ts';
 import { facesCut } from '../_shared/core/scoring.ts';
 import type { FantasyRound } from '../_shared/core/types.ts';
 import { type Tx, sql } from '../_shared/db.ts';
@@ -322,6 +322,60 @@ export async function queueLineupAlerts(lineups: LineupRow[]): Promise<number> {
     }
     // Tapping one opens the Games tab.
     return queue(alerts, tx);
+  });
+}
+
+/**
+ * Queues stat correction alerts for the scoring changes the collect_correction trigger recorded
+ * (private.stat_corrections): a drafted hitter's total bases moved in a game on now or finished
+ * within 6 hours. Goes to the team whose roster had him when the game started, while it's alive
+ * or was knocked out in that game's round (a change can come in after the round closes). Returns
+ * how many it queued.
+ */
+export async function queueCorrectionAlerts(): Promise<number> {
+  return await sql.begin(async (tx) => {
+    const rows = await tx`
+      with taken as (
+        delete from private.stat_corrections
+        returning id, game_pk, mlb_player_id, old_h, old_doubles, old_triples, old_hr, h, doubles, triples, hr
+      )
+      select c.*, p.full_name as player,
+             coalesce(t.name, 'Team ' || t.slot) as team, t.user_id as team_user_id,
+             nullif(split_part(pr.display_name, ' ', 1), '') as manager,
+             s.endpoint, s.user_id, s.delay_seconds
+      from taken c
+      join public.mlb_games g on g.game_pk = c.game_pk
+      join public.mlb_players p on p.id = c.mlb_player_id
+      join public.roster_spells r
+        on r.mlb_player_id = c.mlb_player_id and r.from_at <= g.start_time and (r.to_at is null or g.start_time < r.to_at)
+      join public.seasons se on se.id = r.season_id and se.imported_at is null
+      join public.fantasy_teams t
+        on t.id = r.fantasy_team_id
+       and (t.eliminated_after_round is null
+            or t.eliminated_after_round >= case g.game_type when 'L' then 2 when 'W' then 3 else 1 end)
+      join public.push_subscriptions s
+        on s.correction_alerts
+       and ((s.scope = 'mine' and s.user_id = t.user_id)
+            or (s.scope = 'league' and exists (
+              select 1 from public.league_members m where m.league_id = se.league_id and m.user_id = s.user_id)))
+      left join public.profiles pr on pr.id = t.user_id
+      order by c.id`;
+    const hits = (h: number, doubles: number, triples: number, hr: number) => ({ singles: h - doubles - triples - hr, doubles, triples, hr });
+    // Tapping one opens the Games tab.
+    return queue(
+      rows.map((row) => {
+        const alert = correctionAlert({
+          player: row.player,
+          before: hits(row.old_h, row.old_doubles, row.old_triples, row.old_hr),
+          after: hits(row.h, row.doubles, row.triples, row.hr),
+          team: row.team,
+          manager: row.manager,
+          yours: row.team_user_id === row.user_id,
+        });
+        return { ...alert, endpoint: row.endpoint, send_at: dueAt(row.delay_seconds), url: '/games' };
+      }),
+      tx,
+    );
   });
 }
 

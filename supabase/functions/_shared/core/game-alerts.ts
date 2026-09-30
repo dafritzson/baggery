@@ -1,9 +1,10 @@
 // The text of poll-games' other push notifications, next to bag alerts (bag-alerts.ts): sub alerts
 // (a drafted hitter came off the bench or was replaced), cut alerts (a team crossed the round's cut
-// line) and lineup alerts (a team posted its starting lineup, or dropped a drafted hitter from it).
+// line), lineup alerts (a team posted its starting lineup, or dropped a drafted hitter from it) and
+// stat correction alerts (the official scorer changed a drafted hitter's total bases).
 // Pure, so the unit tests can run it without Supabase.
 
-import { type Alert, type Owner, teamLabel } from './bag-alerts.ts';
+import { type Alert, type Bag, type Owner, teamLabel } from './bag-alerts.ts';
 import { ordinal } from './bag-celebration.ts';
 import { type RankedTeam, eliminations } from './scoring.ts';
 import type { TeamId } from './types.ts';
@@ -127,4 +128,58 @@ export function scratchAlert(player: string, mlbTeam: string, owner: Owner): Ale
 /** "A", "A and B", "A, B and C". */
 function listText(items: string[]): string {
   return items.length === 1 ? items[0] : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+/** A batting line's hits, singles apart. */
+export type Hits = Pick<Bag, 'singles' | 'doubles' | 'triples' | 'hr'>;
+
+/** A drafted hitter's hits before and after an official scoring change to his total bases. */
+export interface Correction extends Owner {
+  player: string;
+  before: Hits;
+  after: Hits;
+}
+
+const HIT_WORDS = [
+  ['singles', 'single'],
+  ['doubles', 'double'],
+  ['triples', 'triple'],
+  ['hr', 'home run'],
+] as const;
+
+/** Total bases of `hits`. */
+function totalBases(hits: Hits): number {
+  return hits.singles + 2 * hits.doubles + 3 * hits.triples + 4 * hits.hr;
+}
+
+/** "a single", "2 doubles"; `start` for the start of a sentence: "Single", "2 doubles". */
+function hitsPhrase(counts: [number, string][], start = false): string {
+  const parts = counts.map(([n, word], i) =>
+    n === 1 ? (start && i === 0 ? word.charAt(0).toUpperCase() + word.slice(1) : `a ${word}`) : `${n} ${word}s`,
+  );
+  return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
+/**
+ * "✏️ Stat correction for Mookie Betts" / "Double changed to a single: −1 bag for Bag Boys (Mike)".
+ * A hit taken away: "Single taken away: −1 bag"; one given (an error scored a hit): "Credited
+ * with a double: +2 bags".
+ */
+export function correctionAlert(c: Correction): Alert {
+  const lost: [number, string][] = [];
+  const gained: [number, string][] = [];
+  for (const [key, word] of HIT_WORDS) {
+    const n = c.after[key] - c.before[key];
+    if (n < 0) lost.push([-n, word]);
+    if (n > 0) gained.push([n, word]);
+  }
+  const what =
+    lost.length && gained.length
+      ? `${hitsPhrase(lost, true)} changed to ${hitsPhrase(gained)}`
+      : lost.length
+        ? `${hitsPhrase(lost, true)} taken away`
+        : `Credited with ${hitsPhrase(gained)}`;
+  const bags = totalBases(c.after) - totalBases(c.before);
+  const change = `${bags < 0 ? '−' : '+'}${Math.abs(bags)} ${Math.abs(bags) === 1 ? 'bag' : 'bags'}`;
+  return { title: `✏️ Stat correction for ${c.player}`, body: `${what}: ${change} for ${teamLabel(c)}` };
 }

@@ -32,6 +32,7 @@ const DEFAULTS: Prefs = {
   subs: true,
   cut: true,
   lineups: false,
+  corrections: true,
   draft: true,
   draftStarted: true,
   autopicks: false,
@@ -84,10 +85,10 @@ function reachWarning(standing: Standing, scope: Scope, email: string | undefine
 /**
  * Alerts on this device, in two cards. Draft alerts: ⏰ you're on the clock, 📣 a draft started, 🤖
  * autodraft picked for you (off unless turned on), ✅ a draft is done. Game alerts, for your
- * hitters or everyone's: bags, subs, the cut line and lineups (off unless turned on), each with its
- * own switch, and a spoiler delay. Turning the first one on asks for permission and subscribes
- * this browser; turning the last one off unsubscribes it. Web push, so web only for now; on iPhone
- * it takes the Home Screen app.
+ * hitters or everyone's: bags, subs, the cut line, lineups (off unless turned on) and stat
+ * corrections, each with its own switch, and a spoiler delay. Turning the first one on asks for
+ * permission and subscribes this browser; turning the last one off unsubscribes it. Web push, so
+ * web only for now; on iPhone it takes the Home Screen app.
  */
 export function AlertsSettings() {
   const [state, setState] = useState<PushState | null>(null);
@@ -181,13 +182,15 @@ export function AlertsSettings() {
             <Divider />
             <AlertRow icon="📋" name="Lineups" detail="When a lineup is posted with your hitters in it" value={prefs.lineups} onChange={(v) => save({ lineups: v })} />
             <Divider />
+            <AlertRow icon="✏️" name="Stat corrections" detail="When the official scorer changes a hitter’s bags" value={prefs.corrections} onChange={(v) => save({ corrections: v })} />
+            <Divider />
             <AlertRow icon="⏱" name="Spoiler delay" detail="If your stream runs behind">
               <Toggle options={DELAYS} value={prefs.delaySeconds} onChange={(v) => save({ delaySeconds: v })} />
             </AlertRow>
           </View>
         ) : (
           <ThemedText type="small" themeColor="textSecondary">
-            Bags, subs, the cut line and lineups. Choose My Baggers for your hitters, or Everyone for every team still alive.
+            Bags, subs, the cut line, lineups and stat corrections. Choose My Baggers for your hitters, or Everyone for every team still alive.
           </ThemedText>
         )}
       </Card>

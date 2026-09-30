@@ -1,4 +1,4 @@
-// Alerts on this device (bag, sub, cut, lineup and draft alerts): web push, so web only (push.web.ts). An
+// Alerts on this device (bag, sub, cut, lineup, stat correction and draft alerts): web push, so web only (push.web.ts). An
 // iOS app would use expo-notifications; until then Settings doesn't offer them there.
 
 /** Whose game alerts: your team's hitters, every team's, or none (draft alerts only). */
@@ -15,6 +15,8 @@ export interface Prefs {
   cut: boolean;
   /** Lineup alerts (off unless turned on): 📋 a starting lineup is posted, 🪑 a hitter is dropped from one. */
   lineups: boolean;
+  /** Stat correction alerts: ✏️ the official scorer changed a hitter's total bases. */
+  corrections: boolean;
   /** Draft alerts (on unless turned off): ⏰ your team is on the clock. */
   draft: boolean;
   /** 📣 a draft started (on unless turned off). */
