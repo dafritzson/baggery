@@ -3,7 +3,6 @@ import { type LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, Vi
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { BAG_EMOJI, hitBags } from '@core/bag-celebration.ts';
-import type { LiveState } from '@core/live.ts';
 import { postseasonSeries } from '@core/schedule.ts';
 import { SERIES } from '@core/scoreboard.ts';
 import type { GameType } from '@core/types.ts';
@@ -12,6 +11,7 @@ import { type Bagger, HitterRow } from '@/components/at-bat';
 import { BoxScoreSheet } from '@/components/box-score';
 import { Card } from '@/components/card';
 import { HitVideosSheet } from '@/components/hit-videos';
+import { LiveStatus } from '@/components/live-status';
 import { Loader } from '@/components/loader';
 import { YouTag } from '@/components/owner-badge';
 import { PlayerName } from '@/components/player-name';
@@ -23,7 +23,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { dayLabel, gameDay, useToday } from '@/lib/game-day';
-import { inningLabel, ownerOf, seriesLabel, statusLine } from '@/lib/game-labels';
+import { lineScore, ownerOf, seriesLabel, statusLine } from '@/lib/game-labels';
 import { type BattingLine, type GameInfo, type ScoreHit, type Scores, useScores } from '@/lib/scores';
 import { type SeasonData, useSeason } from '@/lib/season';
 import { ownerName, teamName } from '@/lib/teams';
@@ -369,59 +369,6 @@ function BaggerCard({
   );
 }
 
-/** Runners on base as a little diamond: filled squares for occupied bases. */
-function Diamond({ bases }: { bases: [boolean, boolean, boolean] }) {
-  const theme = useTheme();
-  const base = (on: boolean, position: object) => (
-    <View
-      style={[
-        styles.base,
-        position,
-        on ? { backgroundColor: theme.text, borderColor: theme.text } : { borderColor: theme.textSecondary },
-      ]}
-    />
-  );
-  return (
-    <View style={styles.diamond} accessibilityLabel={`Runners: ${['first', 'second', 'third'].filter((_, i) => bases[i]).join(', ') || 'none'}`}>
-      {base(bases[1], styles.second)}
-      {base(bases[2], styles.third)}
-      {base(bases[0], styles.first)}
-    </View>
-  );
-}
-
-/** Top right of a live game: inning, runners, count and outs. */
-function LiveStatus({ live }: { live: LiveState }) {
-  const theme = useTheme();
-  const between = live.inningState === 'Middle' || live.inningState === 'End';
-  return (
-    <View style={styles.liveStatus}>
-      <ThemedText type="smallBold" style={{ color: theme.danger }}>{inningLabel(live)}</ThemedText>
-      {!between && (
-        <>
-          <Diamond bases={live.bases} />
-          <ThemedText type="small" style={styles.count}>{`${live.balls}-${live.strikes}`}</ThemedText>
-          <View style={styles.outs} accessibilityLabel={`${live.outs} out`}>
-            {[0, 1, 2].map((i) => (
-              <View key={i} style={[styles.out, { borderColor: theme.textSecondary }, i < live.outs && { backgroundColor: theme.textSecondary }]} />
-            ))}
-          </View>
-        </>
-      )}
-    </View>
-  );
-}
-
-/**
- * "1-3 HR 2B": hits-at bats, then the extra-base hits. Only what makes bags: a hit that isn't
- * listed is a single, and walks are left out. Empty before a first time up.
- */
-function lineScore(line: BattingLine | undefined): string {
-  if (!line) return '';
-  const times = (n: number, label: string) => (n === 0 ? [] : [n === 1 ? label : `${n}${label}`]);
-  return [`${line.h}-${line.ab}`, ...times(line.hr, 'HR'), ...times(line.triples, '3B'), ...times(line.doubles, '2B')].join(' ');
-}
-
 interface CardProps {
   data: SeasonData;
   scores: Scores;
@@ -682,15 +629,6 @@ const styles = StyleSheet.create({
   scoreColumn: { alignItems: 'flex-end', gap: Spacing.half },
   teamAbbr: { fontWeight: 600, lineHeight: 28 },
   score: { minWidth: 24, textAlign: 'right', fontSize: 20, lineHeight: 28, fontVariant: ['tabular-nums'], fontWeight: 600 },
-  liveStatus: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  diamond: { width: 26, height: 19 },
-  base: { position: 'absolute', width: 7, height: 7, borderWidth: 1.5, transform: [{ rotate: '45deg' }] },
-  second: { left: 9.5, top: 1.5 },
-  third: { left: 2, top: 9 },
-  first: { left: 17, top: 9 },
-  count: { fontVariant: ['tabular-nums'] },
-  outs: { flexDirection: 'row', gap: 3 },
-  out: { width: 6, height: 6, borderRadius: 3, borderWidth: 1 },
   bold: { fontWeight: 800 },
   // Two columns of mini cards.
   players: {

@@ -1,7 +1,7 @@
 import type { LiveState } from '@core/live.ts';
 import { SERIES } from '@core/scoreboard.ts';
 
-import type { GameInfo } from '@/lib/scores';
+import type { BattingLine, GameInfo } from '@/lib/scores';
 import type { SeasonData } from '@/lib/season';
 
 /** "Wild Card · Game 2", or "Division Series · Game 3". */
@@ -51,4 +51,14 @@ const TWO_WORD = ['Red Sox', 'White Sox', 'Blue Jays'];
 /** A club's nickname, short enough for two to sit side by side on a phone. */
 export function nickname(name: string): string {
   return TWO_WORD.find((n) => name.endsWith(` ${n}`)) ?? name.split(' ').pop() ?? name;
+}
+
+/**
+ * "1-3 HR 2B": hits-at bats, then the extra-base hits. Only what makes bags: a hit that isn't
+ * listed is a single, and walks are left out. Empty before a first time up.
+ */
+export function lineScore(line: Pick<BattingLine, 'h' | 'ab' | 'hr' | 'triples' | 'doubles'> | undefined): string {
+  if (!line) return '';
+  const times = (n: number, label: string) => (n === 0 ? [] : [n === 1 ? label : `${n}${label}`]);
+  return [`${line.h}-${line.ab}`, ...times(line.hr, 'HR'), ...times(line.triples, '3B'), ...times(line.doubles, '2B')].join(' ');
 }
