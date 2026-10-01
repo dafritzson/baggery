@@ -37,8 +37,11 @@ export interface GridRow {
 }
 
 const ROW = 38;
-const CELL = 34;
-const TOTAL = 52;
+// Just wide enough for a header like "WC3" and a total like "RD 1", so the labels get the room.
+const CELL = 30;
+const TOTAL = 44;
+/** Space at each end of the game columns. */
+const PAD = 2;
 
 /**
  * A spreadsheet-like grid: labels pinned on the left, the round total pinned on the right, and
@@ -79,11 +82,11 @@ export function ScoreGrid({
   const scroller = useRef<ScrollView>(null);
   const [viewWidth, setViewWidth] = useState(0);
   const [gridWidth, setGridWidth] = useState(0);
-  const spare = gridWidth - TOTAL - Math.min(keepColumns ?? columns.length, columns.length) * CELL - 2 * Spacing.one;
+  const spare = gridWidth - TOTAL - Math.min(keepColumns ?? columns.length, columns.length) * CELL - 2 * PAD;
   const labels = labelMaxWidth && gridWidth ? Math.min(labelMaxWidth, Math.max(labelWidth, spare)) : labelWidth;
   useEffect(() => {
     if (follow === undefined || follow < 0 || !viewWidth) return;
-    scroller.current?.scrollTo({ x: Math.max(0, (follow + 1) * CELL + Spacing.one - viewWidth), animated: true });
+    scroller.current?.scrollTo({ x: Math.max(0, (follow + 1) * CELL + PAD - viewWidth), animated: true });
   }, [follow, viewWidth]);
   const standingColor = (r: GridRow) =>
     r.standing && { safe: theme.standingSafe, tied: theme.standingTied, out: theme.standingOut }[r.standing];
@@ -190,7 +193,7 @@ const styles = StyleSheet.create({
   row: { height: ROW },
   cut: { borderTopWidth: 2, borderStyle: 'dashed' },
   labelCell: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.two },
-  cells: { flexDirection: 'row', paddingHorizontal: Spacing.one },
+  cells: { flexDirection: 'row', paddingHorizontal: PAD },
   cell: { minWidth: CELL, flexGrow: 1, flexBasis: 0, alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center' },
   divider: { borderLeftWidth: StyleSheet.hairlineWidth },
   totalCell: { justifyContent: 'center', alignItems: 'center' },
