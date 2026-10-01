@@ -4,7 +4,8 @@ export type DraftKind = 'initial' | 'redraft';
 
 /**
  * A turn the ghost team takes, made by one of the eliminated managers (`by`, their team). An add
- * fills an empty spot and can't be yielded; a redraft is an ordinary redraft pick.
+ * fills an empty spot and can't be yielded (unless nobody undrafted is left); a redraft is an
+ * ordinary redraft pick.
  */
 export interface GhostTurn {
   by: TeamId;
@@ -110,7 +111,7 @@ export function validateAction(state: DraftState, action: DraftAction): string |
   if (turn.teamId !== action.teamId) return 'It is not your turn.';
 
   if (action.type === 'yield') {
-    if (turn.ghost?.kind === 'add') return 'The ghost can’t skip filling a spot.';
+    if (turn.ghost?.kind === 'add' && undraftedLeft(state)) return 'The ghost can’t skip filling a spot.';
     if (state.config.kind === 'initial') return 'You cannot yield in the initial draft.';
     const out = mustReplace(state, turn.teamId);
     if (out > 0) return `Replace your ${out === 1 ? 'eliminated hitter' : `${out} eliminated hitters`} before you yield.`;
@@ -143,9 +144,16 @@ export function mustReplace(state: DraftState, teamId: TeamId): number {
   const eliminated = state.eliminated;
   if (!eliminated?.size) return 0;
   const out = (state.rosters.get(teamId) ?? []).filter((p) => eliminated.has(p)).length;
-  if (!out) return 0;
-  for (const p of state.eligible) if (!state.everRostered.has(p)) return out;
-  return 0;
+  return out && undraftedLeft(state) ? out : 0;
+}
+
+/**
+ * Whether anyone eligible is still undrafted. Once nobody is, a turn that must add someone (an
+ * eliminated hitter's spot, a ghost's empty spot) can be passed instead, so the draft can end.
+ */
+export function undraftedLeft(state: DraftState): boolean {
+  for (const p of state.eligible) if (!state.everRostered.has(p)) return true;
+  return false;
 }
 
 /** Applies a legal action to the roster state. Does not validate. */
@@ -220,7 +228,11 @@ export function autodraftAction(
     .filter((c) => !c.injured && available(c.playerId))
     .sort((a, b) => b.regularSeasonTb - a.regularSeasonTb || a.playerId - b.playerId)[0];
 
-  if (filling) return best ? { type: 'pick', teamId, addPlayerId: best.playerId } : null;
+  if (filling) {
+    if (best) return { type: 'pick', teamId, addPlayerId: best.playerId };
+    // Nobody left to fill a redraft spot with: pass, so the draft can end.
+    return state.config.kind === 'redraft' && !undraftedLeft(state) ? { type: 'yield', teamId } : null;
+  }
   if (autoDrop === undefined || !best) return { type: 'yield', teamId };
   return { type: 'pick', teamId, addPlayerId: best.playerId, dropPlayerId: autoDrop };
 }
