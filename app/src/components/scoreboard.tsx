@@ -122,7 +122,6 @@ export function StandingsTable({
   const started = columns.some((c) => c.started);
 
   const anyMoved = ordered.some((s) => (moves?.get(s.teamId) ?? 0) !== 0);
-  const anyLevel = started && tiedTotals.length > 0;
   const rows: GridRow[] = [...ordered, ...asideStandings].map((s, i) => {
     const team = byId.get(s.teamId)!;
     const ranked = i < ordered.length;
@@ -135,14 +134,8 @@ export function StandingsTable({
       key: s.teamId,
       label: (
         <>
-          {/* No rank column before the round starts, so it doesn't eat into long team names. */}
-          {started && (
-            <ThemedText type="small" themeColor="textSecondary" style={styles.rank}>{!ranked ? '–' : tied ? `T${s.rank}` : s.rank}</ThemedText>
-          )}
-          {!compact && <View style={styles.badge}><OwnerBadge teamId={team.id} owner={team.is_ghost ? '👻' : owner} photo={team.user_id ? data.photos.get(team.user_id) : null} mine={mine} /></View>}
-          <TeamLabel name={teamName(team)} owner={owner} mine={mine} />
-          {/* Places moved, then the tiebreaker on the far right. While any row has one, every row keeps
-              its slot, so they line up in columns without spare space beside the names. */}
+          {/* Places moved, before the rank. While any team moved, every row keeps its slot, so the
+              ranks line up. */}
           {anyMoved && (
             <View style={styles.moveSlot}>
               {moved !== 0 && (
@@ -154,18 +147,21 @@ export function StandingsTable({
               )}
             </View>
           )}
-          {anyLevel && (
-            <View style={styles.tieSlot}>
-              {levelOnBags && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`How the tie at ${s.total} bags was broken`}
-                  hitSlop={8}
-                  onPress={() => setTieGroup(s.total)}>
-                  <SymbolView name={{ ios: 'scalemass', android: 'balance', web: 'balance' }} size={18} tintColor={theme.accent} />
-                </Pressable>
-              )}
-            </View>
+          {/* No rank column before the round starts, so it doesn't eat into long team names. */}
+          {started && (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.rank}>{!ranked ? '–' : tied ? `T${s.rank}` : s.rank}</ThemedText>
+          )}
+          {!compact && <View style={styles.badge}><OwnerBadge teamId={team.id} owner={team.is_ghost ? '👻' : owner} photo={team.user_id ? data.photos.get(team.user_id) : null} mine={mine} /></View>}
+          <TeamLabel name={teamName(team)} owner={owner} mine={mine} />
+          {/* Only in the rows it applies to, so the other names get the room. */}
+          {levelOnBags && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`How the tie at ${s.total} bags was broken`}
+              hitSlop={8}
+              onPress={() => setTieGroup(s.total)}>
+              <SymbolView name={{ ios: 'scalemass', android: 'balance', web: 'balance' }} size={16} tintColor={theme.accent} />
+            </Pressable>
           )}
         </>
       ),
@@ -375,10 +371,8 @@ function SeriesTable({ data, block }: { data: SeasonData; block: SeriesBlock }) 
 }
 
 const styles = StyleSheet.create({
-  // The label cell's gap already spaces them from the name; the two sit closer together.
-  tieSlot: { width: 18, marginLeft: -2 },
-  // Wide enough for "▼9"; a rare "▼12" just grows it.
-  moveSlot: { minWidth: 16, alignItems: 'flex-end' },
+  // Wide enough for "▼9"; a rare "▼12" just grows it. Tucked against the rank.
+  moveSlot: { minWidth: 16, marginRight: -4, alignItems: 'flex-end' },
   move: { fontSize: 11, lineHeight: 14, fontWeight: 700, fontVariant: ['tabular-nums'] },
   chips: { flexDirection: 'row', gap: Spacing.one, flexWrap: 'wrap', minHeight: CHIPS_ROW, alignItems: 'center', alignContent: 'center' },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
@@ -387,7 +381,7 @@ const styles = StyleSheet.create({
   sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: Spacing.two, height: 16 },
   cutNote: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   sectionTitle: { textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 12, lineHeight: 16 },
-  rank: { width: 24, textAlign: 'center', fontSize: 13, fontVariant: ['tabular-nums'] },
+  rank: { width: 20, textAlign: 'center', fontSize: 13, fontVariant: ['tabular-nums'] },
   badge: { marginRight: Spacing.one },
   teamLabel: { flex: 1, minWidth: 0, gap: 1 },
   teamName: { fontSize: 15, lineHeight: 19, fontWeight: 600 },
