@@ -122,6 +122,7 @@ export function StandingsTable({
   const started = columns.some((c) => c.started);
 
   const anyMoved = ordered.some((s) => (moves?.get(s.teamId) ?? 0) !== 0);
+  const anyLevel = started && tiedTotals.length > 0;
   const rows: GridRow[] = [...ordered, ...asideStandings].map((s, i) => {
     const team = byId.get(s.teamId)!;
     const ranked = i < ordered.length;
@@ -140,17 +141,8 @@ export function StandingsTable({
           )}
           {!compact && <View style={styles.badge}><OwnerBadge teamId={team.id} owner={team.is_ghost ? '👻' : owner} photo={team.user_id ? data.photos.get(team.user_id) : null} mine={mine} /></View>}
           <TeamLabel name={teamName(team)} owner={owner} mine={mine} />
-          {levelOnBags && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`How the tie at ${s.total} bags was broken`}
-              hitSlop={8}
-              onPress={() => setTieGroup(s.total)}
-              style={styles.tieButton}>
-              <SymbolView name={{ ios: 'scalemass', android: 'balance', web: 'balance' }} size={18} tintColor={theme.accent} />
-            </Pressable>
-          )}
-          {/* Every row keeps the slot while any team moved, so the tiebreaker icons line up. */}
+          {/* Places moved, then the tiebreaker on the far right. While any row has one, every row keeps
+              its slot, so they line up in columns without spare space beside the names. */}
           {anyMoved && (
             <View style={styles.moveSlot}>
               {moved !== 0 && (
@@ -159,6 +151,19 @@ export function StandingsTable({
                   accessibilityLabel={`${moved > 0 ? 'Up' : 'Down'} ${Math.abs(moved)}`}>
                   {moved > 0 ? `▲${moved}` : `▼${-moved}`}
                 </ThemedText>
+              )}
+            </View>
+          )}
+          {anyLevel && (
+            <View style={styles.tieSlot}>
+              {levelOnBags && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`How the tie at ${s.total} bags was broken`}
+                  hitSlop={8}
+                  onPress={() => setTieGroup(s.total)}>
+                  <SymbolView name={{ ios: 'scalemass', android: 'balance', web: 'balance' }} size={18} tintColor={theme.accent} />
+                </Pressable>
               )}
             </View>
           )}
@@ -370,9 +375,10 @@ function SeriesTable({ data, block }: { data: SeasonData; block: SeriesBlock }) 
 }
 
 const styles = StyleSheet.create({
-  tieButton: { marginLeft: 2 },
-  // Wide enough for "▼12".
-  moveSlot: { width: 28, alignItems: 'flex-end' },
+  // The label cell's gap already spaces them from the name; the two sit closer together.
+  tieSlot: { width: 18, marginLeft: -2 },
+  // Wide enough for "▼9"; a rare "▼12" just grows it.
+  moveSlot: { minWidth: 16, alignItems: 'flex-end' },
   move: { fontSize: 11, lineHeight: 14, fontWeight: 700, fontVariant: ['tabular-nums'] },
   chips: { flexDirection: 'row', gap: Spacing.one, flexWrap: 'wrap', minHeight: CHIPS_ROW, alignItems: 'center', alignContent: 'center' },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
