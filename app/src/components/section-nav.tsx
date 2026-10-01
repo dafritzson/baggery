@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, type Tabs, useIsFocused, usePathname } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { type ComponentProps, type ReactNode, type RefObject, createContext, use, useLayoutEffect, useState } from 'react';
+import { type ComponentProps, type ReactNode, type RefObject, createContext, use, useEffect, useLayoutEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -18,10 +18,12 @@ export type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['ta
 
 type TabRoute = TabBarProps['state']['routes'][number];
 
+type SectionRoute = 'draft' | 'standings' | 'games' | 'research' | 'almanac';
+
 interface Section {
   label: string;
   /** The section's tab in the tab navigator. */
-  route: 'draft' | 'standings' | 'games' | 'research' | 'almanac';
+  route: SectionRoute;
   /** Its own page: pages opened from it (a draft room) are under this path too. */
   path: string;
   /** Whether it's a stack, which pages open on top of (Draft, Almanac). */
@@ -88,6 +90,21 @@ function withYear(params: object | undefined, year: number | undefined): Record<
   return year ? { ...next, year: String(year) } : next;
 }
 
+// What each tab does when its button is tapped while it's on show (see useTabRetap).
+const retaps = new Map<SectionRoute, Set<() => void>>();
+
+/** Calls `onRetap` whenever the section's tab button is tapped while the section is already on show. */
+export function useTabRetap(route: SectionRoute, onRetap: () => void) {
+  useEffect(() => {
+    const listeners = retaps.get(route) ?? new Set();
+    retaps.set(route, listeners);
+    listeners.add(onRetap);
+    return () => {
+      listeners.delete(onRetap);
+    };
+  }, [route, onRetap]);
+}
+
 /**
  * Shows section `s` the way a phone's tab bar does: the page its tab was left on, just as it was
  * left (scrolled, filtered, on the day picked), in the season being viewed. The tab that's already
@@ -104,6 +121,7 @@ function switchTab({ state, navigation }: TabBarProps, s: Section, year: number 
   // The tab's own page, for this season (the one under what's on top, if it's there).
   const ownParams = withYear(nested?.routes.find((r) => r.name === 'index')?.params, year);
   if (state.routes[state.index].key === route.key) {
+    retaps.get(s.route)?.forEach((f) => f());
     // Tapped again: from a page opened on top of the tab's own, back to it (the router finds the
     // stack even from a link); on its own page, up to the top (Screen's useScrollToTop).
     if (s.stack && shown && shown.name !== 'index') router.dismissTo({ pathname: s.path as never, params: ownParams as never });
