@@ -174,17 +174,10 @@ function RosterRow({
   const [hovered, setHovered] = useState(false);
   const player = data.players.get(playerId);
   const name = player?.full_name ?? `Player ${playerId}`;
-  const pool = data.poolByPlayer.get(playerId);
-  const injuredList = pool?.injured_list ?? null;
-  // His MLB team is out of the postseason: he'll need replacing at the next redraft.
-  const out = data.season.status !== 'complete' && !!data.mlbTeams.get(pool?.mlb_team_id ?? 0)?.eliminated;
+  const injuredList = data.poolByPlayer.get(playerId)?.injured_list ?? null;
   const nameLine = (
     <View style={styles.nameLine}>
-      <ThemedText
-        numberOfLines={1}
-        style={[styles.name, styles.nameText, out && styles.outName, hovered && { textDecorationLine: out ? 'underline line-through' : 'underline' }]}>
-        {name}
-      </ThemedText>
+      <ThemedText numberOfLines={1} style={[styles.name, styles.nameText, hovered && { textDecorationLine: 'underline' }]}>{name}</ThemedText>
       {injuredList !== null && <InjuryChip list={injuredList} />}
     </View>
   );
@@ -206,14 +199,14 @@ function RosterRow({
         <View style={styles.stackedName}>
           {nameLine}
           <ThemedText numberOfLines={1} themeColor="textSecondary" style={styles.meta}>
-            {[player?.primary_position, mlbTeamAbbr(data, playerId), out ? 'Out' : null].filter(Boolean).join(' · ')}
+            {[player?.primary_position, mlbTeamAbbr(data, playerId)].filter(Boolean).join(' · ')}
           </ThemedText>
         </View>
       ) : (
         <>
           <View style={styles.stackedName}>{nameLine}</View>
           <ThemedText themeColor="textSecondary" style={styles.position}>{player?.primary_position ?? ''}</ThemedText>
-          <ThemedText themeColor="textSecondary" style={[styles.mlbTeam, out && styles.outName]}>{mlbTeamAbbr(data, playerId)}</ThemedText>
+          <ThemedText themeColor="textSecondary" style={styles.mlbTeam}>{mlbTeamAbbr(data, playerId)}</ThemedText>
         </>
       )}
       {stat !== undefined && <ThemedText style={styles.stat}>{stat}</ThemedText>}
@@ -241,8 +234,6 @@ const styles = StyleSheet.create({
   name: { fontSize: 14, lineHeight: 18, fontWeight: 600 },
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   nameText: { flexShrink: 1, minWidth: 0 },
-  // A hitter whose MLB team is eliminated: struck through and faded until he's replaced.
-  outName: { textDecorationLine: 'line-through', opacity: 0.5 },
   meta: { fontSize: 12, lineHeight: 15 },
   position: { width: 30, textAlign: 'right', fontSize: 12, lineHeight: 15 },
   mlbTeam: { width: 36, textAlign: 'right', fontSize: 12, lineHeight: 15, fontWeight: 700 },
