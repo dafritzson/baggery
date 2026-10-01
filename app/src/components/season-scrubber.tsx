@@ -242,34 +242,35 @@ export function SeasonScrubber({
 
   return (
     <ThemedView type="backgroundElement" style={[styles.card, { boxShadow: theme.raised }]}>
-      <View style={styles.head}>
-        <View style={styles.readout}>
-          <ThemedText type="smallBold" numberOfLines={2}>{main}</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary" numberOfLines={2} style={styles.sub}>{sub}</ThemedText>
-          {/* The links' row is always there, empty without links, so the card keeps its height. */}
-          {bag && !playing ? <BagVideos bag={bag} /> : <View style={styles.videos} />}
+      {/* The readout's first line beside the zoom; the line under it and the links take the full width. */}
+      <View>
+        <View style={styles.head}>
+          <ThemedText type="smallBold" numberOfLines={2} style={styles.main}>{main}</ThemedText>
+          <View accessibilityRole="tablist" accessibilityLabel="Zoom" style={[styles.zoom, { backgroundColor: theme.backgroundSelected, boxShadow: theme.sunken }]}>
+            {ZOOMS.map((z) => {
+              const on = z === zoom;
+              const off = z !== 'season' && !hasBags;
+              return (
+                <Pressable
+                  key={z}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: on, disabled: off }}
+                  accessibilityLabel={z === 'season' ? 'Season' : z === 'round' ? `Round ${round}` : dayName(day.date)}
+                  hitSlop={{ top: 10, bottom: 10, left: 2, right: 2 }}
+                  disabled={off}
+                  onPress={() => onZoom(z)}
+                  style={[styles.zoomButton, on && { backgroundColor: theme.segment, boxShadow: theme.raised }, off && styles.disabled]}>
+                  <ThemedText type="smallBold" style={[styles.zoomLabel, { color: on ? theme.text : theme.textSecondary }]}>
+                    {z === 'season' ? 'Season' : z === 'round' ? (on ? `Rd ${round}` : 'Rd') : on ? shortDate(day.date) : 'Day'}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
-        <View accessibilityRole="tablist" accessibilityLabel="Zoom" style={[styles.zoom, { backgroundColor: theme.backgroundSelected, boxShadow: theme.sunken }]}>
-          {ZOOMS.map((z) => {
-            const on = z === zoom;
-            const off = z !== 'season' && !hasBags;
-            return (
-              <Pressable
-                key={z}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: on, disabled: off }}
-                accessibilityLabel={z === 'season' ? 'Season' : z === 'round' ? `Round ${round}` : dayName(day.date)}
-                hitSlop={{ top: 10, bottom: 10, left: 2, right: 2 }}
-                disabled={off}
-                onPress={() => onZoom(z)}
-                style={[styles.zoomButton, on && { backgroundColor: theme.segment, boxShadow: theme.raised }, off && styles.disabled]}>
-                <ThemedText type="smallBold" style={[styles.zoomLabel, { color: on ? theme.text : theme.textSecondary }]}>
-                  {z === 'season' ? 'Season' : z === 'round' ? (on ? `Rd ${round}` : 'Rd') : on ? shortDate(day.date) : 'Day'}
-                </ThemedText>
-              </Pressable>
-            );
-          })}
-        </View>
+        <ThemedText type="small" themeColor="textSecondary" numberOfLines={2} style={styles.sub}>{sub}</ThemedText>
+        {/* The links' row is always there, empty without links, so the card keeps its height. */}
+        {bag && !playing ? <BagVideos bag={bag} /> : <View style={styles.videos} />}
       </View>
 
       <View style={styles.plot} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
@@ -528,13 +529,14 @@ function Key({ color, width, dash, label }: { color: string; width: number; dash
 const styles = StyleSheet.create({
   card: { borderRadius: Radius.lg, padding: Spacing.two + 4, gap: Spacing.two },
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two },
-  readout: { flex: 1, minWidth: 0 },
+  main: { flex: 1, minWidth: 0 },
   sub: { fontSize: 12, lineHeight: 15 },
   videos: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.one + 2, minHeight: 24, marginTop: Spacing.one + 2 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, height: 24, paddingHorizontal: 10, borderRadius: 12 },
   chipText: { fontSize: 12, lineHeight: 16 },
   pending: { borderWidth: 1, borderStyle: 'dashed' },
-  zoom: { flexDirection: 'row', alignItems: 'center', height: 22, padding: 2, borderRadius: Radius.md },
+  // Raised a little, so it clears the readout's second line, which runs under it.
+  zoom: { flexDirection: 'row', alignItems: 'center', height: 22, marginTop: -4, padding: 2, borderRadius: Radius.md },
   zoomButton: { height: 18, paddingHorizontal: 6, borderRadius: Radius.sm, justifyContent: 'center' },
   zoomLabel: { fontSize: 10, lineHeight: 12 },
   disabled: { opacity: 0.3 },
