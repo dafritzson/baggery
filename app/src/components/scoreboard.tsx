@@ -121,6 +121,7 @@ export function StandingsTable({
   // Before a round's first pitch there's nothing to rank.
   const started = columns.some((c) => c.started);
 
+  const anyMoved = ordered.some((s) => (moves?.get(s.teamId) ?? 0) !== 0);
   const rows: GridRow[] = [...ordered, ...asideStandings].map((s, i) => {
     const team = byId.get(s.teamId)!;
     const ranked = i < ordered.length;
@@ -133,28 +134,32 @@ export function StandingsTable({
       key: s.teamId,
       label: (
         <>
+          {/* Places moved, before the rank. While any team moved, every row keeps its slot, so the
+              ranks line up. */}
+          {anyMoved && (
+            <View style={styles.moveSlot}>
+              {moved !== 0 && (
+                <ThemedText
+                  style={[styles.move, { color: moved > 0 ? theme.success : theme.danger }]}
+                  accessibilityLabel={`${moved > 0 ? 'Up' : 'Down'} ${Math.abs(moved)}`}>
+                  {moved > 0 ? `▲${moved}` : `▼${-moved}`}
+                </ThemedText>
+              )}
+            </View>
+          )}
           {/* No rank column before the round starts, so it doesn't eat into long team names. */}
           {started && (
             <ThemedText type="small" themeColor="textSecondary" style={styles.rank}>{!ranked ? '–' : tied ? `T${s.rank}` : s.rank}</ThemedText>
           )}
           {!compact && <View style={styles.badge}><OwnerBadge teamId={team.id} owner={team.is_ghost ? '👻' : owner} photo={team.user_id ? data.photos.get(team.user_id) : null} mine={mine} /></View>}
           <TeamLabel name={teamName(team)} owner={owner} mine={mine} />
-          {/* Only in the rows they apply to, so the other names get the room: places moved, then the
-              tiebreaker on the far right. */}
-          {moved !== 0 && (
-            <ThemedText
-              style={[styles.move, { color: moved > 0 ? theme.success : theme.danger }]}
-              accessibilityLabel={`${moved > 0 ? 'Up' : 'Down'} ${Math.abs(moved)}`}>
-              {moved > 0 ? `▲${moved}` : `▼${-moved}`}
-            </ThemedText>
-          )}
+          {/* Only in the rows it applies to, so the other names get the room. */}
           {levelOnBags && (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`How the tie at ${s.total} bags was broken`}
               hitSlop={8}
-              onPress={() => setTieGroup(s.total)}
-              style={moved !== 0 && styles.afterMove}>
+              onPress={() => setTieGroup(s.total)}>
               <SymbolView name={{ ios: 'scalemass', android: 'balance', web: 'balance' }} size={16} tintColor={theme.accent} />
             </Pressable>
           )}
@@ -366,8 +371,8 @@ function SeriesTable({ data, block }: { data: SeasonData; block: SeriesBlock }) 
 }
 
 const styles = StyleSheet.create({
-  // The label cell's gap spaces them from the name; the two sit closer together.
-  afterMove: { marginLeft: -2 },
+  // Wide enough for "▼9"; a rare "▼12" just grows it. Tucked against the rank.
+  moveSlot: { minWidth: 16, marginRight: -4, alignItems: 'flex-end' },
   move: { fontSize: 11, lineHeight: 14, fontWeight: 700, fontVariant: ['tabular-nums'] },
   chips: { flexDirection: 'row', gap: Spacing.one, flexWrap: 'wrap', minHeight: CHIPS_ROW, alignItems: 'center', alignContent: 'center' },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
