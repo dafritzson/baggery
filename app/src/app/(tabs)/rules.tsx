@@ -110,7 +110,12 @@ export default function RulesScreen() {
           who&apos;s still playing.
         </Bullet>
         <Bullet>
-          You can yield to skip the rest of a redraft, but only once every empty spot on your roster is filled.
+          You can yield to skip the rest of a redraft, but only once every empty spot on your roster is filled, or nobody
+          undrafted is left.
+        </Bullet>
+        <Bullet>
+          If the undrafted hitters run out, whoever still has picks yields and plays with what they have: an eliminated hitter
+          scores 0.
         </Bullet>
         <Bullet>A hitter can be on one roster a season, ever. Once he&apos;s dropped, nobody can take him again.</Bullet>
         <Bullet>Draft 1&apos;s pool is every playoff team&apos;s active roster, plus hitters on their injured lists who could be back in time. Redrafts use the postseason rosters of MLB teams still alive.</Bullet>
@@ -125,7 +130,7 @@ export default function RulesScreen() {
         <Bullet><B>Round 2:</B> it plays the Championship Series with those 2 hitters. It&apos;s never cut and takes nobody&apos;s spot: the bottom {survivors[0] - survivors[1]} managers are out wherever the Ghost finishes.</Bullet>
         <Bullet>
           <B>Draft 4:</B> the Ghost joins the finalists&apos; snake, placed by its round 2 bags like everyone else. Its first 2
-          turns fill its 2 empty spots, with no drop and no pass, and go to the 2 managers eliminated in round 2. Its last
+          turns fill its 2 empty spots, with no drop and no pass (unless nobody undrafted is left), and go to the 2 managers eliminated in round 2. Its last
           2 turns are regular redraft picks and go to the 2 managers eliminated in round 1. In each pair, the manager who
           finished higher in the round they went out picks first.
         </Bullet>

@@ -65,7 +65,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
   const canAct = !!turn && (myTurn || data.isCommissioner);
   const onBehalfOf = turn && !myTurn ? teamLabel(data, teamsById.get(turn.ghost?.by ?? turn.teamId)) : undefined;
   const dropOptions = turn ? currentRosters(data).get(turn.teamId) ?? [] : [];
-  // The ghost fills its empty spots without dropping anyone, and can't skip filling them.
+  // The ghost fills its empty spots without dropping anyone.
   const filling = !!turn?.ghost && dropOptions.length < ROSTER_SIZE;
 
   // The player popup's Draft button opens the pick sheet, for anyone the drafter can still take:
@@ -101,12 +101,16 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
   const status = clockStatus(data, draft, turn, myTurn, actions.length);
   const errorText = error && <ThemedText themeColor="danger">{error}</ThemedText>;
   const commissioner = useCommissionerActions(data, draft, turn, run);
-  // Hitters whose MLB team is out can't stay: no yielding (or passing a ghost turn) until they're replaced.
-  const mustReplace = dropOptions.filter((id) => data.mlbTeams.get(data.poolByPlayer.get(id)?.mlb_team_id ?? 0)?.eliminated).length;
+  // Hitters whose MLB team is out can't stay: no yielding (or passing a ghost turn) until they're
+  // replaced, and the ghost can't skip filling a spot. Unless nobody undrafted is left.
+  const nobodyLeft = draftable.size === 0;
+  const mustReplace = nobodyLeft
+    ? 0
+    : dropOptions.filter((id) => data.mlbTeams.get(data.poolByPlayer.get(id)?.mlb_team_id ?? 0)?.eliminated).length;
   const yieldButton =
     myTurn &&
     draft.kind === 'redraft' &&
-    !filling &&
+    (!filling || nobodyLeft) &&
     (mustReplace > 0 ? (
       <ThemedText type="small" themeColor="textSecondary">
         {mustReplace === 1 ? 'You have 1 empty spot' : `You have ${mustReplace} empty spots`} (team out) to fill before you can{' '}
@@ -120,7 +124,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
       />
     ));
   // On your ghost turn: what kind of turn it is, and a link to how ghost turns work.
-  const ghostHelp = myTurn && turn?.ghost && <GhostTurnHelp filling={filling} />;
+  const ghostHelp = myTurn && turn?.ghost && <GhostTurnHelp filling={filling} nobodyLeft={nobodyLeft} />;
   // The Queue tab goes away once you have no turns left to queue for.
   const tab = chosenTab === 'queue' && !target ? 'players' : chosenTab;
   const queued = queue.entries.filter((e) => draftable.has(e.playerId)).length;
@@ -253,12 +257,14 @@ function clockStatus(data: SeasonData, draft: Draft, turn: Turn | null, myTurn: 
  * On your turn for the ghost team: whether it fills an empty spot (no drop, no pass) or is an
  * ordinary redraft pick, with a link to the ghost's rules.
  */
-function GhostTurnHelp({ filling }: { filling: boolean }) {
+function GhostTurnHelp({ filling, nobodyLeft }: { filling: boolean; nobodyLeft: boolean }) {
   const theme = useTheme();
   return (
     <Card title="Your pick for the 👻 Ghost" style={{ backgroundColor: theme.tint }}>
       <ThemedText type="small">
-        {filling
+        {filling && nobodyLeft
+          ? 'Nobody undrafted is left to fill its empty spot, so pass this turn.'
+          : filling
           ? "Add an undrafted hitter to fill one of its empty spots. There's no drop, and this turn can't be passed."
           : "A regular redraft pick: add an undrafted hitter to fill one of its empty spots or replace one of its hitters who's still playing. Passing skips only this turn."}
       </ThemedText>

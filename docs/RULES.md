@@ -66,6 +66,10 @@ xSLG, xwOBA, WAR and age were dropped as tiebreakers. They may come back later, 
   A manager may **yield** instead, which skips them for the rest of that draft, but not while
   they have a player whose MLB team is eliminated: he can't stay, so his spot must be filled
   first (unless nobody undrafted is left). The same goes for passing a ghost turn.
+- **Running out**: if the alive MLB teams' undrafted hitters run out, the managers still to
+  pick yield and keep whoever they have, eliminated hitters included (they score 0 from then on).
+  Burned players stay burned, and pitchers and hitters off the postseason roster stay out of the
+  pool. A postseason roster change (an injury replacement) adds hitters once the pool is synced.
 - **A player can be on one roster, ever, per season.** Once drafted he is off the board
   for good, including after being dropped, after his fantasy team is eliminated, and for
   the team that dropped him.
@@ -97,7 +101,8 @@ The eliminated managers' team, so they keep following along. It's in the Standin
   round 2. Its last 2 are ordinary redraft picks, made by the 2 managers out after round 1. Each
   pair goes higher-ranked first, so each of the 4 managers makes one turn. Unlike a manager's
   yield, a pass on a ghost turn (by the manager or autodraft) passes only that turn: the other
-  manager still gets theirs.
+  manager still gets theirs. If nobody undrafted is left, an empty-spot turn is passed too (by
+  the manager or autodraft), and the ghost plays short.
 - **Round 3**: the ghost is ranked with the finalists. If it ranks first, it's the champion and
   its 4 managers share the title. A full tie with the top finalist is a drink-off (one of its
   managers drinks).

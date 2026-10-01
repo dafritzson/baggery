@@ -364,6 +364,20 @@ describe('ghost turns', () => {
     expect(autodraftAction(redraftTurn, candidates, [])).toEqual(yieldTurn('G'));
   });
 
+  it('with nobody undrafted left, an add can be passed, and autodraft passes it', () => {
+    // Only 1 and 2 are eligible; A and B take them, so the ghost's add finds nobody.
+    const s = state(draft4, { rosters: rosters4(), everRostered: new Set([10, 11, 12, 13, 20, 21, 22, 23, 30, 31]), eligible: new Set([1, 2]) });
+    const empty = [pick('A', 1, 10), pick('B', 2, 20)].reduce(applyAction, s);
+    expect(validateAction(empty, yieldTurn('G'))).toBeNull();
+    expect(autodraftAction(empty, [{ playerId: 1, regularSeasonTb: 300 }], [])).toEqual(yieldTurn('G'));
+    // Passing an add passes only that turn: Q still gets the ghost's second add.
+    const after = applyAction(empty, yieldTurn('G'));
+    expect(nextTurn(after.config, after.actions)).toEqual({ teamId: 'G', round: 2, slot: 3, ghost: { by: 'Q', kind: 'add' } });
+    // While anyone is left (B took someone off the pool instead, so 2 is still there), it can't.
+    const left = [pick('A', 1, 10), pick('B', 70, 20)].reduce(applyAction, s);
+    expect(validateAction(left, yieldTurn('G'))).toMatch(/can’t skip/);
+  });
+
   it('a ghost add takes the queued player without a drop', () => {
     const add = s4([pick('A', 5, 10), pick('B', 6, 20)]);
     expect(autodraftAction(add, [{ playerId: 2, regularSeasonTb: 350 }], [], [{ playerId: 1, dropPlayerId: 30 }])).toEqual(pick('G', 1));
