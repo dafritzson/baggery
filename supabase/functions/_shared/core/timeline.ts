@@ -146,6 +146,14 @@ export function roundDays(tl: Timeline, games: TimelineGame[], round: FantasyRou
 }
 
 /**
+ * The zoom the scrubber steps by: while only one round has been played, the season is that round,
+ * so it goes bag by bag like the round instead of day by day.
+ */
+export function stepZoom(tl: Timeline, zoom: Zoom): Zoom {
+  return zoom === 'season' && new Set(tl.days.map((d) => d.round)).size <= 1 ? 'round' : zoom;
+}
+
+/**
  * The scrubber's stops at a zoom: the end of each day for the season; every bag of the round
  * (`at`'s) when zoomed in on it; and one day's first pitch and every bag when zoomed in on that day.
  * A day's last bag is its end; a day without bags is only its end.
