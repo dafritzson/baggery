@@ -1,5 +1,5 @@
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Linking, PanResponder, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 
@@ -110,8 +110,6 @@ export function SeasonScrubber({
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
-  // The plot's left edge on the page, and the drag or tap under way.
-  const gesture = useRef({ origin: 0, dragging: false, vertical: false, lastTap: 0, lastX: 0 });
   const spells = coreSpells(data);
   const days = timeline.days;
   const day = days[stop.day];
@@ -235,36 +233,9 @@ export function SeasonScrubber({
     if (next) onStop(next);
   };
   const scrubTo = (x: number) => onStop(nearestStop(timeline, list, c0 + (Math.max(0, Math.min(width, x)) / width) * (c1 - c0)));
-  const pan = PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    // Let the page scroll (and Android's scroll views take a vertical swipe).
-    onShouldBlockNativeResponder: () => false,
-    onPanResponderTerminationRequest: () => !gesture.current.dragging,
-    onPanResponderGrant: (e) => {
-      gesture.current = { ...gesture.current, origin: e.nativeEvent.pageX - e.nativeEvent.locationX, dragging: false, vertical: false };
-    },
-    onPanResponderMove: (_, g) => {
-      const now = gesture.current;
-      if (!now.dragging && !now.vertical) {
-        // Whichever way the finger clearly goes first decides: sideways drags, anything else never does.
-        if (Math.abs(g.dx) >= DRAG_START && Math.abs(g.dx) > Math.abs(g.dy) * 1.5) now.dragging = true;
-        else if (Math.abs(g.dy) >= DRAG_START) now.vertical = true;
-      }
-      if (now.dragging) scrubTo(g.moveX - now.origin);
-    },
-    onPanResponderRelease: (_, g) => {
-      const now = gesture.current;
-      if (now.dragging || now.vertical || Math.abs(g.dx) >= DRAG_START || Math.abs(g.dy) >= DRAG_START) return;
-      const x = g.x0 - now.origin;
-      if (Date.now() - now.lastTap < DOUBLE_TAP_MS && Math.abs(x - now.lastX) < 40) {
-        now.lastTap = 0;
-        scrubTo(x);
-      } else {
-        now.lastTap = Date.now();
-        now.lastX = x;
-      }
-    },
-  });
+  // The gesture outlives renders; it always scrubs with this render's scale.
+  const [gesture] = useState(() => new ScrubGesture());
+  useEffect(() => gesture.setScrub(scrubTo));
   const hasBags = days.some((d) => d.bags.length > 0);
 
   return (
@@ -338,7 +309,7 @@ export function SeasonScrubber({
         </View>
         <View
           style={[StyleSheet.absoluteFill, Platform.OS === 'web' && ({ touchAction: 'pan-y', cursor: 'pointer' } as object)]}
-          {...pan.panHandlers}
+          {...gesture.panHandlers}
           accessible
           accessibilityRole="adjustable"
           accessibilityLabel="Standings over time"
@@ -400,6 +371,57 @@ export function SeasonScrubber({
       </View>
     </ThemedView>
   );
+}
+
+/**
+ * The slider's touch handling. A drag only takes the slider once the finger clearly goes sideways;
+ * one that first goes up or down (a scroll, the swipe to the home screen) never does. A single tap
+ * does nothing and a double tap jumps to where it landed, so missing the tab bar doesn't move it.
+ */
+class ScrubGesture {
+  private scrub: (x: number) => void = () => {};
+  // The plot's left edge on the page.
+  private origin = 0;
+  private dragging = false;
+  private vertical = false;
+  private lastTap = 0;
+  private lastX = 0;
+
+  setScrub(scrub: (x: number) => void) {
+    this.scrub = scrub;
+  }
+
+  readonly panHandlers = PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    // Let the page scroll (and Android's scroll views take a vertical swipe).
+    onShouldBlockNativeResponder: () => false,
+    onPanResponderTerminationRequest: () => !this.dragging,
+    onPanResponderGrant: (e) => {
+      this.origin = e.nativeEvent.pageX - e.nativeEvent.locationX;
+      this.dragging = false;
+      this.vertical = false;
+    },
+    onPanResponderMove: (_, g) => {
+      if (!this.dragging && !this.vertical) {
+        // Whichever way the finger clearly goes first decides.
+        if (Math.abs(g.dx) >= DRAG_START && Math.abs(g.dx) > Math.abs(g.dy) * 1.5) this.dragging = true;
+        else if (Math.abs(g.dy) >= DRAG_START) this.vertical = true;
+      }
+      if (this.dragging) this.scrub(g.moveX - this.origin);
+    },
+    onPanResponderRelease: (_, g) => {
+      if (this.dragging || this.vertical || Math.abs(g.dx) >= DRAG_START || Math.abs(g.dy) >= DRAG_START) return;
+      const x = g.x0 - this.origin;
+      const now = Date.now();
+      if (now - this.lastTap < DOUBLE_TAP_MS && Math.abs(x - this.lastX) < 40) {
+        this.lastTap = 0;
+        this.scrub(x);
+      } else {
+        this.lastTap = now;
+        this.lastX = x;
+      }
+    },
+  }).panHandlers;
 }
 
 /**
