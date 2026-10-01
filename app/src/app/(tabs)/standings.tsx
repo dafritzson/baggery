@@ -16,6 +16,7 @@ import {
   scoresAt,
   type Stop,
   stopPosition,
+  stepZoom,
   stopsFor,
   type Zoom,
 } from '@core/timeline.ts';
@@ -92,6 +93,8 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
     roundTeamIds(data, round).includes(teamId),
   );
   const days = timeline.days;
+  // What the scrubber steps by: the season goes bag by bag too while it's only one round.
+  const steps = stepZoom(timeline, zoom);
   const latest = days.length ? dayEnd(timeline, days.length - 1) : null;
   // A stop the timeline no longer has (a late hit reordered the day) falls back to the latest.
   const valid = stop && stop.day < days.length && stop.bag <= days[stop.day].bags.length ? stop : null;
@@ -112,22 +115,22 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
   const step = useRef<() => void>(() => {});
   useEffect(() => {
     step.current = () => {
-      const next = at ? move(timeline, zoom, at) : null;
+      const next = at ? move(timeline, steps, at) : null;
       if (next) go(next);
-      if (!next || !move(timeline, zoom, next)) setPlaying(false);
+      if (!next || !move(timeline, steps, next)) setPlaying(false);
     };
   });
   useEffect(() => {
     if (!playing) return;
-    const id = setInterval(() => step.current(), PLAY_MS[zoom] / speed);
+    const id = setInterval(() => step.current(), PLAY_MS[steps] / speed);
     return () => clearInterval(id);
-  }, [playing, zoom, speed]);
+  }, [playing, steps, speed]);
   // Starts playing one way, from the other end when it's already at the end that way.
   const start = (s: Speed, d: 1 | -1) => {
     if (!at) return;
-    const stops = playStops(timeline, zoom, at);
-    if (d > 0 && !nextPlayStop(timeline, zoom, at)) go(stops[0]);
-    if (d < 0 && !prevPlayStop(timeline, zoom, at)) go(stops[stops.length - 1]);
+    const stops = playStops(timeline, steps, at);
+    if (d > 0 && !nextPlayStop(timeline, steps, at)) go(stops[0]);
+    if (d < 0 && !prevPlayStop(timeline, steps, at)) go(stops[stops.length - 1]);
     setSpeed(s);
     setDirection(d);
     setPlaying(true);
@@ -137,8 +140,8 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
   const play = () => (playing ? setPlaying(false) : start(1, 1));
   const shuttle = (d: 1 | -1) => (playing && direction === d ? setSpeed(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]) : start(2, d));
   // Frame by frame: pauses and goes one bag on or back.
-  const nextStop = at ? nextPlayStop(timeline, zoom, at) : null;
-  const prevStop = at ? prevPlayStop(timeline, zoom, at) : null;
+  const nextStop = at ? nextPlayStop(timeline, steps, at) : null;
+  const prevStop = at ? prevPlayStop(timeline, steps, at) : null;
   const stepTo = (s: Stop | null) => () => {
     setPlaying(false);
     if (s) go(s);
@@ -147,7 +150,7 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
     setPlaying(false);
     setZoom(z);
     if (!at) return;
-    const stops = stopsFor(timeline, z, at);
+    const stops = stopsFor(timeline, stepZoom(timeline, z), at);
     go(stops.find((s) => sameStop(s, at)) ?? nearestStop(timeline, stops, stopPosition(timeline, at)));
   };
   // A round chip goes to the end of that round (or the latest moment, for the one being played).
@@ -162,7 +165,7 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
   const lastDay = days.findLastIndex((d) => d.round === round);
   const settled = atLatest || (at !== null && (at.day > lastDay || (at.day === lastDay && isDayEnd(timeline, at))));
   // Places moved since the previous stop in the same round.
-  const prev = at ? previousStop(timeline, zoom, at) : null;
+  const prev = at ? previousStop(timeline, steps, at) : null;
   // Only ranked teams move (the ghost team in round 2 is listed outside the ranking).
   const teamIds = rankedTeamIds(data, round);
   const moves = new Map<string, number>();
@@ -175,7 +178,7 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
     }
   }
   // On a bag (any stop but a day's end on the season), the cell it went into.
-  const bag = at && at.bag > 0 && (zoom !== 'season' || !isDayEnd(timeline, at)) ? days[at.day].bags[at.bag - 1] : null;
+  const bag = at && at.bag > 0 && (steps !== 'season' || !isDayEnd(timeline, at)) ? days[at.day].bags[at.bag - 1] : null;
   const bagGame = bag ? scores.games.find((g) => g.gamePk === bag.gamePk) : undefined;
   const flash = bag && bagGame && bag.round === round ? { teamId: bag.teamId, column: `${bagGame.gameType}${bagGame.seriesGameNumber}` } : null;
 
