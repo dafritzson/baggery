@@ -26,6 +26,7 @@ import { Columns } from '@/components/columns';
 import { Loader } from '@/components/loader';
 import { RoundChips, StandingsTable, TeamScoreboard } from '@/components/scoreboard';
 import { SeasonScrubber, rankedTeamIds, roundTeamIds } from '@/components/season-scrubber';
+import { useTabRetap } from '@/components/section-nav';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -100,9 +101,16 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
       const sub = AppState.addEventListener('change', (state) => {
         if (state === 'active') toLatest();
       });
-      return () => sub.remove();
+      return () => {
+        sub.remove();
+        // Leaving: a tap on the tab comes back to the standings, not a team (a link to a team still
+        // opens it).
+        setView('standings');
+      };
     }, []),
   );
+  // Tapping the Standings tab while on it goes back from a team to the standings too.
+  useTabRetap('standings', useCallback(() => setView('standings'), []));
 
   const spells = coreSpells(data);
   const timeline = buildTimeline(scores.games, scores.hits ?? [], spells, (teamId, round) =>
