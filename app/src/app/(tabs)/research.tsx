@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { Loader } from '@/components/loader';
 import { PlayerDetails } from '@/components/player-popup';
 import { statsWidthFor } from '@/components/player-table';
-import { PlayersList, boardPlayers, currentBoard } from '@/components/players-list';
+import { PlayersList, boardPlayers } from '@/components/players-list';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -40,12 +40,11 @@ function ResearchWide({ data }: { data: SeasonData }) {
   // What the table says it needs (its longest name plus the chosen columns); a guess until then.
   const [tableWidth, setTableWidth] = useState<number | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
-  // Until someone is picked, show the one with the most total bases of those the list starts with.
-  const top = useMemo(() => {
-    const board = currentBoard(data);
-    const rows = boardPlayers(data, board).filter((p) => !board.draftFilters || (p.owner === null && p.alive));
-    return rows.reduce<{ id: number; tb: number } | null>((best, p) => (!best || p.tb > best.tb ? p : best), null);
-  }, [data]);
+  // Until someone is picked, show the player with the most total bases.
+  const top = useMemo(
+    () => boardPlayers(data).reduce<{ id: number; tb: number } | null>((best, p) => (!best || p.tb > best.tb ? p : best), null),
+    [data],
+  );
   const selectedId = picked ?? top?.id ?? null;
 
   return (

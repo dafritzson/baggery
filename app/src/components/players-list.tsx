@@ -31,7 +31,7 @@ export interface Board {
   alive: Set<number>;
   /**
    * Starts filtered to who can be drafted (unowned players on alive teams), with the Owner and
-   * Alive filters on. Off once the season is over, when it lists everyone.
+   * Alive filters on: a draft's board, until the season is over. Research starts unfiltered.
    */
   draftFilters: boolean;
   /** Only players on their team's postseason roster. */
@@ -70,14 +70,14 @@ export function startFilters(board: Board): ColumnFilters {
 }
 
 /**
- * The board now: every postseason roster, owned players and eliminated teams included, starting
- * filtered to who can still be drafted. Once the season is over it's the whole player pool.
+ * The board now: every postseason roster, owned players and eliminated teams included, unfiltered.
+ * Once the season is over it's the whole player pool.
  */
 export function currentBoard(data: SeasonData): Board {
   const owners = ownership(data.spells);
   const alive = new Set([...data.mlbTeams.values()].filter((t) => !t.eliminated).map((t) => t.id));
   if (data.season.status === 'complete') return { owners, alive, draftFilters: false, rosterOnly: false, injured: true };
-  return { owners, alive, draftFilters: true, rosterOnly: true, injured: injuredDraftable(data) };
+  return { owners, alive, draftFilters: false, rosterOnly: true, injured: injuredDraftable(data) };
 }
 
 /** Who can be drafted now, whatever the board shows: for the Draft button and the queue. */
@@ -111,7 +111,8 @@ export function useDraftBoard(data: SeasonData, draft: Draft): Board {
   }, [done, year, draft.before_game_type]);
 
   return useMemo(() => {
-    if (draft.status !== 'complete') return currentBoard(data);
+    // Starts filtered to who can still be drafted, while there's a draft left.
+    if (draft.status !== 'complete') return { ...currentBoard(data), draftFilters: data.season.status !== 'complete' };
     const locks = draft.locks_at ? Date.parse(draft.locks_at) : Infinity;
     return {
       owners: ownership(data.spells, locks),
@@ -285,9 +286,9 @@ export function PlayersList({
     filterSource: available,
     onNaturalWidth: onTableWidth,
   };
-  // Alive teams only: with the Alive filter off, All is every postseason team. After the season, all of them.
+  // Alive teams only: All is every postseason team, alive or not. After the season, all of them.
   const mlbTeams = [...data.mlbTeams.values()]
-    .filter((t) => !shownBoard.draftFilters || shownBoard.alive.has(t.id))
+    .filter((t) => data.season.status === 'complete' || shownBoard.alive.has(t.id))
     .sort((a, b) => a.abbreviation.localeCompare(b.abbreviation));
 
   return (
