@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { type ScheduleGame, ifNecessary, notNeeded, postseasonSeries } from '../supabase/functions/_shared/core/schedule.ts';
+import { type ScheduleGame, ifNecessary, neededGames, notNeeded, postseasonSeries } from '../supabase/functions/_shared/core/schedule.ts';
 
 const NYY = 147;
 const BOS = 111;
@@ -59,6 +59,17 @@ describe('postseasonSeries', () => {
     expect(ws.winner).toBe(NYY);
     expect([4, 5, 6].map((n) => notNeeded(ws, n))).toEqual([false, true, true]);
     expect([4, 5].map((n) => ifNecessary(ws, n))).toEqual([false, true]);
+  });
+
+  it('leaves out the games a decided series no longer needs', () => {
+    const games = [
+      game({ gameType: 'F', seriesGameNumber: 1, homeTeamId: NYY, awayTeamId: SEA, homeScore: 4, awayScore: 1 }),
+      game({ gameType: 'F', seriesGameNumber: 2, homeTeamId: SEA, awayTeamId: NYY, homeScore: 0, awayScore: 3 }),
+      game({ gameType: 'F', seriesGameNumber: 3, homeTeamId: SEA, awayTeamId: NYY, status: 'Preview' }),
+      game({ gameType: 'F', seriesGameNumber: 1, homeTeamId: TOR, awayTeamId: BOS, homeScore: 2, awayScore: 1 }),
+      game({ gameType: 'F', seriesGameNumber: 2, homeTeamId: BOS, awayTeamId: TOR, status: 'Preview' }),
+    ];
+    expect(neededGames(games).map((g) => g.gamePk)).toEqual([games[0], games[1], games[3], games[4]].map((g) => g.gamePk));
   });
 
   it("takes the series length from MLB (2021's one-game Wild Card)", () => {
