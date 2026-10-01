@@ -13,6 +13,7 @@ import {
   previousStop,
   roundLines,
   scoresAt,
+  stepZoom,
   stopPosition,
   stopsFor,
   type TimelineGame,
@@ -124,6 +125,20 @@ describe('stopsFor', () => {
 
   it("stops at a day's first pitch and each of its bags when zoomed in on a day", () => {
     expect(stopsFor(tl, 'day', { day: 0, bag: 3 })).toEqual([0, 1, 2, 3].map((bag) => ({ day: 0, bag })));
+  });
+});
+
+describe('stepZoom', () => {
+  it('steps the season bag by bag, like the round, while only round 1 has been played', () => {
+    const firstRound = buildTimeline(games.slice(0, 4), hits, spells, inRound);
+    expect(stepZoom(firstRound, 'season')).toBe('round');
+    expect(stopsFor(firstRound, stepZoom(firstRound, 'season'), dayEnd(firstRound, 2))).toEqual(stopsFor(firstRound, 'round', dayEnd(firstRound, 2)));
+  });
+
+  it('steps the season day by day once a second round has started, and leaves the other zooms alone', () => {
+    expect(stepZoom(tl, 'season')).toBe('season');
+    expect(stepZoom(tl, 'round')).toBe('round');
+    expect(stepZoom(tl, 'day')).toBe('day');
   });
 });
 

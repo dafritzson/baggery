@@ -10,6 +10,7 @@ import {
   nearestStop,
   roundLines,
   type Stop,
+  stepZoom,
   stopPosition,
   stopsFor,
   type Timeline,
@@ -55,7 +56,8 @@ export function rankedTeamIds(data: SeasonData, round: FantasyRound): string[] {
 /**
  * Below the standings: the season as a race (each team's running round total, stepping up bag by
  * bag) with a slider under it that moves the standings to any moment. Zoomed out it stops at the
- * end of each game day; zoomed in on a round or a day, at every bag. Drag or tap anywhere on the
+ * end of each game day (at every bag while only one round has been played); zoomed in on a round
+ * or a day, at every bag. Drag or tap anywhere on the
  * chart or the bar, or play it like a video: play, pause, a bag back or on, rewind or fast forward
  * (2×, 4×, 8×, back to 1×).
  * Paused on a bag, its videos (MLB's clip and Savant's) are a tap away under the readout.
@@ -201,7 +203,7 @@ export function SeasonScrubber({
   const gameByPk = new Map(games.map((g) => [g.gamePk, g]));
   const played = [...new Set(day.gamePks.map((pk) => gameByPk.get(pk)).filter((g) => g !== undefined).map(colLabel))].join(', ');
   // On a bag: any stop but a day's end on the season (playback goes bag by bag there too).
-  const bag = stop.bag > 0 && (zoom !== 'season' || !isDayEnd(timeline, stop)) ? day.bags[stop.bag - 1] : null;
+  const bag = stop.bag > 0 && (stepZoom(timeline, zoom) !== 'season' || !isDayEnd(timeline, stop)) ? day.bags[stop.bag - 1] : null;
   const anyLive = games.some((g) => g.status === 'Live');
   const champion = data.teams.some((t) => t.eliminated_after_round === 3);
   let main: string;
@@ -222,7 +224,7 @@ export function SeasonScrubber({
     sub = played;
   }
 
-  const list = stopsFor(timeline, zoom, stop);
+  const list = stopsFor(timeline, stepZoom(timeline, zoom), stop);
   // The stop before or after this one (it can be between stops, when playback left it on a bag).
   const step = (by: number) => {
     const next = by > 0 ? list.find((s) => stopPosition(timeline, s) > at) : list.findLast((s) => stopPosition(timeline, s) < at);
