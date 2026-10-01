@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 
+import { currentGameDay } from '@core/timeline.ts';
+
 import type { GameInfo } from '@/lib/scores';
 
 /** Local calendar day of a game, e.g. "2026-09-29", for grouping. */
@@ -10,22 +12,21 @@ export function dayKey(iso: string): string {
 }
 
 /**
- * Today's key, kept current for a screen that stays open (tabs do): it moves on at midnight, and
- * is checked again whenever the app comes back to the foreground, since timers stop in between.
+ * Today's game day, kept current for a screen that stays open (tabs do). It turns over at 3 AM
+ * Eastern, not midnight, so games that run late stay on the day they started. Checked each minute
+ * and whenever the app comes back to the foreground, since timers stop in between.
  */
 export function useToday(): string {
-  const [today, setToday] = useState(() => dayKey(new Date().toISOString()));
+  const [today, setToday] = useState(() => currentGameDay(Date.now()));
   useEffect(() => {
-    const check = () => setToday(dayKey(new Date().toISOString()));
-    const now = new Date();
-    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-    const timer = setTimeout(check, midnight.getTime() - now.getTime() + 1000);
+    const check = () => setToday(currentGameDay(Date.now()));
+    const timer = setInterval(check, 60_000);
     const sub = AppState.addEventListener('change', (state) => state === 'active' && check());
     return () => {
-      clearTimeout(timer);
+      clearInterval(timer);
       sub.remove();
     };
-  }, [today]);
+  }, []);
   return today;
 }
 

@@ -84,6 +84,22 @@ export function gameDay(g: TimelineGame): string {
   return g.officialDate ?? new Date(Date.parse(g.start) - 4 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
+/** When a game day ends: 3 AM Eastern, so games that run past midnight still count as the day before. */
+export const GAME_DAY_ROLLOVER_HOURS = 3;
+
+const easternDate = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/New_York',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+/** Today's game day (as MLB dates them, Eastern), e.g. "2026-09-30": until 3 AM Eastern, still yesterday's. */
+export function currentGameDay(now: number): string {
+  // en-CA formats as YYYY-MM-DD.
+  return easternDate.format(new Date(now - GAME_DAY_ROLLOVER_HOURS * 3600 * 1000));
+}
+
 /**
  * The season's game days so far (days with a game that has started) and each day's bags. A hit
  * counts for the team whose roster had the batter at first pitch, if that team is still in the
