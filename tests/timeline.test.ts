@@ -5,6 +5,7 @@ import type { RosterSpell } from '../supabase/functions/_shared/core/scoring.ts'
 import {
   buildTimeline,
   dayEnd,
+  currentGameDay,
   gameDay,
   nearestStop,
   nextPlayStop,
@@ -259,5 +260,25 @@ describe('positions', () => {
     const list = stopsFor(tl, 'season', { day: 0, bag: 0 });
     expect(nearestStop(tl, list, 2.4)).toEqual({ day: 1, bag: 1 });
     expect(nearestStop(tl, stopsFor(tl, 'round', { day: 0, bag: 1 }), 0.6)).toEqual({ day: 0, bag: 2 });
+  });
+});
+
+describe('currentGameDay', () => {
+  it('stays on the day before until 3 AM Eastern', () => {
+    // 2:59 AM EDT on Oct 1 (06:59 UTC): a game from the 30th may still be going.
+    expect(currentGameDay(Date.parse('2026-10-01T06:59:00Z'))).toBe('2026-09-30');
+    // 3:00 AM EDT.
+    expect(currentGameDay(Date.parse('2026-10-01T07:00:00Z'))).toBe('2026-10-01');
+  });
+
+  it('is the Eastern date, not UTC, in the evening', () => {
+    // 11 PM EDT on Sep 30 is already Oct 1 in UTC.
+    expect(currentGameDay(Date.parse('2026-10-01T03:00:00Z'))).toBe('2026-09-30');
+  });
+
+  it('follows Eastern standard time after the clocks change', () => {
+    // Nov 2, 2026 is in EST (UTC-5): 3 AM is 08:00 UTC.
+    expect(currentGameDay(Date.parse('2026-11-02T07:59:00Z'))).toBe('2026-11-01');
+    expect(currentGameDay(Date.parse('2026-11-02T08:00:00Z'))).toBe('2026-11-02');
   });
 });
