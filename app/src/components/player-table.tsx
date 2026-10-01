@@ -18,6 +18,12 @@ export interface PlayerRow {
   id: number;
   name: string;
   team: string;
+  /** The fantasy team he's on (or was, when `burned`); null if nobody has drafted him. */
+  owner: string | null;
+  /** Dropped by `owner`: he can't be drafted again this season. */
+  burned: boolean;
+  /** His MLB team is still in the postseason (or, on a finished draft's board, was in the series after it). */
+  alive: boolean;
   /** The injured list he's on (7, 10, 15 or 60 days), or null. */
   injuredList: number | null;
   wins: number | null;
@@ -58,7 +64,7 @@ export interface PlayerRow {
   platoon: PlayerPlatoon | null;
 }
 
-export type ColumnKey = Exclude<keyof PlayerRow, 'id' | 'name' | 'team' | 'injuredList' | 'platoon'>;
+export type ColumnKey = Exclude<keyof PlayerRow, 'id' | 'name' | 'team' | 'burned' | 'injuredList' | 'platoon'>;
 type SortKey = 'name' | ColumnKey;
 
 export interface Column {
@@ -85,6 +91,8 @@ export interface Column {
   cellTitle?: (row: PlayerRow) => string | null;
   /** Underlined with dots, e.g. xBags adjusted for a platoon. */
   marked?: (row: PlayerRow) => boolean;
+  /** Its filter applies while the column is hidden too, e.g. the draft board's "Available". */
+  keepsFilter?: boolean;
 }
 
 /** Bounds per column, from the filter menus in the header. */
@@ -128,6 +136,28 @@ export const COLUMNS: Column[] = [
     text: (r) => r.platoon?.spotLabel ?? null,
     cellTitle: (r) => spotTitle(r.platoon),
   },
+  {
+    key: 'owner',
+    label: 'Owner',
+    title: 'Fantasy team that has him (🔥 if they dropped him); blank if nobody has drafted him',
+    width: 110,
+    // Owned, then dropped, then available, when sorted high to low.
+    value: (r) => (r.owner === null ? 0 : r.burned ? 1 : 2),
+    text: ownerText,
+    cellTitle: ownerText,
+    flag: { yes: 'Owned', no: 'Available' },
+    keepsFilter: true,
+  },
+  {
+    key: 'alive',
+    label: 'Alive',
+    title: 'His MLB team is still in the postseason',
+    width: 44,
+    value: (r) => (r.alive ? 1 : 0),
+    format: (v) => (v ? '✓' : ''),
+    flag: { yes: 'Team alive', no: 'Team out' },
+    keepsFilter: true,
+  },
   { key: 'bye', label: 'Bye', title: 'Team has a Wild Card bye', width: 44, value: (r) => (r.bye ? 1 : 0), format: (v) => (v ? '✓' : ''), default: true, flag: { yes: 'Bye', no: 'No bye' }, draft1: true },
   count('wins', 'Wins', 'Team wins', 50),
   { ...count('postTb', 'Post TB', 'Total bases this postseason', 66), default: true, postseason: true },
@@ -150,6 +180,12 @@ export const COLUMNS: Column[] = [
   count('bb', 'BB', 'Walks'),
   count('so', 'SO', 'Strikeouts', 44),
 ];
+
+/** "Bag Daddies", "🔥 (Bag Daddies)" once dropped, or blank. */
+function ownerText(r: PlayerRow): string {
+  if (r.owner === null) return '';
+  return r.burned ? `🔥 (${r.owner})` : r.owner;
+}
 
 /** "Bats 2nd against RHP, 7th against LHP". */
 function spotTitle(p: PlayerPlatoon | null): string | null {
@@ -178,7 +214,7 @@ function compareNullable(a: number | null, b: number | null, desc: boolean): num
 }
 
 /**
- * Available players as a spreadsheet-style table: one row each, sortable by any column.
+ * Players as a spreadsheet-style table: one row each, sortable by any column.
  * The name column stays put while the stats scroll sideways on narrow screens.
  */
 export function PlayerTable({
@@ -322,6 +358,7 @@ export function PlayerTable({
                 style={[styles.cell, { minWidth: c.width, flexGrow: c.width, flexBasis: c.width }]}>
                 <ThemedText
                   type={c.key === sort.key ? 'smallBold' : 'small'}
+                  numberOfLines={1}
                   themeColor={value === null ? 'textSecondary' : 'text'}
                   style={[styles.number, c.marked?.(r) && styles.marked]}>
                   {c.text?.(r) ?? (value === null ? '—' : c.format ? c.format(value) : value)}
@@ -359,7 +396,8 @@ export function PlayerTable({
         {sorted.map((r, i) => (
           <Pressable key={r.id} {...rowPress(r.id)} style={[rowStyle(r.id, i), styles.nameCell, styles.nameRow]}>
             <ThemedText type="smallBold" numberOfLines={1} style={styles.name}>{r.name}</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">{r.team}</ThemedText>
+            {/* Struck through once his MLB team is out, as on Standings. */}
+            <ThemedText type="small" themeColor="textSecondary" style={!r.alive && styles.out}>{r.team}</ThemedText>
             {r.injuredList !== null && <InjuryChip list={r.injuredList} />}
             {r.platoon?.side && <PlatoonChip platoon={r.platoon} name={r.name} />}
           </Pressable>
@@ -497,4 +535,5 @@ const styles = StyleSheet.create({
   cell: { height: ROW_HEIGHT, justifyContent: 'center', alignItems: 'flex-end', paddingLeft: Spacing.one },
   number: { fontVariant: ['tabular-nums'] },
   marked: { textDecorationLine: 'underline', textDecorationStyle: 'dotted' },
+  out: { textDecorationLine: 'line-through' },
 });

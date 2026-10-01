@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { Loader } from '@/components/loader';
 import { PlayerDetails } from '@/components/player-popup';
 import { statsWidthFor } from '@/components/player-table';
-import { PlayersList, availablePlayers } from '@/components/players-list';
+import { PlayersList, boardPlayers } from '@/components/players-list';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -42,7 +42,7 @@ function ResearchWide({ data }: { data: SeasonData }) {
   const [picked, setPicked] = useState<number | null>(null);
   // Until someone is picked, show the player with the most total bases.
   const top = useMemo(
-    () => availablePlayers(data).reduce<{ id: number; tb: number } | null>((best, p) => (!best || p.tb > best.tb ? p : best), null),
+    () => boardPlayers(data).reduce<{ id: number; tb: number } | null>((best, p) => (!best || p.tb > best.tb ? p : best), null),
     [data],
   );
   const selectedId = picked ?? top?.id ?? null;

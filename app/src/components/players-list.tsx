@@ -18,15 +18,22 @@ import { usePlayerColumns } from '@/lib/player-columns';
 import { type PlatoonData, availableGames, matchupsByTeam, playerPlatoon, usePlatoons } from '@/lib/platoon';
 import { projection, teamOdds } from '@/lib/projections';
 import { useScores } from '@/lib/scores';
+import { type Ownership, draftablePlayers, ownership } from '@/lib/board';
 import { type Draft, type SeasonData, injuredDraftable } from '@/lib/season';
+import { teamName } from '@/lib/teams';
 import { supabase } from '@/lib/supabase';
 
-/** Which players a list shows. */
+/** Which players a list shows, and what it says about them. */
 export interface Board {
-  /** Players on a fantasy team, left off the list. */
-  taken: Set<number>;
-  /** MLB teams whose players are listed. */
-  teamIds: Set<number>;
+  /** Who owns each drafted player (or did, and dropped him). */
+  owners: Map<number, Ownership>;
+  /** MLB teams still alive, the ones with a team chip. */
+  alive: Set<number>;
+  /**
+   * Starts filtered to who can be drafted (unowned players on alive teams), with the Owner and
+   * Alive filters on: a draft's board, until the season is over. Research starts unfiltered.
+   */
+  draftFilters: boolean;
   /** Only players on their team's postseason roster. */
   rosterOnly: boolean;
   /** With `rosterOnly`, hitters on the injured list too (Draft 1). */
@@ -57,26 +64,31 @@ export function usePostseasonTotals(year: number, before?: string | null): Posts
   return totals;
 }
 
-/**
- * The board now: players who can still be drafted (on a live postseason roster and on nobody's
- * team). Once the season is over there's nothing left to draft, so it's the whole player pool.
- */
-export function currentBoard(data: SeasonData): Board {
-  if (data.season.status === 'complete') {
-    return { taken: new Set(), teamIds: new Set(data.mlbTeams.keys()), rosterOnly: false, injured: true };
-  }
-  return {
-    taken: new Set(data.spells.map((s) => s.mlb_player_id)),
-    teamIds: new Set([...data.mlbTeams.values()].filter((t) => !t.eliminated).map((t) => t.id)),
-    rosterOnly: true,
-    injured: injuredDraftable(data),
-  };
+/** Filters a board starts with: only unowned players on alive teams, for a draft's board. */
+export function startFilters(board: Board): ColumnFilters {
+  return board.draftFilters ? { owner: { min: null, max: 0 }, alive: { min: 1, max: null } } : {};
 }
 
 /**
- * A draft's board. A live or upcoming draft uses the current one. A finished draft shows what was
- * left once it was done: players nobody had drafted by then, on the MLB teams playing the series
- * it was before (every postseason team for Draft 1, since Wild Card byes don't play that round).
+ * The board now: every postseason roster, owned players and eliminated teams included, unfiltered.
+ * Once the season is over it's the whole player pool.
+ */
+export function currentBoard(data: SeasonData): Board {
+  const owners = ownership(data.spells);
+  const alive = new Set([...data.mlbTeams.values()].filter((t) => !t.eliminated).map((t) => t.id));
+  if (data.season.status === 'complete') return { owners, alive, draftFilters: false, rosterOnly: false, injured: true };
+  return { owners, alive, draftFilters: false, rosterOnly: true, injured: injuredDraftable(data) };
+}
+
+/** Who can be drafted now, whatever the board shows: for the Draft button and the queue. */
+export function draftableNow(data: SeasonData): Set<number> {
+  return draftablePlayers(data.pool, data.mlbTeams, data.spells, injuredDraftable(data));
+}
+
+/**
+ * A draft's board. A live or upcoming draft uses the current one. A finished draft shows how it
+ * ended: who owned whom by then, and the MLB teams playing the series it was before as the alive
+ * ones (every postseason team for Draft 1, since Wild Card byes don't play that round).
  */
 export function useDraftBoard(data: SeasonData, draft: Draft): Board {
   const [seriesTeams, setSeriesTeams] = useState<Set<number> | null>(null);
@@ -99,11 +111,13 @@ export function useDraftBoard(data: SeasonData, draft: Draft): Board {
   }, [done, year, draft.before_game_type]);
 
   return useMemo(() => {
-    if (draft.status !== 'complete') return currentBoard(data);
+    // Starts filtered to who can still be drafted, while there's a draft left.
+    if (draft.status !== 'complete') return { ...currentBoard(data), draftFilters: data.season.status !== 'complete' };
     const locks = draft.locks_at ? Date.parse(draft.locks_at) : Infinity;
     return {
-      taken: new Set(data.spells.filter((s) => Date.parse(s.from_at) <= locks).map((s) => s.mlb_player_id)),
-      teamIds: (done && seriesTeams) || new Set(data.mlbTeams.keys()),
+      owners: ownership(data.spells, locks),
+      alive: (done && seriesTeams) || new Set(data.mlbTeams.keys()),
+      draftFilters: true,
       rosterOnly: true,
       injured: draft.number === 1,
       statsBefore: draft.locks_at,
@@ -116,7 +130,7 @@ export function useDraftBoard(data: SeasonData, draft: Draft): Board {
  * player missing from `totals` hasn't batted yet: 0 PA and 0 TB if his team has played, empty (a
  * dash) if it hasn't, like a Wild Card bye.
  */
-export function availablePlayers(
+export function boardPlayers(
   data: SeasonData,
   board: Board = currentBoard(data),
   totals: PostseasonTotals | null = null,
@@ -129,15 +143,17 @@ export function availablePlayers(
   const played = new Set(data.pool.filter((p) => totals?.has(p.mlb_player_id)).map((p) => p.mlb_team_id));
   // The odds are from the draft's lock for a finished one; xBags counts injured games from then.
   const now = board.statsBefore ? Date.parse(board.statsBefore) : Date.now();
+  const teamsById = new Map(data.teams.map((t) => [t.id, t]));
   return data.pool
     .filter(
       (p) =>
         (!board.rosterOnly || p.on_postseason_roster || (board.injured && p.injured_list !== null)) &&
-        !board.taken.has(p.mlb_player_id) &&
-        board.teamIds.has(p.mlb_team_id),
+        data.mlbTeams.has(p.mlb_team_id),
     )
     .map((p) => {
       const team = data.mlbTeams.get(p.mlb_team_id);
+      const owner = board.owners.get(p.mlb_player_id);
+      const fantasyTeam = owner && teamsById.get(owner.teamId);
       const teamOdd = odds?.get(p.mlb_team_id);
       const { bye, rdslg, tbExpected, rdtb } = projection(data, p);
       const teamMatchups = matchups.get(p.mlb_team_id) ?? [];
@@ -153,6 +169,9 @@ export function availablePlayers(
         mlbTeamId: p.mlb_team_id,
         name: data.players.get(p.mlb_player_id)?.full_name ?? `Player ${p.mlb_player_id}`,
         team: team?.abbreviation ?? '',
+        owner: owner ? (fantasyTeam ? teamName(fantasyTeam) : '—') : null,
+        burned: !!owner?.dropped,
+        alive: board.alive.has(p.mlb_team_id),
         injuredList: p.injured_list,
         wins: team?.wins ?? null,
         adv: teamOdd ? 100 * teamOdd.advance : null,
@@ -221,9 +240,8 @@ export function PlayersList({
   const contained = Platform.OS === 'web' && wide;
   const [query, setQuery] = useState('');
   const [teamFilter, setTeamFilter] = useState<number | null>(null);
-  const [filters, setFilters] = useState<ColumnFilters>({});
-
   const shownBoard = useMemo(() => board ?? currentBoard(data), [board, data]);
+  const [filters, setFilters] = useState<ColumnFilters>(() => startFilters(shownBoard));
   const totals = usePostseasonTotals(data.season.year, shownBoard.statsBefore);
   const { scores } = useScores();
   // Waits for the games, so a series under way isn't shown from 0-0.
@@ -234,7 +252,7 @@ export function PlayersList({
     [data, platoons, scores, shownBoard.statsBefore],
   );
   const available = useMemo(
-    () => availablePlayers(data, shownBoard, totals, odds, platoons, matchups),
+    () => boardPlayers(data, shownBoard, totals, odds, platoons, matchups),
     [data, shownBoard, totals, odds, platoons, matchups],
   );
   // Postseason columns only once it has games (before that they'd be empty), Draft 1's (Bye) only
@@ -248,8 +266,14 @@ export function PlayersList({
   const shown = available.filter(
     (p) => (teamFilter === null || p.mlbTeamId === teamFilter) && (!q || p.name.toLowerCase().includes(q)),
   );
-  // Only the filters on columns in view: hiding a column drops its filter rather than hiding players for a reason you can't see.
-  const active = COLUMNS.filter((c) => columns.includes(c.key) && filters[c.key]);
+  // Only the filters on columns in view: hiding a column drops its filter rather than hiding players
+  // for a reason you can't see. Owner and Alive keep theirs; the line above the table says so.
+  const active = COLUMNS.filter((c) => (columns.includes(c.key) || c.keepsFilter) && filters[c.key]);
+  const clearFilter = (key: ColumnKey) => {
+    const next = { ...filters };
+    delete next[key];
+    setFilters(next);
+  };
   const filtered = filterRows(shown, active.map((c) => ({ value: c.value, range: filters[c.key]! })));
   const tableProps = {
     rows: filtered,
@@ -262,8 +286,9 @@ export function PlayersList({
     filterSource: available,
     onNaturalWidth: onTableWidth,
   };
+  // Alive teams only: All is every postseason team, alive or not. After the season, all of them.
   const mlbTeams = [...data.mlbTeams.values()]
-    .filter((t) => shownBoard.teamIds.has(t.id))
+    .filter((t) => data.season.status === 'complete' || shownBoard.alive.has(t.id))
     .sort((a, b) => a.abbreviation.localeCompare(b.abbreviation));
 
   return (
@@ -299,9 +324,12 @@ export function PlayersList({
       )}
       {active.length > 0 && (
         <View style={styles.filterLine}>
-          <ThemedText type="small" themeColor="textSecondary" style={styles.filterSummary} numberOfLines={1}>
-            {filtered.length} of {shown.length} · {active.map((c) => describeFilter(c, filters[c.key]!)).join(' · ')}
+          <ThemedText type="small" themeColor="textSecondary">
+            {filtered.length} of {shown.length}
           </ThemedText>
+          {active.map((c) => (
+            <FilterPill key={c.key} label={describeFilter(c, filters[c.key]!)} onClear={() => clearFilter(c.key)} />
+          ))}
           <Pressable onPress={() => setFilters({})} hitSlop={8} accessibilityRole="button">
             <ThemedText type="smallBold" themeColor="accent">Clear filters</ThemedText>
           </Pressable>
@@ -405,6 +433,22 @@ function SlidersIcon({ color }: { color: string }) {
   );
 }
 
+/** An active filter above the table, with ✕ to clear it (the Owner and Alive ones may be on hidden columns). */
+function FilterPill({ label, onClear }: { label: string; onClear: () => void }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={onClear}
+      hitSlop={4}
+      accessibilityRole="button"
+      accessibilityLabel={`Clear filter: ${label}`}
+      style={({ pressed }) => [styles.pill, { backgroundColor: pressed ? theme.tintStrong : theme.tint }]}>
+      <ThemedText type="smallBold" style={styles.pillText}>{label}</ThemedText>
+      <ThemedText type="smallBold" themeColor="textSecondary" style={styles.pillText}>✕</ThemedText>
+    </Pressable>
+  );
+}
+
 function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   const theme = useTheme();
   return (
@@ -440,8 +484,9 @@ const styles = StyleSheet.create({
   clearText: { fontSize: 12, lineHeight: 14 },
   // A ScrollView shrinks by default; in a `fill` list the tall table would squash the pills.
   chipRow: { flexGrow: 0, flexShrink: 0 },
-  filterLine: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  filterSummary: { flexShrink: 1 },
+  filterLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.two },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.two, paddingVertical: 2, borderRadius: Radius.md },
+  pillText: { fontSize: 12, lineHeight: 16 },
   chips: { gap: Spacing.one },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
 });

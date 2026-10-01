@@ -13,7 +13,7 @@ import { QueueList, queueTarget, useDraftQueue } from '@/components/draft-queue'
 import { injuryText } from '@/components/injury';
 import { Loader } from '@/components/loader';
 import { PlayerName } from '@/components/player-name';
-import { PlayersList, availablePlayers, useDraftBoard } from '@/components/players-list';
+import { PlayersList, draftableNow, useDraftBoard } from '@/components/players-list';
 import { Screen } from '@/components/screen';
 import { Sheet } from '@/components/sheet';
 import { FoldChevron, HeadshotStack, RosterRows, TeamTile, emptySlots } from '@/components/team-roster';
@@ -68,8 +68,9 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
   // The ghost fills its empty spots without dropping anyone, and can't skip filling them.
   const filling = !!turn?.ghost && dropOptions.length < ROSTER_SIZE;
 
-  // The player popup's Draft button opens the pick sheet, for anyone the drafter can still take.
-  const draftable = useMemo(() => new Set(availablePlayers(data).map((p) => p.id)), [data]);
+  // The player popup's Draft button opens the pick sheet, for anyone the drafter can still take:
+  // decided apart from the board, which lists owned players and eliminated teams too.
+  const draftable = useMemo(() => draftableNow(data), [data]);
   const board = useDraftBoard(data, draft);
   // Your queue, for autodraft to pick from while you're away. It also adds and removes from the popup.
   const target = queueTarget(data, draft);
