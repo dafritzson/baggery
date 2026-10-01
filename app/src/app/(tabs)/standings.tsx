@@ -1,6 +1,6 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, Pressable, StyleSheet, View } from 'react-native';
 
 import { currentRound, roundStandings } from '@core/scoreboard.ts';
 import {
@@ -86,6 +86,23 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
   useEffect(() => {
     if (linkedTeam) router.setParams({ team: undefined });
   }, [linkedTeam]);
+
+  // Coming back to Standings (from another tab, or the app from the background) shows the latest
+  // standings again, so a moment picked earlier, on purpose or not, isn't mistaken for now.
+  useFocusEffect(
+    useCallback(() => {
+      const toLatest = () => {
+        setPlaying(false);
+        setStop(null);
+        setFutureRound(null);
+      };
+      toLatest();
+      const sub = AppState.addEventListener('change', (state) => {
+        if (state === 'active') toLatest();
+      });
+      return () => sub.remove();
+    }, []),
+  );
 
   const spells = coreSpells(data);
   const timeline = buildTimeline(scores.games, scores.hits ?? [], spells, (teamId, round) =>

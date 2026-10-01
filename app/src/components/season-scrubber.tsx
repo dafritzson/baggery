@@ -1,6 +1,6 @@
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useEffect, useState } from 'react';
-import { type GestureResponderEvent, Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Linking, PanResponder, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 import { SERIES, type ScoreStat } from '@core/scoreboard.ts';
@@ -34,6 +34,10 @@ import { teamName } from '@/lib/teams';
 const CHART_H = 120;
 const BAR_H = 22;
 const ZOOMS: Zoom[] = ['season', 'round', 'day'];
+/** How far a finger moves sideways before it drags the slider, so a stray touch doesn't. */
+const DRAG_START = 12;
+/** Two taps this close together (ms) jump the slider to where they landed. */
+const DOUBLE_TAP_MS = 350;
 const EVENTS = { '1B': 'Single', '2B': 'Double', '3B': 'Triple', HR: 'Home run' } as const;
 
 /** "Tue, Oct 7" */
@@ -55,9 +59,10 @@ export function rankedTeamIds(data: SeasonData, round: FantasyRound): string[] {
 /**
  * Below the standings: the season as a race (each team's running round total, stepping up bag by
  * bag) with a slider under it that moves the standings to any moment. Zoomed out it stops at the
- * end of each game day; zoomed in on a round or a day, at every bag. Drag or tap anywhere on the
- * chart or the bar, or play it like a video: play, pause, a bag back or on, rewind or fast forward
- * (2×, 4×, 8×, back to 1×).
+ * end of each game day; zoomed in on a round or a day, at every bag. Drag sideways anywhere on the
+ * chart or the bar, or double tap a moment, or play it like a video: play, pause, a bag back or on,
+ * rewind or fast forward (2×, 4×, 8×, back to 1×). A single tap or an upward swipe (missing the tab
+ * bar, going to the home screen) leaves it where it is.
  * Paused on a bag, its videos (MLB's clip and Savant's) are a tap away under the readout.
  */
 export function SeasonScrubber({
@@ -105,7 +110,8 @@ export function SeasonScrubber({
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
-  const [origin, setOrigin] = useState(0);
+  // The plot's left edge on the page, and the drag or tap under way.
+  const gesture = useRef({ origin: 0, dragging: false, vertical: false, lastTap: 0, lastX: 0 });
   const spells = coreSpells(data);
   const days = timeline.days;
   const day = days[stop.day];
@@ -229,10 +235,36 @@ export function SeasonScrubber({
     if (next) onStop(next);
   };
   const scrubTo = (x: number) => onStop(nearestStop(timeline, list, c0 + (Math.max(0, Math.min(width, x)) / width) * (c1 - c0)));
-  const grant = (e: GestureResponderEvent) => {
-    setOrigin(e.nativeEvent.pageX - e.nativeEvent.locationX);
-    scrubTo(e.nativeEvent.locationX);
-  };
+  const pan = PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    // Let the page scroll (and Android's scroll views take a vertical swipe).
+    onShouldBlockNativeResponder: () => false,
+    onPanResponderTerminationRequest: () => !gesture.current.dragging,
+    onPanResponderGrant: (e) => {
+      gesture.current = { ...gesture.current, origin: e.nativeEvent.pageX - e.nativeEvent.locationX, dragging: false, vertical: false };
+    },
+    onPanResponderMove: (_, g) => {
+      const now = gesture.current;
+      if (!now.dragging && !now.vertical) {
+        // Whichever way the finger clearly goes first decides: sideways drags, anything else never does.
+        if (Math.abs(g.dx) >= DRAG_START && Math.abs(g.dx) > Math.abs(g.dy) * 1.5) now.dragging = true;
+        else if (Math.abs(g.dy) >= DRAG_START) now.vertical = true;
+      }
+      if (now.dragging) scrubTo(g.moveX - now.origin);
+    },
+    onPanResponderRelease: (_, g) => {
+      const now = gesture.current;
+      if (now.dragging || now.vertical || Math.abs(g.dx) >= DRAG_START || Math.abs(g.dy) >= DRAG_START) return;
+      const x = g.x0 - now.origin;
+      if (Date.now() - now.lastTap < DOUBLE_TAP_MS && Math.abs(x - now.lastX) < 40) {
+        now.lastTap = 0;
+        scrubTo(x);
+      } else {
+        now.lastTap = Date.now();
+        now.lastX = x;
+      }
+    },
+  });
   const hasBags = days.some((d) => d.bags.length > 0);
 
   return (
@@ -306,9 +338,7 @@ export function SeasonScrubber({
         </View>
         <View
           style={[StyleSheet.absoluteFill, Platform.OS === 'web' && ({ touchAction: 'pan-y', cursor: 'pointer' } as object)]}
-          onStartShouldSetResponder={() => true}
-          onResponderGrant={grant}
-          onResponderMove={(e) => scrubTo(e.nativeEvent.pageX - origin)}
+          {...pan.panHandlers}
           accessible
           accessibilityRole="adjustable"
           accessibilityLabel="Standings over time"
