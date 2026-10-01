@@ -3,7 +3,7 @@ import { type LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, Vi
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { BAG_EMOJI, hitBags } from '@core/bag-celebration.ts';
-import { postseasonSeries } from '@core/schedule.ts';
+import { neededGames, postseasonSeries } from '@core/schedule.ts';
 import { SERIES } from '@core/scoreboard.ts';
 import type { GameType } from '@core/types.ts';
 
@@ -74,9 +74,11 @@ export default function GamesScreen() {
   }
   if (!data || !scores) return <Screen width="wide"><ThemedText>No season set up yet.</ThemedText></Screen>;
 
-  const days = [...new Set(scores.games.map(gameDay))].sort();
+  // The Day view leaves out games a decided series no longer needs (Round and Postseason show them as —).
+  const listed = neededGames(scores.games);
+  const days = [...new Set(listed.map(gameDay))].sort();
   const day = picked && days.includes(picked) ? picked : defaultDay(days, today);
-  const games = scores.games.filter((g) => day && gameDay(g) === day).sort(byStatusThenStart);
+  const games = listed.filter((g) => day && gameDay(g) === day).sort(byStatusThenStart);
 
   const series = postseasonSeries(scores.games);
   const rounds = SERIES.filter((r) => series.some((s) => s.gameType === r.gameType));
@@ -115,7 +117,7 @@ export default function GamesScreen() {
                 label={day ? dayLabel(day, today) : 'Pick a day'}
                 title="day"
                 options={days.map((d) => {
-                  const n = scores.games.filter((g) => gameDay(g) === d).length;
+                  const n = listed.filter((g) => gameDay(g) === d).length;
                   return { value: d, label: `${dayLabel(d, today)} · ${n} ${n === 1 ? 'game' : 'games'}` };
                 })}
                 value={day}

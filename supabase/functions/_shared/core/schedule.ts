@@ -1,5 +1,5 @@
 // The postseason schedule as series: which games each has played, who leads, who won and which
-// games only happen if needed. For the Games tab's Round and Postseason views.
+// games only happen if needed. For the Games tab.
 
 import { SERIES, type ScoreGame } from './scoreboard.ts';
 import type { GameType } from './types.ts';
@@ -30,6 +30,11 @@ export interface Series<G extends ScheduleGame = ScheduleGame> {
   start: string;
 }
 
+/** A game's series: its game type and both teams, e.g. "D:119-135". */
+function seriesKey(g: ScoreGame): string {
+  return `${g.gameType}:${[g.homeTeamId, g.awayTeamId].sort((a, b) => a - b).join('-')}`;
+}
+
 /** The winning team of a finished game, if it has one. */
 export function gameWinner(game: ScheduleGame): number | null {
   if (game.status !== 'Final' || game.homeScore === null || game.awayScore === null || game.homeScore === game.awayScore) return null;
@@ -47,12 +52,20 @@ export function notNeeded(series: Series, number: number): boolean {
   return series.winner !== null && (!game || game.status === 'Preview');
 }
 
+/**
+ * The games still worth showing: drops the ones scheduled after their series was decided, which
+ * MLB keeps listing (for the Games tab's Day view).
+ */
+export function neededGames<G extends ScheduleGame>(games: G[]): G[] {
+  const decided = new Set(postseasonSeries(games).filter((s) => s.winner !== null).map((s) => s.key));
+  return games.filter((g) => !(g.status === 'Preview' && decided.has(seriesKey(g))));
+}
+
 /** Every series in the games, in play order: by round, then by first pitch of game 1. */
 export function postseasonSeries<G extends ScheduleGame>(games: G[]): Series<G>[] {
   const groups = new Map<string, G[]>();
   for (const g of games) {
-    const pair = [g.homeTeamId, g.awayTeamId].sort((a, b) => a - b).join('-');
-    const key = `${g.gameType}:${pair}`;
+    const key = seriesKey(g);
     groups.set(key, [...(groups.get(key) ?? []), g]);
   }
   const round = (t: GameType) => SERIES.findIndex((s) => s.gameType === t);
