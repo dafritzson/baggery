@@ -317,26 +317,32 @@ export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; sco
       )}
       <View style={styles.blocks}>
         {shown.map((b) => (
-          <SeriesTable key={b.gameType} data={data} block={b} />
+          <SeriesTable key={b.gameType} data={data} block={b} games={scores.games} />
         ))}
       </View>
     </View>
   );
 }
 
-function SeriesTable({ data, block }: { data: SeasonData; block: SeriesBlock }) {
+function SeriesTable({ data, block, games }: { data: SeasonData; block: SeriesBlock; games: Scores['games'] }) {
   const compact = useLayout() === 'compact';
+  // Hitters whose MLB team is out and has no games in this series: they'll need replacing.
+  const inSeries = new Set(games.filter((g) => g.gameType === block.gameType).flatMap((g) => [g.homeTeamId, g.awayTeamId]));
+  const gone = (mlbTeamId: number | undefined) =>
+    mlbTeamId !== undefined && !!data.mlbTeams.get(mlbTeamId)?.eliminated && !inSeries.has(mlbTeamId);
   const cell = (value: number | null, started: boolean) => (value !== null ? String(value) : started ? '·' : '');
   const rows: GridRow[] = [
     ...block.players.map((p) => {
       const name = data.players.get(p.playerId)?.full_name ?? `Player ${p.playerId}`;
-      const mlb = data.mlbTeams.get(data.poolByPlayer.get(p.playerId)?.mlb_team_id ?? 0)?.abbreviation;
+      const mlbTeamId = data.poolByPlayer.get(p.playerId)?.mlb_team_id;
+      const mlb = data.mlbTeams.get(mlbTeamId ?? 0)?.abbreviation;
+      const out = gone(mlbTeamId);
       return {
         key: String(p.playerId),
         label: (
           <>
-            <PlayerName playerId={p.playerId} type="smallBold" numberOfLines={1}>{name}</PlayerName>
-            {mlb && <ThemedText type="small" themeColor="textSecondary">{mlb}</ThemedText>}
+            <PlayerName playerId={p.playerId} type="smallBold" numberOfLines={1} style={out && styles.outName}>{name}</PlayerName>
+            {mlb && <ThemedText type="small" themeColor="textSecondary">{out ? `${mlb} · Out` : mlb}</ThemedText>}
           </>
         ),
         cells: p.games.map((v, i) => cell(v, block.columns[i].started)),
@@ -371,6 +377,8 @@ function SeriesTable({ data, block }: { data: SeasonData; block: SeriesBlock }) 
 }
 
 const styles = StyleSheet.create({
+  // A hitter whose MLB team is eliminated: struck through and faded until he's replaced.
+  outName: { textDecorationLine: 'line-through', opacity: 0.5 },
   // Wide enough for "▼9"; a rare "▼12" just grows it. Tucked against the rank.
   moveSlot: { minWidth: 16, marginRight: -4, alignItems: 'flex-end' },
   move: { fontSize: 11, lineHeight: 14, fontWeight: 700, fontVariant: ['tabular-nums'] },

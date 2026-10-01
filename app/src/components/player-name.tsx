@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, type StyleProp, type TextStyle } from 'react-native';
+import { Pressable, type StyleProp, StyleSheet, type TextStyle } from 'react-native';
 
 import { ThemedText, type ThemedTextProps } from '@/components/themed-text';
 import { useOpenPlayer } from '@/lib/player';
@@ -28,7 +28,7 @@ export function PlayerName({
       accessibilityRole="button"
       accessibilityHint="Shows the player's stats"
       style={{ flexShrink: 1 }}>
-      <ThemedText type={type} numberOfLines={numberOfLines} style={[style, hovered && { textDecorationLine: 'underline' }]}>
+      <ThemedText type={type} numberOfLines={numberOfLines} style={[style, hovered && { textDecorationLine: StyleSheet.flatten(style)?.textDecorationLine === 'line-through' ? 'underline line-through' : 'underline' }]}>
         {children}
       </ThemedText>
     </Pressable>
