@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from 'react';
-import { type LayoutChangeEvent, Platform, Pressable, ScrollView, type StyleProp, StyleSheet, type TextStyle, View, type ViewStyle } from 'react-native';
+import { type LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { BAG_EMOJI, hitBags } from '@core/bag-celebration.ts';
@@ -17,6 +17,7 @@ import { YouTag } from '@/components/owner-badge';
 import { PlayerName } from '@/components/player-name';
 import { PostseasonView, RoundView } from '@/components/schedule';
 import { Screen } from '@/components/screen';
+import { TeamTile } from '@/components/team-tile';
 import { TeamPopup } from '@/components/team-popup';
 import { ThemedText } from '@/components/themed-text';
 import { Toggle } from '@/components/toggle';
@@ -439,23 +440,11 @@ function GameCard(props: CardProps) {
   );
 }
 
-/** A team's abbreviation on a card, dotted underneath: tapping it opens the team's popup. */
-function TeamAbbr({
-  teamId,
-  abbr,
-  onTeam,
-  type,
-  style,
-}: {
-  teamId: number;
-  abbr: string;
-  onTeam: (mlbTeamId: number) => void;
-  type?: 'default';
-  style: StyleProp<TextStyle>;
-}) {
+/** A team's tile on a card (its colors and abbreviation): tapping it opens the team's popup. */
+function TeamAbbr({ teamId, abbr, onTeam, faded }: { teamId: number; abbr: string; onTeam: (mlbTeamId: number) => void; faded?: boolean }) {
   return (
     <Pressable onPress={() => onTeam(teamId)} hitSlop={6} accessibilityRole="button" accessibilityLabel={`${abbr} team stats`}>
-      <ThemedText type={type} style={[style, styles.teamLink]}>{abbr}</ThemedText>
+      <TeamTile mlbTeamId={teamId} abbr={abbr} faded={faded} />
     </Pressable>
   );
 }
@@ -472,7 +461,7 @@ function FinalCard({ data, scores, game, fill, onTeam }: CardProps) {
     const color = { color: won ? theme.text : theme.textSecondary };
     return (
       <View style={styles.finalSide}>
-        <TeamAbbr teamId={teamId} abbr={data.mlbTeams.get(teamId)?.abbreviation ?? '—'} onTeam={onTeam} style={[styles.finalAbbr, color]} />
+        <TeamAbbr teamId={teamId} abbr={data.mlbTeams.get(teamId)?.abbreviation ?? '—'} onTeam={onTeam} faded={score !== null && other !== null && !won} />
         <ThemedText style={[styles.finalScore, color, won && styles.bold]}>{score ?? ''}</ThemedText>
       </View>
     );
@@ -596,7 +585,7 @@ function OpenCard({ data, scores, game, fill, onTeam }: CardProps) {
           <View style={styles.scores}>
             <View style={styles.scoreColumn}>
               {sides.map((t) => (
-                <TeamAbbr key={t.which} teamId={t.teamId} abbr={t.abbr} onTeam={onTeam} type="default" style={[styles.teamAbbr, t.leading && styles.bold]} />
+                <TeamAbbr key={t.which} teamId={t.teamId} abbr={t.abbr} onTeam={onTeam} />
               ))}
             </View>
             <View style={styles.scoreColumn}>
@@ -683,8 +672,7 @@ const styles = StyleSheet.create({
   cell: { flex: 1, minWidth: 0 },
   fill: { flexGrow: 1 },
   finalScores: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
-  finalSide: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.two },
-  finalAbbr: { fontSize: 17, lineHeight: 24, fontWeight: 600 },
+  finalSide: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   finalScore: { fontSize: 22, lineHeight: 28, fontWeight: 600, fontVariant: ['tabular-nums'] },
   // Phones: a little less padding inside game cards leaves room for the up-next lines.
   cardCompact: { paddingHorizontal: Spacing.two + 2 },
@@ -710,8 +698,6 @@ const styles = StyleSheet.create({
   upLine: { marginLeft: 'auto', paddingLeft: 4, flexShrink: 0, textAlign: 'right', fontSize: 10, lineHeight: 14, fontVariant: ['tabular-nums'] },
   scores: { marginLeft: 'auto', flexDirection: 'row', gap: Spacing.two },
   scoreColumn: { alignItems: 'flex-end', gap: Spacing.half },
-  teamAbbr: { fontWeight: 600, lineHeight: 28 },
-  teamLink: { textDecorationLine: 'underline', textDecorationStyle: 'dotted' },
   score: { minWidth: 24, textAlign: 'right', fontSize: 20, lineHeight: 28, fontVariant: ['tabular-nums'], fontWeight: 600 },
   bold: { fontWeight: 800 },
   // Two columns of mini cards.
