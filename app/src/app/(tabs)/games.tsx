@@ -548,7 +548,7 @@ function OpenCard({ data, scores, game, fill, onTeam }: CardProps) {
             <HitterRow key={i} bagger={whose} atBat={batting && i === 0} style={[styles.upRow, styles.upRowFill]}>
               <View style={[styles.upLabel, batting && styles.upLabelWide]}>
                 {batting && i === 0 ? (
-                  <UpTag label="AB" />
+                  <UpTag />
                 ) : (
                   <ThemedText type="small" themeColor="textSecondary" style={styles.upSpot}>
                     {(p && lines.get(p.id)?.spot) ?? ''}
