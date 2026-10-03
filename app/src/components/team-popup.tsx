@@ -10,6 +10,7 @@ import { PlayerName } from '@/components/player-name';
 import { PopupSheet, SheetHandle } from '@/components/popup-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { TeamTile } from '@/components/team-tile';
 import { Toggle } from '@/components/toggle';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -100,9 +101,7 @@ export function TeamPopup({
         <PlayerProvider stacked onLeave={onClose}>
           <SheetHandle dragHandlers={dragHandlers} style={[styles.head, { borderBottomColor: theme.border }]}>
             <View style={styles.headTop}>
-              <View style={[styles.badge, { backgroundColor: theme.accent }]}>
-                <ThemedText style={[styles.badgeText, { color: theme.accentText }]}>{team.abbreviation}</ThemedText>
-              </View>
+              <TeamTile mlbTeamId={mlbTeamId} abbr={team.abbreviation} size="large" />
               <View style={styles.headText}>
                 <ThemedText style={styles.name} numberOfLines={1}>{team.name}</ThemedText>
                 {subtitle !== '' && <ThemedText type="small" themeColor="textSecondary">{subtitle}</ThemedText>}
@@ -370,8 +369,6 @@ function AvailableTab({ data, mlbTeamId, gamePks }: { data: SeasonData; mlbTeamI
 const styles = StyleSheet.create({
   head: { gap: Spacing.three, padding: Spacing.three, borderBottomWidth: StyleSheet.hairlineWidth },
   headTop: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.three },
-  badge: { width: 56, height: 56, borderRadius: Radius.lg, alignItems: 'center', justifyContent: 'center' },
-  badgeText: { fontSize: 18, lineHeight: 22, fontWeight: 800, letterSpacing: 0.5 },
   headText: { flex: 1, gap: Spacing.half },
   name: { fontSize: 20, lineHeight: 26, fontWeight: 700 },
   status: { alignSelf: 'flex-start', marginTop: Spacing.half, paddingHorizontal: Spacing.two, paddingVertical: 1, borderRadius: Radius.sm },
