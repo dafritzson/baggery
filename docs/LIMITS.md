@@ -174,6 +174,10 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   bring scoring changes in. A trigger records a drafted hitter's changed total bases (a handful
   a postseason), and each cron call takes them in one small query (usually nothing back). The
   pushes are ~1 KB each, a few per correction. On by default.
+- **MLB eliminations.** No new MLB requests, Edge Function calls or realtime traffic: when a
+  `poll-games` call read a game or the schedule, it reads the season's games from the database
+  (~45 small rows, a few KB inside Supabase, not egress) and marks the losers of clinched series
+  eliminated (usually no row changes).
 - **Draft alerts.** No new Edge Function calls, polling or realtime traffic: the draft function,
   already called for each pick, pass or start, sends "⏰ You're on the clock" to the next manager's
   devices after it answers (one small `push_subscriptions` lookup and ~1 KB per device). Four

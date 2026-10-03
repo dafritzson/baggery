@@ -17,6 +17,7 @@
 
 import { requireCommissioner, requireUser } from '../_shared/auth.ts';
 import { autoCloseRounds } from '../_shared/close-round.ts';
+import { eliminatedTeams } from '../_shared/core/scoreboard.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
 import { logCommissioner } from '../_shared/league-log.ts';
@@ -300,7 +301,45 @@ async function poll(year: number, all: boolean) {
     // Everything this poll changed, to open apps in one realtime message.
     await sql`select private.flush_score_changes()`;
   }
-  return { year, games, boxscores: due.length, battingLines: batted };
+  // Only when it read a game or the schedule, which is when a series can have ended.
+  let eliminated: number[] = [];
+  if (due.length || games) {
+    try {
+      eliminated = await markEliminated(year);
+    } catch (e) {
+      console.error('eliminated', e);
+    }
+  }
+  return { year, games, boxscores: due.length, battingLines: batted, eliminated };
+}
+
+/**
+ * Marks the MLB teams that lost a series eliminated, as soon as it's clinched: their hitters
+ * can't be drafted and must be replaced, as the draft room's odds (0% to advance) already show.
+ * Returns the teams it just marked.
+ */
+async function markEliminated(year: number): Promise<number[]> {
+  const games = await sql`
+    select game_type, home_team_id, away_team_id, status, home_score, away_score, games_in_series
+    from mlb_games where season_year = ${year}`;
+  const out = eliminatedTeams(
+    games.map((g) => ({
+      gameType: g.game_type,
+      homeTeamId: g.home_team_id,
+      awayTeamId: g.away_team_id,
+      status: g.status,
+      homeScore: g.home_score,
+      awayScore: g.away_score,
+      gamesInSeries: g.games_in_series,
+    })),
+  );
+  if (!out.length) return [];
+  const marked = await sql`
+    update season_mlb_teams t set eliminated = true
+    from seasons s
+    where s.id = t.season_id and s.year = ${year} and t.mlb_team_id = any(${out}::int[]) and not t.eliminated
+    returning t.mlb_team_id`;
+  return marked.map((r) => r.mlb_team_id as number);
 }
 
 /**

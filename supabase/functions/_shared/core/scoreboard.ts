@@ -313,12 +313,27 @@ export function roundDecided(round: FantasyRound, games: SeriesGame[]): boolean 
   const types = roundSeries(round).map((s) => s.gameType);
   const inRound = games.filter((g) => types.includes(g.gameType));
   if (inRound.some((g) => g.status === 'Live')) return false;
+  const series = seriesResults(inRound);
+  const last = LAST_SERIES[round];
+  const lastCount = series.filter((s) => s.gameType === last.gameType).length;
+  return series.every((s) => s.winner !== null) && lastCount >= last.count;
+}
+
+/** One MLB series, and its winner once someone has won enough games (null until then). */
+export interface SeriesResult {
+  gameType: GameType;
+  teams: [number, number];
+  winner: number | null;
+}
+
+/** Each MLB series in `games` (one per game type and pair of teams), with its winner if decided. */
+export function seriesResults(games: SeriesGame[]): SeriesResult[] {
   const series = new Map<string, SeriesGame[]>();
-  for (const g of inRound) {
+  for (const g of games) {
     const key = `${g.gameType}:${[g.homeTeamId, g.awayTeamId].sort((a, b) => a - b).join('-')}`;
     series.set(key, [...(series.get(key) ?? []), g]);
   }
-  const decided = [...series.values()].every((list) => {
+  return [...series.values()].map((list) => {
     const needed = Math.ceil((list.find((g) => g.gamesInSeries)?.gamesInSeries ?? DEFAULT_LENGTH[list[0].gameType]) / 2);
     const wins = new Map<number, number>();
     for (const g of list) {
@@ -326,9 +341,15 @@ export function roundDecided(round: FantasyRound, games: SeriesGame[]): boolean 
       const winner = g.homeScore > g.awayScore ? g.homeTeamId : g.awayTeamId;
       wins.set(winner, (wins.get(winner) ?? 0) + 1);
     }
-    return Math.max(0, ...wins.values()) >= needed;
+    const teams = [list[0].homeTeamId, list[0].awayTeamId].sort((a, b) => a - b) as [number, number];
+    return { gameType: list[0].gameType, teams, winner: teams.find((t) => (wins.get(t) ?? 0) >= needed) ?? null };
   });
-  const last = LAST_SERIES[round];
-  const lastCount = [...series.keys()].filter((k) => k.startsWith(`${last.gameType}:`)).length;
-  return decided && lastCount >= last.count;
+}
+
+/**
+ * MLB teams knocked out: the losers of every decided series. Postseason series are single
+ * elimination, so losing one ends a team's postseason (the odds model's 0% to advance).
+ */
+export function eliminatedTeams(games: SeriesGame[]): number[] {
+  return seriesResults(games).flatMap((s) => (s.winner === null ? [] : s.teams.filter((t) => t !== s.winner)));
 }

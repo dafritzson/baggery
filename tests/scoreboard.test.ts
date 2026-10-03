@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type ScoreGame,
   currentRound,
+  eliminatedTeams,
   playerSeries,
   roundColumns,
   roundDecided,
@@ -141,6 +142,19 @@ describe('roundDecided', () => {
   it('needs four wins in a best-of-seven', () => {
     expect(roundDecided(3, series('W', [1, 2], 'WWWLL', 7, 2))).toBe(false);
     expect(roundDecided(3, series('W', [1, 2], 'WWWLLW', 7, 1))).toBe(true);
+  });
+  it('eliminatedTeams: each decided series’ loser, as soon as it’s clinched', () => {
+    // 9 loses its Wild Card in 2; 3 and 10 are 1–1; the Division Series 1–2 is a sweep so far.
+    const games = [...series('F', [1, 9], 'WW', 3), ...series('F', [3, 10], 'LW', 3, 1), ...series('D', [1, 2], 'WWW', 5, 2)];
+    expect(eliminatedTeams(games).sort((a, b) => a - b)).toEqual([2, 9]);
+    // Home and away swap within a series; a live game doesn't decide anything.
+    const swapped: SeriesGame[] = [
+      ...series('F', [3, 10], 'W', 3),
+      ...series('F', [10, 3], 'W', 3),
+      { gameType: 'F', homeTeamId: 3, awayTeamId: 10, status: 'Live', homeScore: 4, awayScore: 1, gamesInSeries: 3 },
+    ];
+    expect(eliminatedTeams(swapped)).toEqual([]);
+    expect(eliminatedTeams([...swapped.slice(0, 2), ...series('F', [3, 10], 'W', 3)])).toEqual([10]);
   });
 });
 
