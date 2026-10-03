@@ -134,8 +134,14 @@ export function StandingsTable({
       key: s.teamId,
       label: (
         <>
-          {/* Places moved, before the rank. While any team moved, every row keeps its slot, so the
-              ranks line up. */}
+          {/* No rank column before the round starts, so it doesn't eat into long team names. */}
+          {started && (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.rank}>{!ranked ? '–' : tied ? `T${s.rank}` : s.rank}</ThemedText>
+          )}
+          {!compact && <View style={styles.badge}><OwnerBadge teamId={team.id} owner={team.is_ghost ? '👻' : owner} photo={team.user_id ? data.photos.get(team.user_id) : null} mine={mine} /></View>}
+          <TeamLabel name={teamName(team)} owner={owner} mine={mine} />
+          {/* Places moved, left of the tiebreaker icon. While any team moved, every row keeps its slot,
+              so the arrows line up. */}
           {anyMoved && (
             <View style={styles.moveSlot}>
               {moved !== 0 && (
@@ -147,12 +153,6 @@ export function StandingsTable({
               )}
             </View>
           )}
-          {/* No rank column before the round starts, so it doesn't eat into long team names. */}
-          {started && (
-            <ThemedText type="small" themeColor="textSecondary" style={styles.rank}>{!ranked ? '–' : tied ? `T${s.rank}` : s.rank}</ThemedText>
-          )}
-          {!compact && <View style={styles.badge}><OwnerBadge teamId={team.id} owner={team.is_ghost ? '👻' : owner} photo={team.user_id ? data.photos.get(team.user_id) : null} mine={mine} /></View>}
-          <TeamLabel name={teamName(team)} owner={owner} mine={mine} />
           {/* Only in the rows it applies to, so the other names get the room. */}
           {levelOnBags && (
             <Pressable
@@ -379,8 +379,8 @@ function SeriesTable({ data, block, games }: { data: SeasonData; block: SeriesBl
 const styles = StyleSheet.create({
   // A hitter whose MLB team is eliminated: struck through and faded until he's replaced.
   outName: { textDecorationLine: 'line-through', opacity: 0.5 },
-  // Wide enough for "▼9"; a rare "▼12" just grows it. Tucked against the rank.
-  moveSlot: { minWidth: 16, marginRight: -4, alignItems: 'flex-end' },
+  // Wide enough for "▼9"; a rare "▼12" just grows it. Sits right after the name.
+  moveSlot: { minWidth: 16, marginLeft: 4, alignItems: 'flex-end' },
   move: { fontSize: 11, lineHeight: 14, fontWeight: 700, fontVariant: ['tabular-nums'] },
   chips: { flexDirection: 'row', gap: Spacing.one, flexWrap: 'wrap', minHeight: CHIPS_ROW, alignItems: 'center', alignContent: 'center' },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
