@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { type ScheduleGame, ifNecessary, neededGames, notNeeded, postseasonSeries } from '../supabase/functions/_shared/core/schedule.ts';
+import { type ScheduleGame, ifNecessary, neededGames, notNeeded, postseasonSeries, seriesLine } from '../supabase/functions/_shared/core/schedule.ts';
 
 const NYY = 147;
 const BOS = 111;
@@ -82,5 +82,26 @@ describe('postseasonSeries', () => {
     const [wc] = postseasonSeries([game({ gameType: 'F', seriesGameNumber: 4, homeTeamId: NYY, awayTeamId: BOS, status: 'Preview' })]);
     expect(wc.bestOf).toBe(4);
     expect(wc.games[3]?.seriesGameNumber).toBe(4);
+  });
+});
+
+describe('seriesLine', () => {
+  const games = (results: [number, number][]) =>
+    results.map(([home, away], i) => game({ gameType: 'D', seriesGameNumber: i + 1, homeTeamId: TOR, awayTeamId: NYY, homeScore: home, awayScore: away }));
+
+  it('says it from the team\'s own side', () => {
+    // TOR won game 1, NYY won game 2 and 3.
+    const [series] = postseasonSeries(games([[3, 1], [0, 2], [1, 4]]));
+    expect(seriesLine(series, NYY)).toBe('leads 2–1');
+    expect(seriesLine(series, TOR)).toBe('trails 1–2');
+  });
+
+  it('is tied, not started, won or lost', () => {
+    expect(seriesLine(postseasonSeries(games([[3, 1], [0, 2]]))[0], TOR)).toBe('tied 1–1');
+    const [fresh] = postseasonSeries([game({ gameType: 'D', seriesGameNumber: 1, homeTeamId: TOR, awayTeamId: NYY, status: 'Preview' })]);
+    expect(seriesLine(fresh, NYY)).toBe('0–0');
+    const [done] = postseasonSeries(games([[3, 1], [0, 2], [1, 4], [0, 5]]));
+    expect(seriesLine(done, NYY)).toBe('won 3–1');
+    expect(seriesLine(done, TOR)).toBe('lost 1–3');
   });
 });

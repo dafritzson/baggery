@@ -128,6 +128,14 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   player's postseasons and sends back a row per postseason he played in, under ~1 KB more per
   popup. At ~15 people opening ~20 popups a day, that's under 10 MB a month. It's the same
   function call as before, so no new invocations.
+- **The player popup's postseason Game log.** `player-stats` makes one more request to MLB for the
+  player's postseason games this season and sends back a row for each (up to ~20 at ~100 bytes):
+  ~2 KB more per popup. At ~15 people opening ~20 popups a day, that's ~20 MB a month. Same
+  function call as before, so no new invocations.
+- **The team popup (Games tab).** Its Hitters and Games tabs read what the Games tab already
+  holds: no requests. The Available tab loads the team's undrafted hitters' postseason TB when it
+  opens, straight from `player_game_stats`: ≤ ~15 players × ≤ ~20 games, ~10 KB. At ~15 people
+  opening it ~5 times a day, that's ~20 MB a month. No Edge Function calls, no realtime.
 - **Hit videos.** No new Edge Function calls on live days: `poll-games` reads a game's play-by-play
   (0.6–1.2 MB from MLB) only when its box score has hits not yet matched to a play, at most every
   20 s, and its highlights (~1 MB) every 2 minutes while live and every 10 minutes for 6 hours

@@ -13,13 +13,14 @@ import {
 
 import {
   type Counts,
+  type PlayerGame,
   type PlayerStats,
   absences,
   formatRate,
   lastGames,
   rates,
 } from '@core/player-stats.ts';
-import { playerSeries } from '@core/scoreboard.ts';
+import { SERIES, playerSeries } from '@core/scoreboard.ts';
 import { type GameType, ROUND_FOR_GAME_TYPE } from '@core/types.ts';
 
 import { Button } from '@/components/button';
@@ -372,6 +373,18 @@ const GAME_COLUMNS: Column[] = [
   COUNT('so', 'SO'),
 ];
 
+/** A game's row in the game log: "WC 10/2 vs BOS" (the round first, for a postseason game). */
+function gameRow(g: PlayerGame, key: string, prefix = '') {
+  return {
+    key,
+    label: `${prefix}${shortDate(g.date)} ${g.home ? 'vs' : '@'} ${g.opponent}`,
+    cells: GAME_COLUMNS.map((c) => c.value(g, null)),
+  };
+}
+
+/** A row that labels the ones under it, with no numbers. */
+const headingRow = (key: string, label: string) => ({ key: `heading-${key}`, label, cells: GAME_COLUMNS.map(() => ''), heading: true });
+
 function StatsBody({
   stats,
   year,
@@ -386,6 +399,8 @@ function StatsBody({
 }) {
   const [span, setSpan] = useState<(typeof WINDOWS)[number]>(15);
   const games = stats.games.slice(0, span);
+  // Older cached responses (before the function sent them) have none.
+  const postseasonGames = stats.postseasonGames ?? [];
 
   const splits: { label: string; note?: string; line: Counts; season?: SeasonExtras; key?: boolean }[] = [];
   if (stats.season) splits.push({ label: String(year), line: stats.season, season: { opsPlus, projection }, key: true });
@@ -436,19 +451,21 @@ function StatsBody({
         </Section>
       )}
 
-      {stats.games.length > 0 && (
+      {(stats.games.length > 0 || postseasonGames.length > 0) && (
         <Section
           title="Game log"
-          action={<WindowToggle value={span} onChange={setSpan} />}>
+          action={stats.games.length > 0 && <WindowToggle value={span} onChange={setSpan} />}>
           <StatTable
-            labelWidth={96}
+            labelWidth={128}
             columns={GAME_COLUMNS}
-            rows={games.map((g, i) => ({
+            rows={[
+              ...(postseasonGames.length ? [headingRow('postseason', `${year} postseason`)] : []),
+              ...postseasonGames.map((g, i) => gameRow(g, `post${g.gamePk ?? ''}${i}`, `${SERIES.find((s) => s.gameType === g.gameType)?.label ?? ''} `)),
+              // The window toggle is for the regular season: the postseason's games all show.
+              ...(postseasonGames.length && games.length ? [headingRow('regular', 'Regular season')] : []),
               // Index too: a doubleheader is two games on one date against one team.
-              key: `${g.date}${g.opponent}${i}`,
-              label: `${shortDate(g.date)} ${g.home ? 'vs' : '@'} ${g.opponent}`,
-              cells: GAME_COLUMNS.map((c) => c.value(g, null)),
-            }))}
+              ...games.map((g, i) => gameRow(g, `${g.date}${g.opponent}${i}`)),
+            ]}
           />
         </Section>
       )}
@@ -668,7 +685,7 @@ function StatTable({
   labelWidth,
 }: {
   columns: Column[];
-  rows: { key: string; label: string; note?: string; cells: string[]; strong?: boolean }[];
+  rows: { key: string; label: string; note?: string; cells: string[]; strong?: boolean; heading?: boolean }[];
   labelWidth: number;
 }) {
   const theme = useTheme();
@@ -685,7 +702,11 @@ function StatTable({
         <View style={[styles.tableRow, styles.tableHead, { borderBottomColor: theme.border }]} />
         {rows.map((r, i) => (
           <View key={r.key} style={[styles.tableRow, styles.labelCell, rowBorder(i)]}>
-            <ThemedText type={r.strong ? 'smallBold' : 'small'} numberOfLines={1} style={styles.cellText}>
+            <ThemedText
+              type={r.strong || r.heading ? 'smallBold' : 'small'}
+              themeColor={r.heading ? 'textSecondary' : 'text'}
+              numberOfLines={1}
+              style={[styles.cellText, r.heading && styles.headingText]}>
               {r.label}
               {r.note && <ThemedText type="small" themeColor="textSecondary" style={styles.cellText}>{` ${r.note}`}</ThemedText>}
             </ThemedText>
@@ -714,7 +735,7 @@ function StatTable({
           {rows.map((r, i) => (
             <View key={r.key} style={[styles.tableRow, styles.cells, rowBorder(i)]}>
               {r.cells.map((value, j) => (
-                <View key={columns[j].label} style={[styles.cell, { minWidth: columns[j].width }, j === tbIndex && { backgroundColor: theme.tint }]}>
+                <View key={columns[j].label} style={[styles.cell, { minWidth: columns[j].width }, j === tbIndex && !r.heading && { backgroundColor: theme.tint }]}>
                   <ThemedText
                     type={r.strong || j === tbIndex ? 'smallBold' : 'small'}
                     style={[styles.cellText, styles.number]}>
@@ -771,6 +792,7 @@ const styles = StyleSheet.create({
   cells: { flexDirection: 'row', paddingRight: Spacing.two },
   cell: { flexGrow: 1, flexBasis: 0, height: '100%', justifyContent: 'center', alignItems: 'flex-end', paddingHorizontal: Spacing.one },
   cellText: { fontSize: 13, lineHeight: 18 },
+  headingText: { fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.3 },
   number: { fontVariant: ['tabular-nums'] },
   links: { flexDirection: 'row', gap: Spacing.four },
   stints: { gap: Spacing.half },
