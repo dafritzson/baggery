@@ -4,7 +4,7 @@ import { type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { FillSurface, useOnFill, useTheme } from '@/hooks/use-theme';
+import { FillSurface, useTheme } from '@/hooks/use-theme';
 
 /** Whose hitter a row is: yours, another manager's, or nobody's. */
 export type Bagger = 'mine' | 'other' | null;
@@ -47,22 +47,13 @@ export function HitterRow({
   );
 }
 
-/** "AB", "OD", "IH" beside a hitter's name in a box score. */
-export function UpTag({ label }: { label: string }) {
-  const theme = useTheme();
-  const onFill = useOnFill();
+/** The red "AB" beside the hitter at bat in a box score or due-up list. */
+export function UpTag() {
   const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
-  const atBat = label === 'AB';
-  // The batter: red everywhere, fill or not. The next two: gray on the page, white in the fill's
-  // color on a fill. (On a fill the theme's danger is a pale red, so AB takes the page's.)
-  const [background, color] = atBat
-    ? [Colors[scheme].danger, '#ffffff']
-    : onFill
-      ? [theme.onFill, theme.accentText]
-      : [theme.backgroundSelected, theme.textSecondary];
+  // Red everywhere, fill or not. (On a fill the theme's danger is a pale red, so it takes the page's.)
   return (
-    <View style={[styles.tag, { backgroundColor: background }]}>
-      <ThemedText style={[styles.tagText, { color }]}>{label}</ThemedText>
+    <View style={[styles.tag, { backgroundColor: Colors[scheme].danger }]}>
+      <ThemedText style={[styles.tagText, { color: '#ffffff' }]}>AB</ThemedText>
     </View>
   );
 }

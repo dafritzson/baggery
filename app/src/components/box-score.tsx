@@ -223,7 +223,7 @@ function UpNow({ live, box, compact }: { live: LiveState; box: BoxScore | null; 
     );
   const atBat = (
     <View style={styles.upBatter}>
-      <UpTag label="AB" />
+      <UpTag />
       <PlayerName playerId={batter.id} type="smallBold" numberOfLines={1} style={!compact && styles.upName}>
         {batter.name}
       </PlayerName>
@@ -299,12 +299,9 @@ function TeamBox({ data, game, box, side }: { data: SeasonData; game: GameInfo; 
   const lines = box.lines.filter((l) => l.teamId === teamId);
   const rows = teamBox(lines, box.lineups.get(teamId));
   const totals = boxTotals(lines);
-  // The batting team's batter, on deck and in the hole.
+  // The batting team's batter.
   const live = game.status === 'Live' ? game.live : null;
-  const up = new Map<number, string>();
-  if (live && live.battingSide === side) {
-    live.batting.forEach((p, i) => p && up.set(p.id, ['AB', 'OD', 'IH'][i]));
-  }
+  const atBat = live && live.battingSide === side ? live.batting[0]?.id : undefined;
   const hitsOf = (playerId: number) =>
     (scores?.hits ?? [])
       .filter((h) => h.gamePk === game.gamePk && h.playerId === playerId)
@@ -331,11 +328,10 @@ function TeamBox({ data, game, box, side }: { data: SeasonData; game: GameInfo; 
       </View>
       {rows.map((row) => {
         const who = baggers(row.playerId);
-        const tag = up.get(row.playerId);
         return (
-          <HitterRow key={row.playerId} bagger={who.bagger} atBat={tag === 'AB'} ringUndrafted style={[styles.row, styles.line, { borderTopColor: theme.border }]}>
+          <HitterRow key={row.playerId} bagger={who.bagger} atBat={row.playerId === atBat} ringUndrafted style={[styles.row, styles.line, { borderTopColor: theme.border }]}>
             <ThemedText type="small" themeColor="textSecondary" style={[styles.spot, styles.spotText]}>{row.sub || row.spot === null ? '' : row.spot}</ThemedText>
-            <BatterCell row={row} who={who} tag={tag} bags={row.line?.tb ? hitBags(row.line.tb, hitsOf(row.playerId), row.playerId, game.gamePk, row.line).join('') : ''} />
+            <BatterCell row={row} who={who} atBat={row.playerId === atBat} bags={row.line?.tb ? hitBags(row.line.tb, hitsOf(row.playerId), row.playerId, game.gamePk, row.line).join('') : ''} />
             {COLUMNS.map((c) => number(row.line ? row.line[c.key] : '–', c.key))}
             <View style={styles.tb}>{number(row.line ? row.line.tb : '–', 'tb', true)}</View>
           </HitterRow>
@@ -361,12 +357,12 @@ function TeamBox({ data, game, box, side }: { data: SeasonData; game: GameInfo; 
 function BatterCell({
   row,
   who,
-  tag,
+  atBat,
   bags,
 }: {
   row: BoxRow;
   who: Owner;
-  tag?: string;
+  atBat?: boolean;
   bags: string;
 }) {
   return (
@@ -377,7 +373,7 @@ function BatterCell({
           {row.name}
         </PlayerName>
         {!!row.position && <ThemedText themeColor="textSecondary" style={styles.pos}>{row.position}</ThemedText>}
-        {tag && <UpTag label={tag} />}
+        {atBat && <UpTag />}
       </View>
       {(!!who.bagger || !!who.owner) && (
         <View style={styles.ownerLine}>
