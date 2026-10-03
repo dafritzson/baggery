@@ -5,6 +5,8 @@ import {
   currentRound,
   eliminatedTeams,
   playerSeries,
+  redraftLock,
+  type ScheduledGame,
   roundColumns,
   roundDecided,
   roundStandings,
@@ -143,6 +145,28 @@ describe('roundDecided', () => {
     expect(roundDecided(3, series('W', [1, 2], 'WWWLL', 7, 2))).toBe(false);
     expect(roundDecided(3, series('W', [1, 2], 'WWWLLW', 7, 1))).toBe(true);
   });
+  it('redraftLock: the series’ first pitch, once the round before is decided and the time is set', () => {
+    const at = (start: string, tbd = false) => (g: SeriesGame): ScheduledGame => ({ ...g, start, startTimeTbd: tbd });
+    const wildCard = [
+      ...series('F', [1, 9], 'WW', 3),
+      ...series('F', [2, 10], 'LWW', 3),
+      ...series('F', [3, 11], 'WW', 3),
+    ].map(at('2026-09-30T18:00:00Z'));
+    const lastWildCard = (results: string) => series('F', [4, 12], results, 3).map(at('2026-10-01T18:00:00Z'));
+    const ds = [
+      at('2026-10-04T22:08:00Z')(series('D', [1, 5], '', 5, 1)[0]),
+      at('2026-10-04T18:08:00Z')(series('D', [2, 6], '', 5, 1)[0]),
+    ];
+    // A Wild Card still going: a Division Series could still be missing from the schedule.
+    expect(redraftLock('D', [...wildCard, ...lastWildCard('WL'), ...ds])).toBeNull();
+    expect(redraftLock('D', [...wildCard, ...lastWildCard('WLW'), ...ds])).toBe('2026-10-04T18:08:00Z');
+    // The earliest game's time not set yet: wait.
+    const tbd = at('2026-10-04T07:33:00Z', true)(series('D', [3, 7], '', 5, 1)[0]);
+    expect(redraftLock('D', [...wildCard, ...lastWildCard('WLW'), ...ds, tbd])).toBeNull();
+    // Draft 1 isn't a redraft (sync-pool sets its lock).
+    expect(redraftLock('F', wildCard)).toBeNull();
+  });
+
   it('eliminatedTeams: each decided series’ loser, as soon as it’s clinched', () => {
     // 9 loses its Wild Card in 2; 3 and 10 are 1–1; the Division Series 1–2 is a sweep so far.
     const games = [...series('F', [1, 9], 'WW', 3), ...series('F', [3, 10], 'LW', 3, 1), ...series('D', [1, 2], 'WWW', 5, 2)];
