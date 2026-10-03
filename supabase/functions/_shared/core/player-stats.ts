@@ -1,6 +1,8 @@
 // A player's batting stats for the player popup: the shapes the player-stats function returns,
 // and the math for "last N games" lines.
 
+import type { GameType } from './types.ts';
+
 /** Counting stats for a game, a stretch of games or a season. */
 export interface Counts {
   g: number;
@@ -25,6 +27,9 @@ export interface PlayerGame extends Counts {
   /** Opponent's abbreviation, e.g. "BOS". */
   opponent: string;
   home: boolean;
+  /** Postseason games only: the series (F, D, L or W) and MLB's id for the game. */
+  gameType?: GameType;
+  gamePk?: number;
 }
 
 export interface PlayerSeasonRow extends Counts {
@@ -52,6 +57,8 @@ export interface PlayerStats {
   season: Counts | null;
   /** Regular-season games that season, newest first. */
   games: PlayerGame[];
+  /** That season's postseason games, newest first; empty before his team's first one. Absent from an older response. */
+  postseasonGames?: PlayerGame[];
   /** When that regular season runs; null if MLB doesn't say. */
   dates: SeasonDates | null;
   /** Earlier MLB seasons, newest first. */

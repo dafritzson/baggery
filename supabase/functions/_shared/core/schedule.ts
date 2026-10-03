@@ -92,3 +92,15 @@ export function postseasonSeries<G extends ScheduleGame>(games: G[]): Series<G>[
     })
     .sort((a, b) => round(a.gameType) - round(b.gameType) || a.start.localeCompare(b.start));
 }
+
+/**
+ * Where a team stands in its series, from its side: "won 3–1", "lost 1–3", "leads 2–1",
+ * "trails 1–2", "tied 1–1", or "0–0" before a first game is played.
+ */
+export function seriesLine(series: Series, teamId: number): string {
+  const [mine, theirs] = series.teams[0] === teamId ? series.wins : [series.wins[1], series.wins[0]];
+  const score = `${mine}–${theirs}`;
+  if (series.winner !== null) return `${series.winner === teamId ? 'won' : 'lost'} ${score}`;
+  if (mine === 0 && theirs === 0) return score;
+  return `${mine > theirs ? 'leads' : mine < theirs ? 'trails' : 'tied'} ${score}`;
+}

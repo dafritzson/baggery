@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from 'react';
-import { type LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
+import { type LayoutChangeEvent, Platform, Pressable, ScrollView, type StyleProp, StyleSheet, type TextStyle, View, type ViewStyle } from 'react-native';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { BAG_EMOJI, hitBags } from '@core/bag-celebration.ts';
@@ -17,6 +17,7 @@ import { YouTag } from '@/components/owner-badge';
 import { PlayerName } from '@/components/player-name';
 import { PostseasonView, RoundView } from '@/components/schedule';
 import { Screen } from '@/components/screen';
+import { TeamPopup } from '@/components/team-popup';
 import { ThemedText } from '@/components/themed-text';
 import { Toggle } from '@/components/toggle';
 import { Radius, Spacing } from '@/constants/theme';
@@ -68,6 +69,8 @@ export default function GamesScreen() {
   const [view, setView] = useState<Zoom>('day');
   // The game whose box score is open.
   const [boxPk, setBoxPk] = useState<number | null>(null);
+  // The MLB team whose popup is open.
+  const [teamId, setTeamId] = useState<number | null>(null);
 
   if (loading || (data && !scores)) {
     return <Screen width="wide"><Loader /></Screen>;
@@ -150,7 +153,7 @@ export default function GamesScreen() {
                       <View key={g.gamePk} style={styles.row}>
                         {games.slice(row * 2, row * 2 + 2).map((game) => (
                           <View key={game.gamePk} style={styles.cell} {...zoomKey(`game-${game.gamePk}`)}>
-                            <GameCard data={data} scores={scores} game={game} onOpen={() => setBoxPk(game.gamePk)} fill />
+                            <GameCard data={data} scores={scores} game={game} onOpen={() => setBoxPk(game.gamePk)} onTeam={setTeamId} fill />
                           </View>
                         ))}
                         {row * 2 + 1 >= games.length && <View style={styles.cell} />}
@@ -158,7 +161,7 @@ export default function GamesScreen() {
                     ))
                 : games.map((g) => (
                     <View key={g.gamePk} {...zoomKey(`game-${g.gamePk}`)}>
-                      <GameCard data={data} scores={scores} game={g} onOpen={() => setBoxPk(g.gamePk)} />
+                      <GameCard data={data} scores={scores} game={g} onOpen={() => setBoxPk(g.gamePk)} onTeam={setTeamId} />
                     </View>
                   ))}
             </View>
@@ -172,6 +175,7 @@ export default function GamesScreen() {
         </>
       )}
       {boxGame && <BoxScoreSheet data={data} game={boxGame} onClose={() => setBoxPk(null)} />}
+      {teamId !== null && <TeamPopup data={data} scores={scores} mlbTeamId={teamId} onClose={() => setTeamId(null)} onOpenGame={setBoxPk} />}
     </Screen>
   );
 }
@@ -413,13 +417,15 @@ interface CardProps {
   game: GameInfo;
   /** Opens the game's box score. */
   onOpen: () => void;
+  /** Opens an MLB team's popup, from its abbreviation. */
+  onTeam: (mlbTeamId: number) => void;
   /** Stretches the card to the height of its row (desktop). */
   fill?: boolean;
 }
 
 /**
- * Tapping anywhere on a game opens its box score, except on a player's name (his popup) or ▶
- * (his videos), which handle their own taps.
+ * Tapping anywhere on a game opens its box score, except on a team's abbreviation (its popup), a
+ * player's name (his popup) or ▶ (his videos), which handle their own taps.
  */
 function GameCard(props: CardProps) {
   return (
@@ -433,8 +439,29 @@ function GameCard(props: CardProps) {
   );
 }
 
+/** A team's abbreviation on a card, dotted underneath: tapping it opens the team's popup. */
+function TeamAbbr({
+  teamId,
+  abbr,
+  onTeam,
+  type,
+  style,
+}: {
+  teamId: number;
+  abbr: string;
+  onTeam: (mlbTeamId: number) => void;
+  type?: 'default';
+  style: StyleProp<TextStyle>;
+}) {
+  return (
+    <Pressable onPress={() => onTeam(teamId)} hitSlop={6} accessibilityRole="button" accessibilityLabel={`${abbr} team stats`}>
+      <ThemedText type={type} style={[style, styles.teamLink]}>{abbr}</ThemedText>
+    </Pressable>
+  );
+}
+
 /** A finished game: the final score on one line, then how the baggers did. */
-function FinalCard({ data, scores, game, fill }: CardProps) {
+function FinalCard({ data, scores, game, fill, onTeam }: CardProps) {
   const theme = useTheme();
   const compact = useLayout() === 'compact';
   const side = (which: 'away' | 'home') => {
@@ -445,7 +472,7 @@ function FinalCard({ data, scores, game, fill }: CardProps) {
     const color = { color: won ? theme.text : theme.textSecondary };
     return (
       <View style={styles.finalSide}>
-        <ThemedText style={[styles.finalAbbr, color]}>{data.mlbTeams.get(teamId)?.abbreviation ?? '—'}</ThemedText>
+        <TeamAbbr teamId={teamId} abbr={data.mlbTeams.get(teamId)?.abbreviation ?? '—'} onTeam={onTeam} style={[styles.finalAbbr, color]} />
         <ThemedText style={[styles.finalScore, color, won && styles.bold]}>{score ?? ''}</ThemedText>
       </View>
     );
@@ -483,7 +510,7 @@ function LiveGlow({ live, fill, children }: { live: boolean; fill?: boolean; chi
 }
 
 /** A game that's on or still to come: who's up, the score, and the baggers so far. */
-function OpenCard({ data, scores, game, fill }: CardProps) {
+function OpenCard({ data, scores, game, fill, onTeam }: CardProps) {
   const theme = useTheme();
   const compact = useLayout() === 'compact';
   const live = game.status === 'Live';
@@ -543,7 +570,7 @@ function OpenCard({ data, scores, game, fill }: CardProps) {
     const score = which === 'away' ? game.awayScore : game.homeScore;
     const other = which === 'away' ? game.homeScore : game.awayScore;
     const leading = game.status !== 'Preview' && score !== null && other !== null && score > other;
-    return { which, abbr: data.mlbTeams.get(teamId)?.abbreviation ?? '—', score: game.status === 'Preview' ? '' : (score ?? ''), leading };
+    return { which, teamId, abbr: data.mlbTeams.get(teamId)?.abbreviation ?? '—', score: game.status === 'Preview' ? '' : (score ?? ''), leading };
   });
 
   return (
@@ -569,7 +596,7 @@ function OpenCard({ data, scores, game, fill }: CardProps) {
           <View style={styles.scores}>
             <View style={styles.scoreColumn}>
               {sides.map((t) => (
-                <ThemedText key={t.which} type="default" style={[styles.teamAbbr, t.leading && styles.bold]}>{t.abbr}</ThemedText>
+                <TeamAbbr key={t.which} teamId={t.teamId} abbr={t.abbr} onTeam={onTeam} type="default" style={[styles.teamAbbr, t.leading && styles.bold]} />
               ))}
             </View>
             <View style={styles.scoreColumn}>
@@ -684,6 +711,7 @@ const styles = StyleSheet.create({
   scores: { marginLeft: 'auto', flexDirection: 'row', gap: Spacing.two },
   scoreColumn: { alignItems: 'flex-end', gap: Spacing.half },
   teamAbbr: { fontWeight: 600, lineHeight: 28 },
+  teamLink: { textDecorationLine: 'underline', textDecorationStyle: 'dotted' },
   score: { minWidth: 24, textAlign: 'right', fontSize: 20, lineHeight: 28, fontVariant: ['tabular-nums'], fontWeight: 600 },
   bold: { fontWeight: 800 },
   // Two columns of mini cards.

@@ -73,11 +73,12 @@ async function datesOf(season: number): Promise<SeasonDates | null> {
 const cache = new Map<string, { at: number; stats: PlayerStats }>();
 
 async function playerStats(playerId: number, season: number): Promise<PlayerStats> {
-  const [peopleData, statsData, postseasonData, abbrs, dates] = await Promise.all([
+  const [peopleData, statsData, postseasonData, postseasonLog, abbrs, dates] = await Promise.all([
     mlb(`/people/${playerId}?hydrate=currentTeam`),
     mlb(`/people/${playerId}/stats?stats=season,gameLog,yearByYear&group=hitting&gameType=R&sportId=1&season=${season}`),
-    // A request of its own: gameType=R above would filter it too. P is all postseason rounds together.
+    // Requests of their own: gameType=R above would filter them too. P is all postseason rounds together.
     mlb(`/people/${playerId}/stats?stats=yearByYear&group=hitting&gameType=P&sportId=1`),
+    mlb(`/people/${playerId}/stats?stats=gameLog&group=hitting&gameType=P&sportId=1&season=${season}`),
     abbreviations(),
     // Without the dates the chart falls back to one step per game, so a failure here isn't fatal.
     datesOf(season).catch(() => null),
@@ -98,9 +99,15 @@ async function playerStats(playerId: number, season: number): Promise<PlayerStat
     return total ? counts(total.stat) : sumCounts(rows.map((r) => counts(r.stat)));
   };
   const seasonSplits = splitsOf(statsData, 'season');
+  // deno-lint-ignore no-explicit-any
+  const gameLine = (s: any): PlayerGame => ({ ...counts(s.stat), g: 1, date: s.date, opponent: abbr(s.opponent?.id), home: !!s.isHome });
   const games: PlayerGame[] = splitsOf(statsData, 'gameLog')
-    .map((s) => ({ ...counts(s.stat), g: 1, date: s.date, opponent: abbr(s.opponent?.id), home: !!s.isHome }))
+    .map(gameLine)
     .sort((a, b) => b.date.localeCompare(a.date));
+  // This season's postseason games, with the series each belongs to.
+  const postseasonGames: PlayerGame[] = splitsOf(postseasonLog, 'gameLog')
+    .map((s) => ({ ...gameLine(s), gameType: s.gameType, gamePk: s.game?.gamePk }))
+    .sort((a, b) => b.date.localeCompare(a.date) || (b.gamePk ?? 0) - (a.gamePk ?? 0));
 
   // A row per year up to `through`, newest first.
   // deno-lint-ignore no-explicit-any
@@ -132,6 +139,7 @@ async function playerStats(playerId: number, season: number): Promise<PlayerStat
     },
     season: seasonSplits.length ? combined(seasonSplits) : null,
     games,
+    postseasonGames,
     dates,
     years: yearRows(splitsOf(statsData, 'yearByYear'), season - 1),
     postseasons: yearRows(splitsOf(postseasonData, 'yearByYear'), season),
