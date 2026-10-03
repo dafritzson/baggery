@@ -139,7 +139,7 @@ export const COLUMNS: Column[] = [
   {
     key: 'owner',
     label: 'Owner',
-    title: 'Fantasy team that has him (🔥 if they dropped him); blank if nobody has drafted him',
+    title: 'Fantasy team that has him (🔥 if they dropped him, 💀 if his MLB team is out); blank if nobody has drafted him',
     width: 110,
     // Owned, then dropped, then available, when sorted high to low.
     value: (r) => (r.owner === null ? 0 : r.burned ? 1 : 2),
@@ -181,9 +181,13 @@ export const COLUMNS: Column[] = [
   count('so', 'SO', 'Strikeouts', 44),
 ];
 
-/** "Bag Daddies", "🔥 (Bag Daddies)" once dropped, or blank. */
+/**
+ * "Bag Daddies", "🔥 (Bag Daddies)" once dropped while his MLB team is alive, "💀 (Bag Daddies)"
+ * once his MLB team is out (dropped or not), or blank.
+ */
 function ownerText(r: PlayerRow): string {
   if (r.owner === null) return '';
+  if (!r.alive) return `💀 (${r.owner})`;
   return r.burned ? `🔥 (${r.owner})` : r.owner;
 }
 
