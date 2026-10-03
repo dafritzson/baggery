@@ -346,6 +346,34 @@ export function seriesResults(games: SeriesGame[]): SeriesResult[] {
   });
 }
 
+/** A game with its scheduled start, for when a redraft locks. */
+export interface ScheduledGame extends SeriesGame {
+  start: string;
+  /** MLB hasn't set the time yet: `start` is a placeholder on the right day. */
+  startTimeTbd: boolean;
+}
+
+/** The MLB round before each redraft's series, and how many series it has. */
+const PREVIOUS_ROUND: Partial<Record<GameType, { gameType: GameType; count: number }>> = {
+  D: { gameType: 'F', count: 4 },
+  L: { gameType: 'D', count: 4 },
+  W: { gameType: 'L', count: 2 },
+};
+
+/**
+ * When a redraft before `gameType`'s series locks: that series' first pitch. Null until it's
+ * certain: every series of the round before has a winner (so every matchup, and its games, is on
+ * the schedule) and the earliest game's time is set, not "TBD".
+ */
+export function redraftLock(gameType: GameType, games: ScheduledGame[]): string | null {
+  const previous = PREVIOUS_ROUND[gameType];
+  if (!previous) return null;
+  const before = seriesResults(games.filter((g) => g.gameType === previous.gameType));
+  if (before.length < previous.count || before.some((s) => s.winner === null)) return null;
+  const first = games.filter((g) => g.gameType === gameType).sort((a, b) => Date.parse(a.start) - Date.parse(b.start))[0];
+  return first && !first.startTimeTbd ? first.start : null;
+}
+
 /**
  * MLB teams knocked out: the losers of every decided series. Postseason series are single
  * elimination, so losing one ends a team's postseason (the odds model's 0% to advance).
