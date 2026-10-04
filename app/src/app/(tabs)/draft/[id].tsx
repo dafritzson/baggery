@@ -600,6 +600,10 @@ function PickCard({
   const details = [player?.primary_position, playerId !== null && mlbTeamAbbr(data, playerId), tb !== undefined && `${tb} TB`]
     .filter(Boolean)
     .join(' · ');
+  // Who the pick dropped: burned if he was still playing (off the board for good), or replaced
+  // when his team is out or he's off its postseason roster.
+  const dropId = action.drop_player_id;
+  const burned = dropId != null && !isOut(data, dropId);
 
   return (
     <Pressable
@@ -608,7 +612,18 @@ function PickCard({
       accessibilityRole="button"
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
-      style={[styles.pickCard, { backgroundColor: hovered && playerId !== null ? theme.tintHover : theme.tint, boxShadow: theme.raised }]}>
+      style={[
+        styles.pickCard,
+        { backgroundColor: burned ? theme.burnTint : hovered && playerId !== null ? theme.tintHover : theme.tint, boxShadow: theme.raised },
+      ]}>
+      {burned && (
+        <View
+          pointerEvents="none"
+          style={[styles.burnGlow, { boxShadow: `inset 0 0 14px ${theme.burn}` }]}
+          // dataSet isn't in React Native's types; react-native-web turns it into data-* attributes.
+          {...({ dataSet: { burnFlicker: '' } } as object)}
+        />
+      )}
       <View style={styles.pickCardTop}>
         <ThemedText type="smallBold" numberOfLines={1} style={styles.pickPlayer}>
           {playerId !== null ? playerName(data, playerId) : 'Yielded'}
@@ -625,6 +640,16 @@ function PickCard({
         {team ? teamName(team) : '—'}
         {owner && <ThemedText type="small" themeColor="textSecondary" style={styles.pickOwner}> · {owner}</ThemedText>}
       </ThemedText>
+      {dropId != null &&
+        (burned ? (
+          <ThemedText type="smallBold" numberOfLines={1} style={[styles.pickTeam, { color: theme.burn }]}>
+            🔥 Burned <ThemedText type="smallBold" style={[{ color: theme.burn }, styles.burnedName]}>{playerName(data, dropId)}</ThemedText>
+          </ThemedText>
+        ) : (
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.pickTeam}>
+            Replaced {playerName(data, dropId)} ({outReason(data, dropId)})
+          </ThemedText>
+        ))}
     </Pressable>
   );
 }
@@ -976,6 +1001,8 @@ const styles = StyleSheet.create({
   picksList: { maxHeight: 340, borderTopWidth: StyleSheet.hairlineWidth },
   picksFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 48, pointerEvents: 'none' },
   pickCard: { paddingVertical: Spacing.two, paddingHorizontal: Spacing.three },
+  burnedName: { textDecorationLine: 'line-through', ...({ textDecorationThickness: 2 } as object) },
+  burnGlow: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
   pickCardTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   pickPlayer: { flex: 1, fontSize: 15, lineHeight: 19 },
   pickLine: { fontSize: 13, lineHeight: 17 },

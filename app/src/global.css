@@ -253,6 +253,27 @@
 }
 
 /*
+ * A burned pick in the draft room's Picks (PickCard): an orange glow inside the card that
+ * flickers like a flame. Only its opacity animates.
+ */
+[data-burn-flicker] {
+  will-change: opacity;
+  animation: burn-flicker 2.4s ease-in-out infinite;
+}
+@keyframes burn-flicker {
+  0%, 100% { opacity: 1; }
+  20% { opacity: 0.55; }
+  35% { opacity: 0.9; }
+  55% { opacity: 0.45; }
+  75% { opacity: 0.85; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-burn-flicker] {
+    animation: none;
+  }
+}
+
+/*
  * Zooming between the Games tab's Day, Round and Postseason views (lib/zoom.web.ts), while
  * <html> has data-zoom. The page scales around the focused game, cut off at its own edges, and
  * that game morphs into its place in the new view. The controls above it and the phone tab bar

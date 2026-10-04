@@ -399,7 +399,19 @@ export function PlayerTable({
         </View>
         {sorted.map((r, i) => (
           <Pressable key={r.id} {...rowPress(r.id)} style={[rowStyle(r.id, i), styles.nameCell, styles.nameRow]}>
-            <ThemedText type="smallBold" numberOfLines={1} style={styles.name}>{r.name}</ThemedText>
+            {/* Burned (dropped while his MLB team is alive): off the board for good, in flames and struck through. */}
+            <ThemedText
+              type="smallBold"
+              numberOfLines={1}
+              style={[styles.name, r.burned && r.alive && { color: theme.burn }]}>
+              {r.burned && r.alive ? (
+                <>
+                  🔥 <ThemedText type="smallBold" style={[{ color: theme.burn }, styles.burned]}>{r.name}</ThemedText>
+                </>
+              ) : (
+                r.name
+              )}
+            </ThemedText>
             {/* Struck through once his MLB team is out, as on Standings. */}
             <ThemedText type="small" themeColor="textSecondary" style={!r.alive && styles.out}>{r.team}</ThemedText>
             {r.injuredList !== null && <InjuryChip list={r.injuredList} />}
@@ -535,6 +547,8 @@ const styles = StyleSheet.create({
   nameCell: { justifyContent: 'center', paddingHorizontal: Spacing.two + 2 },
   nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: Spacing.one },
   name: { flexShrink: 1 },
+  // Off the board for good: struck through, so the flame reads as burned, not hot.
+  burned: { textDecorationLine: 'line-through', ...({ textDecorationThickness: 2 } as object) },
   cells: { flexDirection: 'row', paddingRight: Spacing.two },
   cell: { height: ROW_HEIGHT, justifyContent: 'center', alignItems: 'flex-end', paddingLeft: Spacing.one },
   number: { fontVariant: ['tabular-nums'] },
