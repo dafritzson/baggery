@@ -24,6 +24,12 @@
 //   npx tsx scripts/ghost-sim.ts --own-rosters            Alex's version
 //   npx tsx scripts/ghost-sim.ts --two-hitters            Alex's version with a ghost of 2
 //   npx tsx scripts/ghost-sim.ts --ghost-in-cs            the ghost plays the CS round
+//   npx tsx scripts/ghost-sim.ts --ghost-in-cs --release roster
+//
+// --release puts eliminated managers' hitters back in the pool, for anyone to draft: the 2 out
+// after the DS before Draft 3, the 2 out after the CS before Draft 4. `roster` releases the
+// hitters on their roster when they're knocked out, `discarded` the ones they dropped in earlier
+// redrafts, and `both` both.
 //
 // Each run takes a real season and plays today's 12-team postseason with its teams: in each
 // league the 3 division winners (seeds 1–3, the top 2 with byes) and the 3 best other records.
@@ -78,6 +84,8 @@ const BY_YEAR = process.argv.includes('--by-year');
 const TWO_HITTERS = process.argv.includes('--two-hitters');
 const OWN_ROSTERS = TWO_HITTERS || process.argv.includes('--own-rosters');
 const GHOST_IN_CS = process.argv.includes('--ghost-in-cs');
+const RELEASE = process.argv.includes('--release') ? process.argv[process.argv.indexOf('--release') + 1] : 'none';
+if (!['none', 'roster', 'discarded', 'both'].includes(RELEASE)) throw new Error('--release takes roster, discarded or both.');
 const POSTSEASON_HITTING = arg('postseason-hitting', 0.88);
 const SERIES_SHRINK = arg('series-shrink', 0.5);
 const SWING = arg('swing', 0.14);
@@ -397,6 +405,19 @@ function simulate(ps: Postseason): Run {
   };
   const snake = (order: number[], round: number) => (round % 2 ? [...order].reverse() : order);
   // A team short of 4 hitters adds instead of swapping. `who` is whose opinions a team drafts by.
+  // Who each manager has dropped, and with --release, putting eliminated managers' hitters back.
+  const dropped: number[][] = Array.from({ length: MANAGERS }, () => []);
+  const release = (out: number[], rosters: number[][], drafted: Uint8Array) => {
+    // A hitter they dropped may have been released before and be on someone's roster again.
+    const kept = new Set(rosters.filter((_, m) => !out.includes(m)).flat());
+    for (const m of out) {
+      const freed = [
+        ...(RELEASE === 'roster' || RELEASE === 'both' ? rosters[m] : []),
+        ...(RELEASE === 'discarded' || RELEASE === 'both' ? dropped[m] : []),
+      ];
+      for (const i of freed) if (!kept.has(i)) drafted[i] = 0;
+    }
+  };
   const redraft = (order: number[], rosters: number[][], drafted: Uint8Array, r: number, who = (m: number) => m) => {
     const yielded = new Set<number>();
     let swaps = 0;
@@ -419,6 +440,7 @@ function simulate(ps: Postseason): Run {
         const worst = roster.reduce((w, i, k) => (worth(i) < worth(roster[w]) ? k : w), 0);
         const dead = !plays(r, roster[worst]);
         if (add >= 0 && (dead || opinion(o, r, add) > worth(roster[worst]) * (1 + UPGRADE))) {
+          dropped[m]?.push(roster[worst]);
           roster[worst] = add;
           drafted[add] = 1;
           swaps++;
@@ -455,6 +477,7 @@ function simulate(ps: Postseason): Run {
   const ranked1 = rank([...Array(MANAGERS).keys()], (m) => total[m]);
   const alive2 = ranked1.slice(0, 5);
   const dsOut = ranked1.slice(5).reverse();
+  release(dsOut, rosters, drafted);
   const swaps3 = redraft(alive2, rosters, drafted, L);
   const regular = (i: number) => plays(W, i) && regulars.has(i);
   const regularsBefore = hs.filter((_, i) => regular(i) && !drafted[i]).length;
@@ -499,6 +522,7 @@ function simulate(ps: Postseason): Run {
   const ranked2 = rank(alive2, (m) => round2.get(m)!);
   const finalists = ranked2.slice(0, 3);
   const csOut = ranked2.slice(3).reverse();
+  release(csOut, rosters, drafted);
   const sum = (ms: number[]) => ms.reduce((s, m) => s + total[m], 0);
   const ghostCSBags = ghostCS.reduce((s, g) => s + bags(L, g.i), 0);
   const trigger = !OWN_ROSTERS && !GHOST_IN_CS && sum(dsOut) + ghostCSBags + sum(csOut) > sum(finalists);
@@ -737,7 +761,8 @@ console.log(
 );
 console.log(
   `postseason hitting ${POSTSEASON_HITTING}, series shrink ${SERIES_SHRINK}, swing ${SWING}, ` +
-    `horizon ${HORIZON}, upgrade ${UPGRADE}, noise ${NOISE}\n`,
+    `horizon ${HORIZON}, upgrade ${UPGRADE}, noise ${NOISE}` +
+    `${RELEASE === 'none' ? '' : `, eliminated managers' hitters released: ${RELEASE}`}\n`,
 );
 const REDRAFT_LABELS = ['no redraft', 'redraft dead CS picks'];
 if (GHOST_IN_CS) {
