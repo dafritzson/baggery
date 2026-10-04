@@ -188,7 +188,7 @@ function inSpell(s: RosterSpell, start: string): boolean {
 
 const byDesc = <T>(f: (x: T) => number) => (a: T, b: T) => f(b) - f(a);
 
-export function almanac(input: AlmanacInput, top = 10): Almanac {
+export function almanac(input: AlmanacInput, top = 20): Almanac {
   const playing = new Set(input.teams.map((t) => t.seasonId));
   const seasons = input.seasons.filter((s) => playing.has(s.id)).sort((a, b) => b.year - a.year);
   const liveSeason = seasons.find((s) => !s.complete) ?? null;

@@ -263,14 +263,17 @@ export interface LeaderboardRow {
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
+/** A leaderboard's height before it scrolls: about 7½ rows, so the cut-off row says there's more. */
+const LEADERBOARD_HEIGHT = 500;
+
 /**
  * A ranked list: medals for the top three, each row in its manager's color. The leader's row is
- * larger.
+ * larger. A long list scrolls inside its own box, so the page doesn't get longer.
  */
 export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
   const theme = useTheme();
   return (
-    <View style={{ gap: Spacing.one }}>
+    <ScrollView style={{ maxHeight: LEADERBOARD_HEIGHT }} contentContainerStyle={{ gap: Spacing.one }} nestedScrollEnabled>
       {rows.map((r, i) => {
         const color = r.manager?.color ?? theme.accent;
         const first = i === 0;
@@ -305,6 +308,6 @@ export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
           </Pressable>
         );
       })}
-    </View>
+    </ScrollView>
   );
 }
