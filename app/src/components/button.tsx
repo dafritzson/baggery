@@ -4,7 +4,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-type Variant = 'primary' | 'secondary' | 'danger' | 'success';
+type Variant = 'primary' | 'secondary' | 'danger';
 
 export function Button({
   label,
@@ -25,7 +25,7 @@ export function Button({
   pulse?: boolean;
 }) {
   const theme = useTheme();
-  const background = variant === 'primary' ? theme.accent : variant === 'danger' ? theme.danger : variant === 'success' ? theme.success : theme.backgroundSelected;
+  const background = variant === 'primary' ? theme.accent : variant === 'danger' ? theme.danger : theme.backgroundSelected;
   const color = variant === 'secondary' ? theme.text : theme.accentText;
   const inactive = disabled || loading;
   return (
