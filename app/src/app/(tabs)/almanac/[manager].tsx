@@ -175,7 +175,7 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
                       <ThemedText type="small">{st.label}</ThemedText>
                       <ThemedText type="small" themeColor="textSecondary" style={styles.badgeReason}>{st.help}</ThemedText>
                     </View>
-                    <ThemedText type="smallBold">{st.format(v)}</ThemedText>
+                    <ThemedText type="smallBold" style={styles.statValue}>{st.format(v)}</ThemedText>
                     <View style={[styles.rank, { backgroundColor: lead ? color : theme.background }]}>
                       <ThemedText type="smallBold" style={{ color: lead ? '#fff' : theme.textSecondary, fontSize: 11 }}>
                         {pill}
@@ -294,7 +294,9 @@ const styles = StyleSheet.create({
   badgeReason: { fontSize: 11, lineHeight: 15 },
   group: { textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11, marginTop: Spacing.two },
   statRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingVertical: 2 },
-  rank: { minWidth: 38, alignItems: 'center', borderRadius: 999, paddingHorizontal: Spacing.two, paddingVertical: 1 },
+  // Fixed columns, so every row's value and pill line up whatever the label wraps to.
+  statValue: { width: 52, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  rank: { width: 76, alignItems: 'center', borderRadius: 999, paddingHorizontal: Spacing.two, paddingVertical: 1 },
   compare: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, alignItems: 'baseline' },
   hero: { borderRadius: Radius.lg, padding: Spacing.three, gap: Spacing.three },
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },

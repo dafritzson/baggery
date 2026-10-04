@@ -246,9 +246,9 @@ const Duel = memo(function Duel({ h, data }: { h: Duel_; data: AlmanacData }) {
             <View key={p.playerId} style={styles.shared}>
               <View style={styles.sharedLine}>
                 <ThemedText type="small" style={{ flex: 1 }}>{player(p.playerId)}</ThemedText>
-                <ThemedText type="smallBold" style={{ color: colors.a }}>{p.a}</ThemedText>
+                <ThemedText type="smallBold" style={[styles.sharedValue, { color: colors.a }]}>{p.a}</ThemedText>
                 <ThemedText type="small" themeColor="textSecondary"> · </ThemedText>
-                <ThemedText type="smallBold" style={{ color: colors.b }}>{p.b}</ThemedText>
+                <ThemedText type="smallBold" style={[styles.sharedValue, { textAlign: 'left', color: colors.b }]}>{p.b}</ThemedText>
               </View>
               <SplitBar a={p.a} b={p.b} height={5} />
             </View>
@@ -297,4 +297,5 @@ const styles = StyleSheet.create({
   moments: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   shared: { gap: 3 },
   sharedLine: { flexDirection: 'row', alignItems: 'baseline' },
+  sharedValue: { width: 28, textAlign: 'right', fontVariant: ['tabular-nums'] },
 });
