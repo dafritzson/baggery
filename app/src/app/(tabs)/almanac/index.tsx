@@ -69,7 +69,7 @@ function League({ data }: { data: AlmanacData }) {
   const live = (year: number) => (year === a.liveYear ? ['Live'] : []);
   const liveNote = (year: number) => (year === a.liveYear ? ' (live)' : '');
   const player = (id: number) => data.players.get(id) ?? `Player ${id}`;
-  const moves = [...a.redrafts].sort((x, y) => y.addedTb - y.droppedTb - (x.addedTb - x.droppedTb)).slice(0, 6);
+  const moves = [...a.redrafts].sort((x, y) => y.addedTb - y.droppedTb - (x.addedTb - x.droppedTb)).slice(0, 20);
   const who = (key: string) => ({ name: data.managers.get(key) ?? '?', color: managerColor(data, key) });
   // "James, Darren and Daniel"
   const names = (keys: string[]) => {
@@ -171,7 +171,7 @@ function League({ data }: { data: AlmanacData }) {
           rows={([1, 2, 3] as const)
             .flatMap((r) => a.bestRounds[r])
             .sort((x, y) => y.tb - x.tb)
-            .slice(0, 8)
+            .slice(0, 20)
             .map((r, i) => ({
               key: `${i}`,
               title: `Round ${r.round}, ${r.year}`,
@@ -185,7 +185,7 @@ function League({ data }: { data: AlmanacData }) {
 
       <Card title="Biggest single games">
         <Leaderboard
-          rows={a.bestPlayerGames.slice(0, 8).map((g, i) => ({
+          rows={a.bestPlayerGames.slice(0, 20).map((g, i) => ({
             key: `${i}`,
             title: player(g.playerId),
             tags: [`${g.year} ${seriesGame(g.gameType, g.seriesGameNumber)}`, ...live(g.year)],
@@ -198,7 +198,7 @@ function League({ data }: { data: AlmanacData }) {
       <Card title="Best bagger seasons">
         <ThemedText type="small" themeColor="textSecondary">Most bags one bagger scored for one team in a postseason.</ThemedText>
         <Leaderboard
-          rows={a.bestPlayerSeasons.slice(0, 8).map((p, i) => ({
+          rows={a.bestPlayerSeasons.slice(0, 20).map((p, i) => ({
             key: `${i}`,
             title: player(p.playerId),
             tags: [`${p.year}`, ...live(p.year)],
@@ -224,7 +224,7 @@ function League({ data }: { data: AlmanacData }) {
             played, whoever had him by then. A pick from {a.liveYear ?? 'this year'} counts once his team is out.
           </ThemedText>
           <Leaderboard
-            rows={(betsBy === 'busts' ? busts : steals).slice(0, 8).map((b, i) => ({
+            rows={(betsBy === 'busts' ? busts : steals).slice(0, 20).map((b, i) => ({
               key: `${i}`,
               title: player(b.playerId),
               tags: [`${b.year}`, `Pick ${b.pick}`, `${b.xBags.toFixed(1)} xBags, ${b.bags} ${b.bags === 1 ? 'bag' : 'bags'}`, ...live(b.year)],
@@ -238,7 +238,7 @@ function League({ data }: { data: AlmanacData }) {
       <Card title="Closest cuts">
         <ThemedText type="small" themeColor="textSecondary">The last team through against the first team out.</ThemedText>
         <Leaderboard
-          rows={a.closestCuts.slice(0, 6).map((c, i) => ({
+          rows={a.closestCuts.slice(0, 20).map((c, i) => ({
             key: `${i}`,
             title:
               c.margin === 0

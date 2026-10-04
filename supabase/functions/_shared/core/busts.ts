@@ -124,7 +124,7 @@ export function draftBets(seasons: BustSeason[]): DraftBet[] {
 }
 
 /** The biggest busts (furthest below their xBags) and steals (furthest above), `top` of each. */
-export function bustsAndSteals(bets: DraftBet[], top = 10): { busts: DraftBet[]; steals: DraftBet[] } {
+export function bustsAndSteals(bets: DraftBet[], top = 20): { busts: DraftBet[]; steals: DraftBet[] } {
   return {
     busts: bets.filter((b) => b.diff < 0).sort((a, b) => a.diff - b.diff).slice(0, top),
     steals: bets.filter((b) => b.diff > 0).sort((a, b) => b.diff - a.diff).slice(0, top),
