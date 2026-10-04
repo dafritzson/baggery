@@ -11,6 +11,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { headshotUrl, mlbTeamAbbr } from '@/lib/format';
+import { outNameStyle } from '@/lib/out-name';
 import { useOpenPlayer } from '@/lib/player';
 import type { SeasonData, Team } from '@/lib/season';
 import { ownerLine, ownerName, teamName } from '@/lib/teams';
@@ -174,10 +175,22 @@ function RosterRow({
   const [hovered, setHovered] = useState(false);
   const player = data.players.get(playerId);
   const name = player?.full_name ?? `Player ${playerId}`;
-  const injuredList = data.poolByPlayer.get(playerId)?.injured_list ?? null;
+  const pool = data.poolByPlayer.get(playerId);
+  const injuredList = pool?.injured_list ?? null;
+  // His MLB team is knocked out: struck through in red until he's replaced.
+  const out = !!pool && !!data.mlbTeams.get(pool.mlb_team_id)?.eliminated;
   const nameLine = (
     <View style={styles.nameLine}>
-      <ThemedText numberOfLines={1} style={[styles.name, styles.nameText, hovered && { textDecorationLine: 'underline' }]}>{name}</ThemedText>
+      <ThemedText
+        numberOfLines={1}
+        style={[
+          styles.name,
+          styles.nameText,
+          out && outNameStyle(theme),
+          hovered && { textDecorationLine: out ? 'underline line-through' : 'underline' },
+        ]}>
+        {name}
+      </ThemedText>
       {injuredList !== null && <InjuryChip list={injuredList} />}
     </View>
   );
@@ -200,13 +213,14 @@ function RosterRow({
           {nameLine}
           <ThemedText numberOfLines={1} themeColor="textSecondary" style={styles.meta}>
             {[player?.primary_position, mlbTeamAbbr(data, playerId)].filter(Boolean).join(' · ')}
+            {out && <ThemedText themeColor="danger" style={[styles.meta, styles.outTag]}> · Out</ThemedText>}
           </ThemedText>
         </View>
       ) : (
         <>
           <View style={styles.stackedName}>{nameLine}</View>
           <ThemedText themeColor="textSecondary" style={styles.position}>{player?.primary_position ?? ''}</ThemedText>
-          <ThemedText themeColor="textSecondary" style={styles.mlbTeam}>{mlbTeamAbbr(data, playerId)}</ThemedText>
+          <ThemedText themeColor={out ? 'danger' : 'textSecondary'} style={styles.mlbTeam}>{mlbTeamAbbr(data, playerId)}</ThemedText>
         </>
       )}
       {stat !== undefined && <ThemedText style={styles.stat}>{stat}</ThemedText>}
@@ -235,6 +249,7 @@ const styles = StyleSheet.create({
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   nameText: { flexShrink: 1, minWidth: 0 },
   meta: { fontSize: 12, lineHeight: 15 },
+  outTag: { fontWeight: 700 },
   position: { width: 30, textAlign: 'right', fontSize: 12, lineHeight: 15 },
   mlbTeam: { width: 36, textAlign: 'right', fontSize: 12, lineHeight: 15, fontWeight: 700 },
   stat: { width: 40, textAlign: 'right', fontSize: 14, lineHeight: 18, fontWeight: 700, fontVariant: ['tabular-nums'] },
