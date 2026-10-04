@@ -85,6 +85,11 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
           .flatMap((p) => p.seasons.map((s) => ({ key: `${p.playerId}-${s.year}`, playerId: p.playerId, tb: s.tb, years: [s.year] })))
           .sort((x, y) => y.tb - x.tb)
           .slice(0, 10);
+  // Finished seasons, for finishes: the one being played only has its closed rounds.
+  const finished = seasons.filter((t) => !t.alive);
+  const bets = data.bets.filter((b) => b.managerKey === managerKey);
+  const busts = bets.filter((b) => b.diff < 0).sort((x, y) => x.diff - y.diff).slice(0, 3);
+  const steals = bets.filter((b) => b.diff > 0).sort((x, y) => y.diff - x.diff).slice(0, 3);
   const moves = a.redrafts.filter((m) => m.managerKey === managerKey);
   const net = moves.reduce((sum, m) => sum + m.addedTb - m.droppedTb, 0);
   const byGain = [...moves].sort((x, y) => y.addedTb - y.droppedTb - (x.addedTb - x.droppedTb));
@@ -207,9 +212,9 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
       <Card title="Career arc">
         <ThemedText type="small" themeColor="textSecondary">Where {name} finished each year.</ThemedText>
         <FinishChart
-          years={[...seasons].map((t) => t.year).sort()}
-          places={{ a: new Map(seasons.map((t) => [t.year, t.place])), b: new Map() }}
-          teams={Math.max(...a.teamSeasons.map((t) => t.place))}
+          years={[...finished].map((t) => t.year).sort()}
+          places={{ a: new Map(finished.map((t) => [t.year, t.place])), b: new Map() }}
+          teams={Math.max(...a.teamSeasons.filter((t) => !t.alive).map((t) => t.place))}
           color={color}
         />
       </Card>
@@ -228,10 +233,11 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
           rowKey={(t) => t.teamId}
           labelHeader="Year"
           labelWidth={84}
-          label={(t) => <ThemedText type="smallBold" numberOfLines={1}>{t.year}{t.place === 1 ? ' 🏆' : ''}</ThemedText>}
+          label={(t) => <ThemedText type="smallBold" numberOfLines={1}>{t.year}{t.place === 1 && !t.live ? ' 🏆' : ''}</ThemedText>}
           onPressRow={(t) => router.push({ pathname: '/standings', params: { year: t.year } })}
           columns={[
-            { key: 'place', label: 'Finish', value: (t) => t.place, format: (t) => ordinal(t.place), ascending: true, width: 60 },
+            // Still alive in the season being played: no finish yet.
+            { key: 'place', label: 'Finish', value: (t) => (t.alive ? 0 : t.place), format: (t) => (t.alive ? 'Alive' : ordinal(t.place)), ascending: true, width: 60 },
             { key: 'r1', label: 'Round 1', value: (t) => round(t, 1)?.tb ?? -1, format: (t) => roundCell(t, 1), width: 84 },
             { key: 'r2', label: 'Round 2', value: (t) => round(t, 2)?.tb ?? -1, format: (t) => roundCell(t, 2), width: 84 },
             { key: 'r3', label: 'Round 3', value: (t) => round(t, 3)?.tb ?? -1, format: (t) => roundCell(t, 3), width: 84 },
@@ -266,6 +272,24 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
           </View>
         ))}
       </Card>
+
+      {(busts.length > 0 || steals.length > 0) && (
+        <Card title="Busts and steals">
+          <ThemedText type="small" themeColor="textSecondary">
+            {name}&apos;s Draft 1 picks against their xBags at the draft: the bags each scored that postseason, against what was expected.
+          </ThemedText>
+          {[...steals, ...busts].map((b) => (
+            <View key={`${b.year}-${b.playerId}`}>
+              <Line right={`${b.diff > 0 ? '+' : '−'}${Math.abs(b.diff).toFixed(1)}`}>
+                {b.diff > 0 ? '💎 ' : '🪦 '}{player(b.playerId)}
+              </Line>
+              <ThemedText type="small" themeColor="textSecondary">
+                {b.year} pick {b.pick}{b.live ? ' (live)' : ''}: {b.xBags.toFixed(1)} xBags, {b.bags} {b.bags === 1 ? 'bag' : 'bags'}
+              </ThemedText>
+            </View>
+          ))}
+        </Card>
+      )}
 
       {moves.length > 0 && (
         <Card title="Redrafts">

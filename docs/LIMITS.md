@@ -44,9 +44,11 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   in an open app (the tab stays open after that), and when a manager's page opens more than 5
   minutes after the last call (the app caches it): a few thousand calls a month at most.
 - **The Almanac.** The `almanac` function reads every season's rows next to the database and sends
-  back only the computed Almanac, an estimated ~100 KB (not yet measured), where the app used to
-  download the raw rows itself (~0.5–1 MB, dominated by box scores and the player pool). At ~15
-  apps opening it a couple of times a day, that's roughly 50–100 MB a month instead of ~0.5 GB.
+  back only the computed Almanac: ~120 KB measured locally with all seven seasons (2020–2026),
+  about 20 KB of it the Draft 1 picks behind busts and steals. The app used to download the raw
+  rows itself (~0.5–1 MB, dominated by box scores and the player pool). At ~15 apps opening it a
+  couple of times a day, that's roughly 50–110 MB a month instead of ~0.5 GB. It counts the
+  season being played as far as it's final, but on the same calls: it doesn't refresh on its own.
   Whether the function's own reads count as egress isn't documented clearly; at worst they're the
   same bytes the app used to download.
 - **Egress.** The Games and Standings tabs load the season once. After that, each poll sends one

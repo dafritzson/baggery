@@ -1,8 +1,14 @@
 // The Almanac: the league's records across every finished season, and each manager's career.
 // Built on the same scoring as the standings (teamRoundTotals, rankTeams), so the two can't
 // disagree. Pure: the app loads the rows and calls almanac().
+//
+// The season being played counts as far as it's final: its finished games (single-game records),
+// its closed rounds (round records, cuts, round-by-round duels), and a bagger's total for a team
+// once it can't change (the team is out, it dropped him, or his MLB team is out). Titles, finishes
+// and careers wait for the season to end.
 
 import { decidedBy, type PlayerGameStat, rankTeams, type RosterSpell, teamRoundTotals, type Tiebreaker } from './scoring.ts';
+import type { DraftBet } from './busts.ts';
 import { type FantasyRound, type PlayerId, ROUND_FOR_GAME_TYPE, type TeamId } from './types.ts';
 
 const ROUNDS: FantasyRound[] = [1, 2, 3];
@@ -10,7 +16,7 @@ const ROUNDS: FantasyRound[] = [1, 2, 3];
 export interface AlmanacSeason {
   id: string;
   year: number;
-  /** Only finished seasons count toward the Almanac. */
+  /** Finished. A season still being played counts only as far as it's final (see above). */
   complete: boolean;
 }
 
@@ -56,6 +62,11 @@ export interface AlmanacInput {
   spells: AlmanacSpell[];
   stats: AlmanacStat[];
   redrafts: AlmanacRedraft[];
+  /**
+   * Players whose MLB team is out of a season still being played, as "seasonId:playerId": their
+   * totals are final. The almanac function sends only finished games of such a season.
+   */
+  playersOut?: Set<string>;
 }
 
 /** One team's season: where it finished and its bags in each round it played. */
@@ -68,6 +79,14 @@ export interface TeamSeason {
   /** The rounds the team played, with its bags, rank, and the average of the teams in that round. */
   rounds: { round: FantasyRound; tb: number; rank: number; teams: number; average: number }[];
   bags: number;
+  /** The round it went out in; null for the champion, or a team still alive. */
+  eliminatedAfterRound: FantasyRound | null;
+  /**
+   * From the season still being played: `rounds` has only its closed rounds, and `place` is only
+   * final once the team is out (`alive` is false).
+   */
+  live: boolean;
+  alive: boolean;
 }
 
 export interface ManagerCareer {
@@ -83,6 +102,8 @@ export interface ManagerCareer {
   roundsPlayed: number;
   bags: number;
   bagsPerRound: number;
+  /** Bags so far in the season being played (finished games), on top of `bags`. */
+  liveBags: number;
 }
 
 export interface PlayerGameRecord {
@@ -135,6 +156,8 @@ export interface RedraftMove {
 }
 
 export interface Almanac {
+  /** The year of the season being played, if any: its records get a "live" mark. */
+  liveYear: number | null;
   /** Most recent first. */
   champions: { year: number; champion: TeamSeason; runnerUp: TeamSeason | null }[];
   /** Most titles first. */
@@ -166,7 +189,9 @@ function inSpell(s: RosterSpell, start: string): boolean {
 const byDesc = <T>(f: (x: T) => number) => (a: T, b: T) => f(b) - f(a);
 
 export function almanac(input: AlmanacInput, top = 10): Almanac {
-  const seasons = input.seasons.filter((s) => s.complete).sort((a, b) => b.year - a.year);
+  const playing = new Set(input.teams.map((t) => t.seasonId));
+  const seasons = input.seasons.filter((s) => playing.has(s.id)).sort((a, b) => b.year - a.year);
+  const liveSeason = seasons.find((s) => !s.complete) ?? null;
   const managerName = new Map(input.managers.map((m) => [m.key, m.name]));
   const teamById = new Map(input.teams.map((t) => [t.id, t]));
 
@@ -192,7 +217,9 @@ export function almanac(input: AlmanacInput, top = 10): Almanac {
 
     const rounds = new Map<TeamId, TeamSeason['rounds']>(teams.map((t) => [t.id, []]));
     const rankIn = new Map<string, number>();
-    for (const round of ROUNDS) {
+    // A round is closed once someone went out in it (round 3 closes the season).
+    const closed = season.complete ? ROUNDS : ROUNDS.filter((r) => teams.some((t) => t.eliminatedAfterRound === r));
+    for (const round of closed) {
       const alive = teams.filter((t) => t.eliminatedAfterRound === null || t.eliminatedAfterRound >= round);
       if (!alive.length) continue;
       const ranked = rankTeams(teamRoundTotals(round, alive.map((t) => t.id), spells, stats));
@@ -242,18 +269,27 @@ export function almanac(input: AlmanacInput, top = 10): Almanac {
         place: 1 + teams.filter((o) => better(o, t) < 0).length,
         rounds: r,
         bags: r.reduce((sum, x) => sum + x.tb, 0),
+        eliminatedAfterRound: t.eliminatedAfterRound,
+        live: !season.complete,
+        alive: !season.complete && t.eliminatedAfterRound === null,
       });
     }
   }
 
-  const champions = seasons.flatMap((s) => {
+  const finished = teamSeasons.filter((t) => !t.live);
+  const champions = seasons.filter((s) => s.complete).flatMap((s) => {
     const inSeason = teamSeasons.filter((t) => t.year === s.year).sort((a, b) => a.place - b.place);
     const champion = inSeason.find((t) => teamById.get(t.teamId)!.eliminatedAfterRound === null);
     return champion ? [{ year: s.year, champion, runnerUp: inSeason.find((t) => t !== champion && t.place === 2) ?? null }] : [];
   });
 
-  const careers: ManagerCareer[] = [...new Set(teamSeasons.map((t) => t.managerKey))].map((key) => {
-    const mine = teamSeasons.filter((t) => t.managerKey === key);
+  const yearOf = new Map(input.seasons.map((s) => [s.id, s.year]));
+  const managerOf = (teamId: TeamId) => teamById.get(teamId)!.managerKey;
+  const liveBags = new Map<string, number>();
+  for (const s of owned) if (s.seasonId === liveSeason?.id) liveBags.set(managerOf(s.teamId), (liveBags.get(managerOf(s.teamId)) ?? 0) + s.tb);
+
+  const careers: ManagerCareer[] = [...new Set(finished.map((t) => t.managerKey))].map((key) => {
+    const mine = finished.filter((t) => t.managerKey === key);
     const roundsPlayed = mine.reduce((sum, t) => sum + t.rounds.length, 0);
     const bags = mine.reduce((sum, t) => sum + t.bags, 0);
     return {
@@ -268,12 +304,11 @@ export function almanac(input: AlmanacInput, top = 10): Almanac {
       roundsPlayed,
       bags,
       bagsPerRound: roundsPlayed ? bags / roundsPlayed : 0,
+      liveBags: liveBags.get(key) ?? 0,
     };
   });
   careers.sort((a, b) => b.titles - a.titles || a.averageFinish - b.averageFinish || b.bags - a.bags);
 
-  const yearOf = new Map(input.seasons.map((s) => [s.id, s.year]));
-  const managerOf = (teamId: TeamId) => teamById.get(teamId)!.managerKey;
   const bestPlayerGames = owned
     .filter((s) => s.tb > 0)
     .sort(byDesc((s) => s.tb))
@@ -287,9 +322,20 @@ export function almanac(input: AlmanacInput, top = 10): Almanac {
       seriesGameNumber: s.seriesGameNumber,
     }));
 
-  // A player's bags for one team in one season, and for one manager across seasons.
+  // A player's bags for one team in one season, and for one manager across seasons. In the season
+  // being played, only once his total for that team is final.
+  const complete = new Set(seasons.filter((s) => s.complete).map((s) => s.id));
+  const final = (s: AlmanacStat & { teamId: TeamId }) => {
+    if (complete.has(s.seasonId)) return true;
+    const spells = input.spells.filter((x) => x.seasonId === s.seasonId && x.teamId === s.teamId && x.playerId === s.playerId);
+    return (
+      teamById.get(s.teamId)!.eliminatedAfterRound !== null ||
+      spells.every((x) => x.to !== null) ||
+      (input.playersOut?.has(`${s.seasonId}:${s.playerId}`) ?? false)
+    );
+  };
   const playerSeason = new Map<string, PlayerSeasonRecord>();
-  for (const s of owned) {
+  for (const s of owned.filter(final)) {
     const k = `${s.teamId}:${s.playerId}`;
     const rec = playerSeason.get(k) ?? { managerKey: managerOf(s.teamId), year: yearOf.get(s.seasonId)!, playerId: s.playerId, tb: 0 };
     rec.tb += s.tb;
@@ -317,7 +363,6 @@ export function almanac(input: AlmanacInput, top = 10): Almanac {
     }
   }
 
-  const complete = new Set(seasons.map((s) => s.id));
   const redrafts = input.redrafts
     .filter((r) => complete.has(r.seasonId))
     .map((r) => ({
@@ -336,13 +381,15 @@ export function almanac(input: AlmanacInput, top = 10): Almanac {
 
   for (const round of ROUNDS) bestRounds[round] = bestRounds[round].sort(byDesc((r) => r.tb)).slice(0, top);
   return {
+    liveYear: liveSeason?.year ?? null,
     champions,
     careers,
     teamSeasons,
     bestRounds,
     bestPlayerGames,
     bestPlayerSeasons,
-    closestCuts: closestCuts.sort((a, b) => a.margin - b.margin || b.year - a.year).slice(0, top),
+    // A cut the bags don't explain (a team through below one out, as only hand-made data has) isn't a record.
+    closestCuts: closestCuts.filter((c) => c.margin >= 0).sort((a, b) => a.margin - b.margin || b.year - a.year).slice(0, top),
     redrafts,
     playersByManager,
   };
@@ -383,7 +430,8 @@ export function headToHead(al: Almanac, aKey: string, bKey: string): HeadToHead 
   for (const ta of al.teamSeasons.filter((t) => t.managerKey === aKey)) {
     const tb = al.teamSeasons.find((t) => t.managerKey === bKey && t.year === ta.year);
     if (!tb) continue;
-    seasons.push({ year: ta.year, a: ta, b: tb, winner: pick(ta.place, tb.place, true) });
+    // A season still being played has no finishes yet, only closed rounds.
+    if (!ta.live) seasons.push({ year: ta.year, a: ta, b: tb, winner: pick(ta.place, tb.place, true) });
     for (const ra of ta.rounds) {
       const rb = tb.rounds.find((r) => r.round === ra.round);
       if (rb) rounds.push({ year: ta.year, round: ra.round, a: ra.tb, b: rb.tb, winner: pick(ra.tb, rb.tb, false) });
@@ -507,8 +555,8 @@ export function scouting(input: AlmanacInput, scout: ScoutingInput, al: Almanac)
     for (const round of ROUNDS) {
       const inRound = al.teamSeasons.filter((t) => t.year === year && t.rounds.some((r) => r.round === round));
       const tb = (t: TeamSeason) => t.rounds.find((r) => r.round === round)!.tb;
-      const through = inRound.filter((t) => t.place === 1 || t.rounds.some((r) => r.round === round + 1));
-      const out = inRound.filter((t) => !through.includes(t));
+      const through = inRound.filter((t) => t.eliminatedAfterRound === null || t.eliminatedAfterRound > round);
+      const out = inRound.filter((t) => t.eliminatedAfterRound === round);
       if (!through.length || !out.length) continue;
       const lastIn = Math.min(...through.map(tb));
       const firstOut = Math.max(...out.map(tb));
@@ -522,7 +570,9 @@ export function scouting(input: AlmanacInput, scout: ScoutingInput, al: Almanac)
   return al.careers.map((c) => {
     const mine = (teamId: TeamId) => managerOf(teamId) === c.key;
     const d1 = draft1.filter((p) => mine(p.teamId));
+    // Closed rounds of the season being played count for the clutch stats; the rest wait for it to end.
     const seasons = al.teamSeasons.filter((t) => t.managerKey === c.key);
+    const finished = seasons.filter((t) => !t.live);
     const swaps = picks.filter((p) => p.draftNumber > 1 && p.type === 'pick' && p.drop !== null && mine(p.teamId));
     const lines = owned.filter((s) => mine(s.teamId));
     const tb = lines.reduce((sum, s) => sum + s.tb, 0);
@@ -544,7 +594,7 @@ export function scouting(input: AlmanacInput, scout: ScoutingInput, al: Almanac)
       powerShare: tb ? lines.reduce((sum, s) => sum + 4 * s.hr, 0) / tb : null,
       obp: pa ? onBase / pa : null,
       topHeavy: mean(
-        seasons.map((t) => {
+        finished.map((t) => {
           const byPlayer = new Map<PlayerId, number>();
           for (const s of lines.filter((l) => l.teamId === t.teamId)) byPlayer.set(s.playerId, (byPlayer.get(s.playerId) ?? 0) + s.tb);
           const total = [...byPlayer.values()].reduce((a, b) => a + b, 0);
@@ -609,6 +659,8 @@ export interface AlmanacData {
   /** How each manager plays the game, and the badges they've earned. */
   scouting: ManagerScouting[];
   badges: Map<string, Badge[]>;
+  /** Every Draft 1 pick with a final total, against its xBags (core/busts.ts). */
+  bets: DraftBet[];
 }
 
 /** AlmanacData as JSON, which has no Maps: each Map is its entries. The almanac function sends it. */
@@ -619,6 +671,7 @@ export interface AlmanacJson {
   players: [number, string][];
   scouting: ManagerScouting[];
   badges: [string, Badge[]][];
+  bets: DraftBet[];
 }
 
 export function almanacToJson(d: AlmanacData): AlmanacJson {
@@ -629,6 +682,7 @@ export function almanacToJson(d: AlmanacData): AlmanacJson {
     players: [...d.players],
     scouting: d.scouting,
     badges: [...d.badges],
+    bets: d.bets,
   };
 }
 
@@ -641,5 +695,6 @@ export function almanacFromJson(j: AlmanacJson): AlmanacData {
     players: new Map(j.players),
     scouting: j.scouting,
     badges: new Map(j.badges),
+    bets: j.bets ?? [],
   };
 }

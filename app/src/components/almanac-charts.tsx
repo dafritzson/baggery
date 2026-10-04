@@ -30,7 +30,7 @@ export function AboveAverageChart({ seasons }: { seasons: TeamSeason[] }) {
   const onLayout = (e: LayoutChangeEvent) => setWidth(Math.round(e.nativeEvent.layout.width));
   const bars = [...seasons]
     .sort((a, b) => a.year - b.year)
-    .flatMap((s) => s.rounds.map((r, i) => ({ year: s.year, round: r.round, diff: r.tb - r.average, first: i === 0, title: s.place === 1 })));
+    .flatMap((s) => s.rounds.map((r, i) => ({ year: s.year, round: r.round, diff: r.tb - r.average, first: i === 0, title: s.place === 1 && !s.live })));
   const height = 170;
   const pad = { t: 16, b: 30 };
   const widest = Math.max(1, ...bars.map((b) => Math.abs(b.diff)));
@@ -97,21 +97,26 @@ export function Pennant({ year, name, bags, color, onPress }: { year: number; na
 }
 
 /** A horizontal bar per manager: the value's share of the largest, in the manager's color. */
+/** `extra` (the season being played, say) draws as a lighter end on the bar and counts in its number. */
 export function LeaderBars({ rows, format = String }: {
-  rows: { key: string; name: string; value: number; color: string; onPress?: () => void; note?: string }[];
+  rows: { key: string; name: string; value: number; extra?: number; color: string; onPress?: () => void; note?: string }[];
   format?: (n: number) => string;
 }) {
   const theme = useTheme();
-  const most = Math.max(1, ...rows.map((r) => r.value));
+  const most = Math.max(1, ...rows.map((r) => r.value + (r.extra ?? 0)));
   return (
     <View style={{ gap: Spacing.two }}>
       {rows.map((r) => (
         <Pressable key={r.key} onPress={r.onPress} style={styles.leaderRow}>
           <ThemedText type="smallBold" numberOfLines={1} style={styles.leaderName}>{r.name}</ThemedText>
           <View style={[styles.leaderTrack, { backgroundColor: theme.background }]}>
-            <View style={[styles.leaderBar, { width: `${(r.value / most) * 100}%`, backgroundColor: r.color }]} />
+            {/* One bar, rounded only at its ends, with the extra stacked on as a lighter segment. */}
+            <View style={[styles.leaderBar, { width: `${((r.value + (r.extra ?? 0)) / most) * 100}%` }]}>
+              <View style={{ flex: r.value, backgroundColor: r.color }} />
+              {!!r.extra && <View style={{ flex: r.extra, backgroundColor: r.color, opacity: 0.45 }} />}
+            </View>
           </View>
-          <ThemedText type="smallBold" style={styles.leaderValue}>{format(r.value)}{r.note ?? ''}</ThemedText>
+          <ThemedText type="smallBold" style={styles.leaderValue}>{format(r.value + (r.extra ?? 0))}{r.note ?? ''}</ThemedText>
         </Pressable>
       ))}
     </View>
@@ -177,7 +182,7 @@ const styles = StyleSheet.create({
   leaderRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   leaderName: { width: 64 },
   leaderTrack: { flex: 1, height: 14, borderRadius: 7, overflow: 'hidden' },
-  leaderBar: { height: 14, borderRadius: 7 },
+  leaderBar: { height: 14, borderRadius: 7, overflow: 'hidden', flexDirection: 'row' },
   leaderValue: { width: 64, textAlign: 'right' },
 });
 
