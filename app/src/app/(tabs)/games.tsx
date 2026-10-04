@@ -605,8 +605,8 @@ function OpenCard({ data, scores, game, fill, onTeam }: CardProps) {
 }
 
 /**
- * A live game's last at-bat under its card's header, on one line: "Judge flyout to CF", with the
- * runs that scored on it in red. A drafted batter's name is in his manager's color: green for
+ * A live game's last at-bat under its card's header, on one line: "Last play: Judge flyout to CF",
+ * the label in bold gray, with the runs that scored on it in red. A drafted batter's name is in his manager's color: green for
  * yours, blue for another manager's (the fills in light mode, the brighter rings in dark, so it
  * reads on the card either way).
  */
@@ -616,6 +616,7 @@ function LastPlayLine({ play, whose }: { play: LastPlay; whose: Bagger }) {
   const nameColor = whose === 'mine' ? (dark ? theme.mineRing : theme.mineFill) : whose === 'other' ? (dark ? theme.otherRing : theme.otherFill) : theme.text;
   return (
     <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.lastPlay}>
+      <ThemedText type="smallBold" themeColor="textSecondary" style={styles.lastPlayText}>Last play: </ThemedText>
       <ThemedText type="smallBold" style={[styles.lastPlayText, { color: nameColor }]}>{play.batter}</ThemedText>
       {` ${play.play}`}
       {play.runs > 0 && (
