@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -42,6 +43,8 @@ const CELL = 30;
 const TOTAL = 44;
 /** Space at each end of the game columns. */
 const PAD = 2;
+/** How long a row takes to slide to its new place when the order changes. */
+const MOVE_MS = 300;
 
 /**
  * A spreadsheet-like grid: labels pinned on the left, the round total pinned on the right, and
@@ -57,6 +60,7 @@ export function ScoreGrid({
   keepColumns,
   rowHeight = ROW,
   follow,
+  moveMs = MOVE_MS,
 }: {
   columns: GridColumn[];
   rows: GridRow[];
@@ -77,6 +81,8 @@ export function ScoreGrid({
   rowHeight?: number;
   /** A column to keep scrolled into view (the latest one filled in, when the standings are scrubbed). */
   follow?: number;
+  /** How long a row slides when the rows change order (shorter while the standings play back fast). */
+  moveMs?: number;
 }) {
   const theme = useTheme();
   const scroller = useRef<ScrollView>(null);
@@ -94,7 +100,6 @@ export function ScoreGrid({
     styles.row,
     { height: rowHeight },
     i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border },
-    rows[i - 1]?.cutAfter && [styles.cut, { borderTopColor: theme.danger }],
     r.selected && { backgroundColor: theme.backgroundSelected },
     r.mine && { backgroundColor: theme.mineFill },
   ];
@@ -118,12 +123,24 @@ export function ScoreGrid({
   // total keeps the page's colors when it has a standing color of its own.
   const pressable = (r: GridRow, i: number, style: object, content: ReactNode, onFill = true) => {
     const children = <FillSurface fill={r.mine && onFill ? 'mineFill' : null}>{content}</FillSurface>;
-    return r.onPress ? (
-      <Pressable key={r.key} onPress={r.onPress} style={[rowStyle(r, i), style]}>{children}</Pressable>
-    ) : (
-      <View key={r.key} style={[rowStyle(r, i), style]}>{children}</View>
+    return (
+      <SlidingRow key={r.key} index={i} height={rowHeight} ms={moveMs}>
+        {r.onPress ? (
+          <Pressable onPress={r.onPress} style={[rowStyle(r, i), style]}>{children}</Pressable>
+        ) : (
+          <View style={[rowStyle(r, i), style]}>{children}</View>
+        )}
+      </SlidingRow>
     );
   };
+  // The cut line stays put while rows slide across it.
+  const cutAt = rows.findIndex((r) => r.cutAfter) + 1;
+  const body = (content: ReactNode) => (
+    <View style={{ height: rows.length * rowHeight }}>
+      {content}
+      {cutAt > 0 && cutAt < rows.length && <View style={[styles.cut, { top: cutAt * rowHeight, borderTopColor: theme.danger }]} />}
+    </View>
+  );
 
   return (
     <ThemedView
@@ -132,7 +149,7 @@ export function ScoreGrid({
       onLayout={labelMaxWidth ? (e) => setGridWidth(e.nativeEvent.layout.width) : undefined}>
       <View style={[{ width: labels, borderRightColor: theme.border }, styles.labels]}>
         <View style={[styles.header, styles.labelCell, { borderBottomColor: theme.border }]}>{header(labelHeader)}</View>
-        {rows.map((r, i) => pressable(r, i, styles.labelCell, r.label))}
+        {body(rows.map((r, i) => pressable(r, i, styles.labelCell, r.label)))}
       </View>
       <ScrollView
         ref={scroller}
@@ -149,7 +166,7 @@ export function ScoreGrid({
               </View>
             ))}
           </View>
-          {rows.map((r, i) =>
+          {body(rows.map((r, i) =>
             pressable(
               r,
               i,
@@ -166,16 +183,40 @@ export function ScoreGrid({
                 </View>
               )),
             ),
-          )}
+          ))}
         </View>
       </ScrollView>
       <View style={[styles.totals, { borderLeftColor: theme.border }]}>
         <View style={[styles.header, styles.totalCell, { borderBottomColor: theme.border }]}>{header(totalHeader)}</View>
-        {rows.map((r, i) =>
+        {body(rows.map((r, i) =>
           pressable(r, i, [styles.totalCell, { backgroundColor: standingColor(r) }], cellText(r.total, true, r.muted), !r.standing),
-        )}
+        ))}
       </View>
     </ThemedView>
+  );
+}
+
+/**
+ * A body row, placed by its index: when the rows change order (the standings played back), it
+ * slides from where it was to its new place. The one moving up passes over the one moving down.
+ */
+function SlidingRow({ index, height, ms, children }: { index: number; height: number; ms: number; children: ReactNode }) {
+  const theme = useTheme();
+  const y = useSharedValue(index * height);
+  const [last, setLast] = useState(index);
+  const [rising, setRising] = useState(false);
+  if (index !== last) {
+    setLast(index);
+    setRising(index < last);
+  }
+  useEffect(() => {
+    y.value = withTiming(index * height, { duration: ms, easing: Easing.inOut(Easing.cubic) });
+  }, [index, height, ms, y]);
+  const slide = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
+  return (
+    <Animated.View style={[styles.slot, { height, zIndex: rising ? 1 : 0, backgroundColor: theme.backgroundElement }, slide]}>
+      {children}
+    </Animated.View>
   );
 }
 
@@ -191,7 +232,8 @@ const styles = StyleSheet.create({
   headerText: { fontSize: 12 },
   liveDot: { position: 'absolute', top: 6, right: 4, width: 6, height: 6, borderRadius: 3 },
   row: { height: ROW },
-  cut: { borderTopWidth: 2, borderStyle: 'dashed' },
+  slot: { position: 'absolute', top: 0, left: 0, right: 0 },
+  cut: { position: 'absolute', left: 0, right: 0, zIndex: 2, borderTopWidth: 2, borderStyle: 'dashed' },
   labelCell: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.two },
   cells: { flexDirection: 'row', paddingHorizontal: PAD },
   cell: { minWidth: CELL, flexGrow: 1, flexBasis: 0, alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center' },

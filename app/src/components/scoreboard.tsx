@@ -75,6 +75,7 @@ export function StandingsTable({
   settled = true,
   moves,
   flash,
+  moveMs,
 }: {
   data: SeasonData;
   scores: Scores;
@@ -87,6 +88,8 @@ export function StandingsTable({
   moves?: Map<string, number>;
   /** The cell of the bag the scrubber is on: its team and game column ("D3"). */
   flash?: { teamId: string; column: string } | null;
+  /** How long a team's row takes to slide to its new place when the order changes. */
+  moveMs?: number;
 }) {
   // Teams eliminated in an earlier round aren't in this one. The ghost team plays round 2 without
   // facing its cut: it's listed below everyone, outside the ranking.
@@ -217,6 +220,7 @@ export function StandingsTable({
         keepColumns={4}
         rowHeight={48}
         follow={columns.findLastIndex((c) => c.started)}
+        moveMs={moveMs}
       />
       <TiebreakSheet
         title={tieGroup === null ? '' : `Tied at ${tieGroup} bags`}
