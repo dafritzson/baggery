@@ -110,8 +110,11 @@ export function LeaderBars({ rows, format = String }: {
         <Pressable key={r.key} onPress={r.onPress} style={styles.leaderRow}>
           <ThemedText type="smallBold" numberOfLines={1} style={styles.leaderName}>{r.name}</ThemedText>
           <View style={[styles.leaderTrack, { backgroundColor: theme.background }]}>
-            <View style={[styles.leaderBar, { width: `${(r.value / most) * 100}%`, backgroundColor: r.color }]} />
-            {!!r.extra && <View style={[styles.leaderBar, { width: `${(r.extra / most) * 100}%`, backgroundColor: r.color, opacity: 0.4 }]} />}
+            {/* One bar, rounded only at its ends, with the extra stacked on as a lighter segment. */}
+            <View style={[styles.leaderBar, { width: `${((r.value + (r.extra ?? 0)) / most) * 100}%` }]}>
+              <View style={{ flex: r.value, backgroundColor: r.color }} />
+              {!!r.extra && <View style={{ flex: r.extra, backgroundColor: r.color, opacity: 0.45 }} />}
+            </View>
           </View>
           <ThemedText type="smallBold" style={styles.leaderValue}>{format(r.value + (r.extra ?? 0))}{r.note ?? ''}</ThemedText>
         </Pressable>
@@ -178,8 +181,8 @@ const styles = StyleSheet.create({
   lbTagText: { fontSize: 10, lineHeight: 14 },
   leaderRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   leaderName: { width: 64 },
-  leaderTrack: { flex: 1, height: 14, borderRadius: 7, overflow: 'hidden', flexDirection: 'row' },
-  leaderBar: { height: 14, borderRadius: 7 },
+  leaderTrack: { flex: 1, height: 14, borderRadius: 7, overflow: 'hidden' },
+  leaderBar: { height: 14, borderRadius: 7, overflow: 'hidden', flexDirection: 'row' },
   leaderValue: { width: 64, textAlign: 'right' },
 });
 

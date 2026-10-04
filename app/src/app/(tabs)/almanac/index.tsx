@@ -110,7 +110,7 @@ function League({ data }: { data: AlmanacData }) {
 
       <Card title="Career bags">
         {a.liveYear !== null && a.careers.some((c) => c.liveBags > 0) && (
-          <ThemedText type="small" themeColor="textSecondary">The lighter end of each bar is {a.liveYear} so far.</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">The faded end of each bar is {a.liveYear} so far.</ThemedText>
         )}
         <LeaderBars
           rows={[...a.careers]
