@@ -226,6 +226,8 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
         settled={settled}
         moves={moves}
         flash={flash}
+        // Rows finish sliding before the next step, however fast it plays.
+        moveMs={playing ? Math.min(300, (PLAY_MS[steps] / speed) * 0.8) : undefined}
       />
       {at && !futureRound && (
         <SeasonScrubber
