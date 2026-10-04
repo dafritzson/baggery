@@ -17,6 +17,7 @@
 
 import { requireCommissioner, requireUser } from '../_shared/auth.ts';
 import { autoCloseRounds } from '../_shared/close-round.ts';
+import type { LiveState } from '../_shared/core/live.ts';
 import { type ScheduledGame, eliminatedTeams, redraftLock } from '../_shared/core/scoreboard.ts';
 import { sql } from '../_shared/db.ts';
 import { UserError, json, serve } from '../_shared/http.ts';
@@ -29,11 +30,14 @@ import {
   clipsForHits,
   highlightClips,
   type LineupRow,
+  LAST_PLAY_FIELDS,
   linescoreLive,
   linescoreRuns,
   linescoreTable,
+  nextLastPlay,
   playHits,
   playLines,
+  playsKey,
   savantHasVideo,
   scheduleGames,
   scheduleLineups,
@@ -71,6 +75,24 @@ async function knownTeamIds(year: number): Promise<Set<number>> {
 }
 
 /**
+ * Carries the game's last play over from what's stored, reading the play-by-play (filtered to
+ * what the play needs) only while the game is live and the line score has moved on to another
+ * at-bat. Finished games don't show it, so a season's reload reads none. A failure keeps the
+ * stored play, and the next poll tries again.
+ */
+async function addLastPlay(gamePk: number, live: LiveState): Promise<void> {
+  const [row] = await sql`select live, status from mlb_games where game_pk = ${gamePk}`;
+  const before = (row?.live ?? null) as LiveState | null;
+  Object.assign(live, { lastPlay: before?.lastPlay ?? null, playsAsOf: before?.playsAsOf });
+  if (row?.status !== 'Live' || before?.playsAsOf === playsKey(live)) return;
+  try {
+    Object.assign(live, nextLastPlay(live, before, await mlb(`/game/${gamePk}/playByPlay?fields=${LAST_PLAY_FIELDS}`)));
+  } catch (e) {
+    console.error('last play', gamePk, e);
+  }
+}
+
+/**
  * Saves a game's box score (everyone's batting line) and its live state (inning, bases, due up).
  * With `alerts` (the regular polls, not a reload), queues sub alerts for its lineup changes.
  */
@@ -81,6 +103,7 @@ async function saveGame(gamePk: number, alerts: boolean): Promise<number> {
   const live = linescoreLive(linescore, boxscore?.teams?.home?.team?.id);
   const runs = linescoreRuns(linescore);
   const table = linescoreTable(linescore);
+  if (live) await addLastPlay(gamePk, live);
   if (live || runs || table) {
     const liveJson = live ? sql.json(JSON.parse(JSON.stringify(live))) : null;
     const tableJson = table ? sql.json(JSON.parse(JSON.stringify(table))) : null;
