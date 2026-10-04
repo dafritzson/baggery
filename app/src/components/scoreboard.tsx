@@ -153,15 +153,20 @@ export function StandingsTable({
               )}
             </View>
           )}
-          {/* Only in the rows it applies to, so the other names get the room. */}
-          {levelOnBags && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`How the tie at ${s.total} bags was broken`}
-              hitSlop={8}
-              onPress={() => setTieGroup(s.total)}>
-              <SymbolView name={{ ios: 'scalemass', android: 'balance', web: 'balance' }} size={16} tintColor={theme.accent} />
-            </Pressable>
+          {/* While any team is level on bags, every row keeps the icon's slot, so the move arrows
+              line up whether or not the row has the icon. */}
+          {started && tiedTotals.length > 0 && (
+            <View style={styles.tieSlot}>
+              {levelOnBags && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`How the tie at ${s.total} bags was broken`}
+                  hitSlop={8}
+                  onPress={() => setTieGroup(s.total)}>
+                  <SymbolView name={{ ios: 'scalemass', android: 'balance', web: 'balance' }} size={16} tintColor={theme.accent} />
+                </Pressable>
+              )}
+            </View>
           )}
         </>
       ),
@@ -381,6 +386,7 @@ const styles = StyleSheet.create({
   outName: { textDecorationLine: 'line-through', opacity: 0.5 },
   // Wide enough for "▼9"; a rare "▼12" just grows it. Sits right after the name.
   moveSlot: { minWidth: 16, marginLeft: 4, alignItems: 'flex-end' },
+  tieSlot: { width: 16, alignItems: 'center' },
   move: { fontSize: 11, lineHeight: 14, fontWeight: 700, fontVariant: ['tabular-nums'] },
   chips: { flexDirection: 'row', gap: Spacing.one, flexWrap: 'wrap', minHeight: CHIPS_ROW, alignItems: 'center', alignContent: 'center' },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
