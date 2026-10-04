@@ -56,6 +56,9 @@ export const Colors = {
     playButton: '#2563EB',
     /** An on/off switch's track when off (on, it's the accent). */
     switchOff: '#C4C6CC',
+    /** Burned players (dropped while their MLB team is still alive): flame orange, and a warm fill. */
+    burn: '#C2410C',
+    burnTint: '#FFEDD5',
   },
   dark: {
     text: '#ffffff',
@@ -89,6 +92,8 @@ export const Colors = {
     onFillSecondary: 'rgba(255, 255, 255, 0.72)',
     playButton: '#60A5FA',
     switchOff: '#4A4D52',
+    burn: '#FB923C',
+    burnTint: '#3A1F0E',
   },
 } as const;
 

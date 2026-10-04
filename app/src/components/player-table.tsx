@@ -399,7 +399,13 @@ export function PlayerTable({
         </View>
         {sorted.map((r, i) => (
           <Pressable key={r.id} {...rowPress(r.id)} style={[rowStyle(r.id, i), styles.nameCell, styles.nameRow]}>
-            <ThemedText type="smallBold" numberOfLines={1} style={styles.name}>{r.name}</ThemedText>
+            {/* Burned (dropped while his MLB team is alive): off the board for good, in flames. */}
+            <ThemedText
+              type="smallBold"
+              numberOfLines={1}
+              style={[styles.name, r.burned && r.alive && { color: theme.burn, textShadowColor: `${theme.burn}80`, textShadowRadius: 6 }]}>
+              {r.burned && r.alive ? `🔥 ${r.name}` : r.name}
+            </ThemedText>
             {/* Struck through once his MLB team is out, as on Standings. */}
             <ThemedText type="small" themeColor="textSecondary" style={!r.alive && styles.out}>{r.team}</ThemedText>
             {r.injuredList !== null && <InjuryChip list={r.injuredList} />}
