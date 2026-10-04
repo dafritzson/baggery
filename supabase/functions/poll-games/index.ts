@@ -76,14 +76,15 @@ async function knownTeamIds(year: number): Promise<Set<number>> {
 
 /**
  * Carries the game's last play over from what's stored, reading the play-by-play (filtered to
- * what the play needs) only when the line score has moved on to another at-bat. A failure keeps
- * the stored play, and the next poll tries again.
+ * what the play needs) only while the game is live and the line score has moved on to another
+ * at-bat. Finished games don't show it, so a season's reload reads none. A failure keeps the
+ * stored play, and the next poll tries again.
  */
 async function addLastPlay(gamePk: number, live: LiveState): Promise<void> {
-  const [row] = await sql`select live from mlb_games where game_pk = ${gamePk}`;
+  const [row] = await sql`select live, status from mlb_games where game_pk = ${gamePk}`;
   const before = (row?.live ?? null) as LiveState | null;
   Object.assign(live, { lastPlay: before?.lastPlay ?? null, playsAsOf: before?.playsAsOf });
-  if (before?.playsAsOf === playsKey(live)) return;
+  if (row?.status !== 'Live' || before?.playsAsOf === playsKey(live)) return;
   try {
     Object.assign(live, nextLastPlay(live, before, await mlb(`/game/${gamePk}/playByPlay?fields=${LAST_PLAY_FIELDS}`)));
   } catch (e) {
