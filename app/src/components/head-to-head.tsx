@@ -79,7 +79,8 @@ const Duel = memo(function Duel({ h, data }: { h: Duel_; data: AlmanacData }) {
   const [measure, setMeasure] = useState<Measure>('perRound');
   const player = (id: number) => data.players.get(id) ?? `Player ${id}`;
   const { a, b } = h;
-  const all = data.almanac.teamSeasons;
+  // Finished seasons only: the one being played has no finishes yet.
+  const all = data.almanac.teamSeasons.filter((t) => !t.live);
   const seasonsOf = (key: string) => all.filter((t) => t.managerKey === key);
   const sa = seasonsOf(a.key);
   const sb = seasonsOf(b.key);

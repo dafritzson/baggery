@@ -148,6 +148,77 @@ describe('almanac', () => {
   });
 });
 
+/**
+ * input() plus the 2026 season being played: round 1 is closed (Curtis out), round 2 is under way.
+ * Alex's player 10 scored 12 in round 1 and 5 in round 2 so far; Bill's 11 scored 6, then
+ * Curtis's 12 scored 2 and is done.
+ */
+function liveInput(): AlmanacInput {
+  const inp = input();
+  const at = (t: GameType) => START[t].replace('2021', '2026');
+  const line = (playerId: number, gameType: GameType, tb: number): AlmanacStat => ({ ...stat(playerId, gameType, tb), seasonId: 'live', gameStart: at(gameType) });
+  inp.teams.push(
+    { id: 'LA', seasonId: 'live', managerKey: 'a', eliminatedAfterRound: null },
+    { id: 'LB', seasonId: 'live', managerKey: 'b', eliminatedAfterRound: null },
+    { id: 'LC', seasonId: 'live', managerKey: 'c', eliminatedAfterRound: 1 },
+  );
+  inp.spells.push(
+    { seasonId: 'live', teamId: 'LA', playerId: 10, from: at('F'), to: null },
+    { seasonId: 'live', teamId: 'LB', playerId: 11, from: at('F'), to: null },
+    { seasonId: 'live', teamId: 'LC', playerId: 12, from: at('F'), to: null },
+  );
+  inp.stats.push(line(10, 'F', 12), line(10, 'L', 5), line(11, 'D', 6), line(12, 'F', 2));
+  return inp;
+}
+
+describe('the season being played', () => {
+  const a = almanac(liveInput());
+
+  it('counts its closed rounds, not the open one', () => {
+    expect(a.liveYear).toBe(2026);
+    expect(a.bestRounds[1].filter((r) => r.year === 2026).map((r) => [r.managerKey, r.tb])).toEqual([['a', 12], ['b', 6], ['c', 2]]);
+    expect(a.bestRounds[2].some((r) => r.year === 2026)).toBe(false);
+    expect(a.closestCuts.find((c) => c.year === 2026)).toMatchObject({ round: 1, through: { managerKeys: ['b'] }, out: { managerKeys: ['c'] }, margin: 4 });
+  });
+
+  it('has no champion or finishes yet, and keeps careers to finished seasons plus live bags', () => {
+    expect(a.champions.map((c) => c.year)).toEqual([2021]);
+    expect(a.careers.map((c) => [c.name, c.seasons, c.bags, c.liveBags])).toEqual([
+      ['Alex', 1, 20, 17],
+      ['Bill', 1, 11, 6],
+      ['Curtis', 1, 1, 2],
+    ]);
+    const live = (m: string) => a.teamSeasons.find((t) => t.year === 2026 && t.managerKey === m)!;
+    expect([live('a').alive, live('c').alive, live('c').live]).toEqual([true, false, true]);
+    expect(live('a').rounds.map((r) => r.round)).toEqual([1]);
+  });
+
+  it('takes finished games for single-game records, and a bagger’s total once it is final', () => {
+    expect(a.bestPlayerGames[0]).toMatchObject({ year: 2026, playerId: 10, tb: 12 });
+    // Curtis is out, so player 12's 2 bags are final; Alex and Bill are still going.
+    const live = a.bestPlayerSeasons.filter((p) => p.year === 2026);
+    expect(live.map((p) => p.playerId)).toEqual([12]);
+    const out = liveInput();
+    out.playersOut = new Set(['live:10']);
+    expect(almanac(out).bestPlayerSeasons[0]).toMatchObject({ year: 2026, playerId: 10, tb: 17 });
+  });
+
+  it('duels the closed rounds but not the season', () => {
+    const h = headToHead(a, 'a', 'b')!;
+    expect(h.seasons.map((s) => s.year)).toEqual([2021]);
+    expect(h.rounds.filter((r) => r.year === 2026).map((r) => [r.round, r.a, r.b])).toEqual([[1, 12, 6]]);
+  });
+
+  it('counts its closed rounds in the cut margins', () => {
+    // Curtis gets to 4 in round 1: Bill (6) made the cut by 2, Curtis missed it by 2.
+    const inp = liveInput();
+    inp.stats.push({ ...stat(12, 'F', 2), seasonId: 'live', gameStart: START.F.replace('2021', '2026') });
+    const s = scouting(inp, { picks: [], players: [], seriesTeams: [] }, almanac(inp));
+    const of = (k: string) => s.find((x) => x.key === k)!;
+    expect([of('b').closeEscapes, of('c').heartbreaks]).toEqual([1, 1]);
+  });
+});
+
 describe('headToHead', () => {
   const a = almanac(input());
 
@@ -220,6 +291,7 @@ describe('almanacToJson', () => {
       players: new Map([[1, 'One'], [4, 'Four']]),
       scouting: [],
       badges: new Map([['a', [{ emoji: '🎯', name: 'Sharp', reason: 'Why' }]]]),
+      bets: [{ managerKey: 'a', year: 2021, playerId: 1, pick: 1, xBags: 9.5, bags: 8, diff: -1.5, live: false }],
     };
     const back = almanacFromJson(JSON.parse(JSON.stringify(almanacToJson(data))));
     expect(back).toEqual(data);

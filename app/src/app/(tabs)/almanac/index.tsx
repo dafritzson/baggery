@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { CutRecord, ManagerCareer } from '@core/almanac.ts';
+import { bustsAndSteals } from '@core/busts.ts';
 import { SERIES } from '@core/scoreboard.ts';
 
 import { LeaderBars, Leaderboard, Pennant, ScoutingGrid, managerColor } from '@/components/almanac-charts';
@@ -14,6 +15,7 @@ import { Screen } from '@/components/screen';
 import { StatTable } from '@/components/stat-table';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Toggle } from '@/components/toggle';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { openManager, ordinal } from '@/components/manager-link';
@@ -61,6 +63,11 @@ const seriesGame = (gameType: string, n: number | null) => `${SERIES.find((s) =>
 
 function League({ data }: { data: AlmanacData }) {
   const a = data.almanac;
+  const [betsBy, setBetsBy] = useState<'busts' | 'steals'>('busts');
+  const { busts, steals } = bustsAndSteals(data.bets);
+  // A record from the season being played gets a "Live" tag.
+  const live = (year: number) => (year === a.liveYear ? ['Live'] : []);
+  const liveNote = (year: number) => (year === a.liveYear ? ' (live)' : '');
   const player = (id: number) => data.players.get(id) ?? `Player ${id}`;
   const moves = [...a.redrafts].sort((x, y) => y.addedTb - y.droppedTb - (x.addedTb - x.droppedTb)).slice(0, 6);
   const who = (key: string) => ({ name: data.managers.get(key) ?? '?', color: managerColor(data, key) });
@@ -102,13 +109,17 @@ function League({ data }: { data: AlmanacData }) {
       </Card>
 
       <Card title="Career bags">
+        {a.liveYear !== null && a.careers.some((c) => c.liveBags > 0) && (
+          <ThemedText type="small" themeColor="textSecondary">The lighter end of each bar is {a.liveYear} so far.</ThemedText>
+        )}
         <LeaderBars
           rows={[...a.careers]
-            .sort((x, y) => y.bags - x.bags)
+            .sort((x, y) => y.bags + y.liveBags - (x.bags + x.liveBags))
             .map((c) => ({
               key: c.key,
               name: c.name,
               value: c.bags,
+              extra: c.liveBags,
               color: managerColor(data, c.key),
               onPress: () => openManager(data, c.key),
             }))}
@@ -123,27 +134,32 @@ function League({ data }: { data: AlmanacData }) {
           const season = a.bestPlayerSeasons[0];
           const cut = a.closestCuts[0];
           const move = moves[0];
+          const bust = busts[0];
           return (
             <>
               {round && (
                 <MomentCard emoji="🔥" title="Best round ever" color={managerColor(data, round.managerKey)} headline={`${round.tb} bags`}
-                  detail={`${data.managers.get(round.managerKey)}, ${round.year} round ${round.round}`} />
+                  detail={`${data.managers.get(round.managerKey)}, ${round.year} round ${round.round}${liveNote(round.year)}`} />
               )}
               {game && (
                 <MomentCard emoji="💣" title="Biggest single game" color={managerColor(data, game.managerKey)} headline={`${game.tb} bags`}
-                  detail={`${player(game.playerId)}, ${game.year} ${seriesGame(game.gameType, game.seriesGameNumber)} for ${data.managers.get(game.managerKey)}`} />
+                  detail={`${player(game.playerId)}, ${game.year} ${seriesGame(game.gameType, game.seriesGameNumber)} for ${data.managers.get(game.managerKey)}${liveNote(game.year)}`} />
               )}
               {season && (
                 <MomentCard emoji="⭐" title="Best bagger season" color={managerColor(data, season.managerKey)} headline={`${season.tb} bags`}
-                  detail={`${player(season.playerId)}, ${season.year} for ${data.managers.get(season.managerKey)}`} />
+                  detail={`${player(season.playerId)}, ${season.year} for ${data.managers.get(season.managerKey)}${liveNote(season.year)}`} />
               )}
               {cut && (
                 <MomentCard emoji="✂️" title="Closest cut" color={managerColor(data, cut.out.managerKeys[0])} headline={cut.margin === 0 ? 'Tiebreak' : `By ${cut.margin}`}
-                  detail={`${cut.year} round ${cut.round}: ${cutSummary(cut)}`} />
+                  detail={`${cut.year} round ${cut.round}${liveNote(cut.year)}: ${cutSummary(cut)}`} />
               )}
               {move && (
                 <MomentCard emoji="🔁" title="Best redraft" color={managerColor(data, move.managerKey)} headline={`+${move.addedTb - move.droppedTb}`}
                   detail={`${data.managers.get(move.managerKey)} took ${player(move.add)} for ${player(move.drop)}, ${move.year}`} />
+              )}
+              {bust && (
+                <MomentCard emoji="🪦" title="Biggest bust" color={managerColor(data, bust.managerKey)} headline={`${bust.bags} ${bust.bags === 1 ? 'bag' : 'bags'}`}
+                  detail={`${player(bust.playerId)}, ${bust.year} pick ${bust.pick} for ${data.managers.get(bust.managerKey)}: ${bust.xBags.toFixed(1)} expected`} />
               )}
             </>
           );
@@ -159,7 +175,7 @@ function League({ data }: { data: AlmanacData }) {
             .map((r, i) => ({
               key: `${i}`,
               title: `Round ${r.round}, ${r.year}`,
-              tags: [],
+              tags: live(r.year),
               manager: who(r.managerKey),
               label: `${r.tb} bags`,
               onPress: () => openManager(data, r.managerKey),
@@ -172,7 +188,7 @@ function League({ data }: { data: AlmanacData }) {
           rows={a.bestPlayerGames.slice(0, 8).map((g, i) => ({
             key: `${i}`,
             title: player(g.playerId),
-            tags: [`${g.year} ${seriesGame(g.gameType, g.seriesGameNumber)}`],
+            tags: [`${g.year} ${seriesGame(g.gameType, g.seriesGameNumber)}`, ...live(g.year)],
             manager: who(g.managerKey),
             label: `${g.tb} bags`,
           }))}
@@ -185,12 +201,39 @@ function League({ data }: { data: AlmanacData }) {
           rows={a.bestPlayerSeasons.slice(0, 8).map((p, i) => ({
             key: `${i}`,
             title: player(p.playerId),
-            tags: [`${p.year}`],
+            tags: [`${p.year}`, ...live(p.year)],
             manager: who(p.managerKey),
             label: `${p.tb} bags`,
           }))}
         />
       </Card>
+
+      {(busts.length > 0 || steals.length > 0) && (
+        <Card
+          title={betsBy === 'busts' ? 'Biggest busts' : 'Biggest steals'}
+          action={
+            <Toggle
+              options={[{ value: 'busts', label: 'Busts' }, { value: 'steals', label: 'Steals' }]}
+              value={betsBy}
+              onChange={setBetsBy}
+            />
+          }>
+          <ThemedText type="small" themeColor="textSecondary">
+            {betsBy === 'busts' ? 'Draft 1 picks that fell furthest short of' : 'Draft 1 picks that beat'} their xBags at the draft: the
+            bags the draft room expected from his hitting and how far his team looked likely to go. Bags count every postseason game he
+            played, whoever had him by then. A pick from {a.liveYear ?? 'this year'} counts once his team is out.
+          </ThemedText>
+          <Leaderboard
+            rows={(betsBy === 'busts' ? busts : steals).slice(0, 8).map((b, i) => ({
+              key: `${i}`,
+              title: player(b.playerId),
+              tags: [`${b.year}`, `Pick ${b.pick}`, `${b.xBags.toFixed(1)} xBags, ${b.bags} ${b.bags === 1 ? 'bag' : 'bags'}`, ...live(b.year)],
+              manager: who(b.managerKey),
+              label: `${b.diff > 0 ? '+' : '−'}${Math.abs(b.diff).toFixed(1)}`,
+            }))}
+          />
+        </Card>
+      )}
 
       <Card title="Closest cuts">
         <ThemedText type="small" themeColor="textSecondary">The last team through against the first team out.</ThemedText>
@@ -204,6 +247,7 @@ function League({ data }: { data: AlmanacData }) {
             tags: [
               `${c.year}`,
               `Round ${c.round}`,
+              ...live(c.year),
               ...(c.margin === 0 ? [`${names([...c.through.managerKeys, ...c.out.managerKeys])} ${tiedAt(c)}`] : []),
             ],
             manager: who(c.out.managerKeys[0]),
