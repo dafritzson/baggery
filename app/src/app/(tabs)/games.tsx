@@ -4,6 +4,7 @@ import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { BAG_EMOJI, hitBags } from '@core/bag-celebration.ts';
 import { neededGames, postseasonSeries } from '@core/schedule.ts';
+import type { LastPlay } from '@core/live.ts';
 import { SERIES } from '@core/scoreboard.ts';
 import type { GameType } from '@core/types.ts';
 
@@ -22,6 +23,7 @@ import { TeamPopup } from '@/components/team-popup';
 import { ThemedText } from '@/components/themed-text';
 import { Toggle } from '@/components/toggle';
 import { Radius, Spacing } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { dayLabel, gameDay, useToday } from '@/lib/game-day';
@@ -576,6 +578,7 @@ function OpenCard({ data, scores, game, fill, onTeam }: CardProps) {
             </ThemedText>
           )}
         </View>
+        {live && game.live?.lastPlay && <LastPlayLine play={game.live.lastPlay} whose={bagger(game.live.lastPlay.batterId)} />}
         <View style={styles.teams}>
           <View style={styles.upCards}>
             {upNext('away')}
@@ -598,6 +601,27 @@ function OpenCard({ data, scores, game, fill, onTeam }: CardProps) {
         <Baggers data={data} scores={scores} game={game} />
       </Card>
     </LiveGlow>
+  );
+}
+
+/**
+ * A live game's last at-bat under its card's header, on one line: "Judge flyout to CF", with the
+ * runs that scored on it in red. A drafted batter's name is in his manager's color: green for
+ * yours, blue for another manager's (the fills in light mode, the brighter rings in dark, so it
+ * reads on the card either way).
+ */
+function LastPlayLine({ play, whose }: { play: LastPlay; whose: Bagger }) {
+  const theme = useTheme();
+  const dark = useColorScheme() === 'dark';
+  const nameColor = whose === 'mine' ? (dark ? theme.mineRing : theme.mineFill) : whose === 'other' ? (dark ? theme.otherRing : theme.otherFill) : theme.text;
+  return (
+    <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.lastPlay}>
+      <ThemedText type="smallBold" style={[styles.lastPlayText, { color: nameColor }]}>{play.batter}</ThemedText>
+      {` ${play.play}`}
+      {play.runs > 0 && (
+        <ThemedText type="smallBold" style={[styles.lastPlayText, { color: theme.danger }]}>{` · ${play.runs} run${play.runs === 1 ? '' : 's'}`}</ThemedText>
+      )}
+    </ThemedText>
   );
 }
 
@@ -688,6 +712,9 @@ const styles = StyleSheet.create({
   // The batting team's card: outlined, no fill, so a filled row always means a bagger.
   upCardBatting: { borderWidth: 1.5 },
   headLabel: { flexShrink: 1, minWidth: 0 },
+  // Tucked up under the header.
+  lastPlay: { fontSize: 13, lineHeight: 18, marginTop: -Spacing.one },
+  lastPlayText: { fontSize: 13, lineHeight: 18 },
   // The batting order spot, or the batter's AB tag (so the batting team's card needs more room).
   upLabel: { width: 7, flexShrink: 0, alignItems: 'center' },
   upLabelWide: { width: 20 },

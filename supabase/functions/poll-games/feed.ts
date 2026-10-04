@@ -2,7 +2,7 @@
 // unit tests can run it on sample responses.
 
 import type { Linescore, LineupPlayer } from '../_shared/core/box-score.ts';
-import type { LivePlayer, LiveState } from '../_shared/core/live.ts';
+import type { LastPlay, LivePlayer, LiveState } from '../_shared/core/live.ts';
 
 export type GameType = 'F' | 'D' | 'L' | 'W';
 const GAME_TYPES = new Set<string>(['F', 'D', 'L', 'W']);
@@ -317,6 +317,75 @@ export function linescoreLive(data: any, homeTeamId?: number): LiveState | null 
     batting: [livePlayer(offense.batter), livePlayer(offense.onDeck), livePlayer(offense.inHole)],
     dueUp: [livePlayer(defense.batter), livePlayer(defense.onDeck), livePlayer(defense.inHole)],
   };
+}
+
+/**
+ * What `/game/{gamePk}/playByPlay` needs to send for `nextLastPlay`: the event, batter, where the
+ * ball went and who scored, for every at-bat. ~80 KB for a whole game (~4 KB gzipped) where the
+ * unfiltered play-by-play is ~0.7 MB.
+ */
+export const LAST_PLAY_FIELDS =
+  'allPlays,currentPlay,result,event,about,isComplete,atBatIndex,matchup,batter,id,fullName,playEvents,hitData,location,runners,movement,end,details,playIndex';
+
+/** The at-bat a live state is at, as `LiveState.playsAsOf` keeps it. */
+export function playsKey(live: LiveState): string {
+  return `${live.inning}|${live.inningState}|${live.batting[0]?.id ?? ''}`;
+}
+
+const FIELDERS: Record<string, string> = { 1: 'P', 2: 'C', 3: '1B', 4: '2B', 5: '3B', 6: 'SS', 7: 'LF', 8: 'CF', 9: 'RF' };
+// MLB's event names that don't read well lowercased. The rest are lowercased word by word,
+// keeping words like "DP" and "2B": "Grounded Into DP" is "grounded into DP".
+const PLAY_WORDS: Record<string, string> = {
+  'Home Run': 'homer',
+  'Intent Walk': 'intentional walk',
+  'Field Error': 'reached on error',
+  'Fielders Choice': "fielder's choice",
+  'Fielders Choice Out': "fielder's choice out",
+  'Catcher Interference': "catcher's interference",
+};
+
+// deno-lint-ignore no-explicit-any
+function readPlay(play: any): LastPlay | null {
+  const batterId = play?.matchup?.batter?.id;
+  const event: string | undefined = play?.result?.event;
+  if (typeof play?.about?.atBatIndex !== 'number' || !batterId || !event) return null;
+  const fullName: string = play.matchup.batter.fullName ?? '';
+  // deno-lint-ignore no-explicit-any
+  const events: any[] = play.playEvents ?? [];
+  const location = [...events].reverse().find((e) => e?.hitData?.location)?.hitData.location;
+  const words = PLAY_WORDS[event] ?? event.split(' ').map((w) => (/[A-Z]{2}|\d/.test(w) ? w : w.toLowerCase())).join(' ');
+  return {
+    atBat: play.about.atBatIndex,
+    batterId,
+    batter: fullName.split(' ').slice(1).join(' ') || fullName,
+    play: FIELDERS[location] ? `${words} to ${FIELDERS[location]}` : words,
+    // deno-lint-ignore no-explicit-any
+    runs: (play.runners ?? []).filter((r: any) => r?.movement?.end === 'score' && r?.details?.playIndex === events.length - 1).length,
+  };
+}
+
+/**
+ * A live game's last play, from its play-by-play, read when the at-bat in `live` (from the line
+ * score) isn't the one `before` was read for. MLB's play-by-play can lag its line score by a few
+ * seconds, so it only counts once it has caught up: it has a newer finished at-bat than `before`,
+ * or its at-bat in progress is the line score's batter. Otherwise `before` stays as it was, and
+ * the next poll reads the play-by-play again.
+ */
+export function nextLastPlay(
+  live: LiveState,
+  before: Pick<LiveState, 'lastPlay' | 'playsAsOf'> | null,
+  // deno-lint-ignore no-explicit-any
+  data: any,
+): Pick<LiveState, 'lastPlay' | 'playsAsOf'> {
+  const kept = { lastPlay: before?.lastPlay ?? null, playsAsOf: before?.playsAsOf };
+  // deno-lint-ignore no-explicit-any
+  const plays: any[] = data?.allPlays ?? [];
+  const last = readPlay([...plays].reverse().find((p) => p?.about?.isComplete));
+  const current = data?.currentPlay;
+  const newer = !!last && last.atBat > (before?.lastPlay?.atBat ?? -1);
+  const atBat = current?.about?.isComplete === false && current?.matchup?.batter?.id === live.batting[0]?.id;
+  if (!newer && !atBat) return kept;
+  return { lastPlay: newer ? last : kept.lastPlay, playsAsOf: playsKey(live) };
 }
 
 /** A hit's play, as mlb_hits keeps it. */

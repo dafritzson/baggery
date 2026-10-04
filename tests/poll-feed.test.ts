@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boxscoreBatting, boxscoreSubs, clipsForHits, highlightClips, linescoreLive, linescoreRuns, linescoreTable, playHits, playLines, savantHasVideo, scheduleGames, scheduleLineups } from '../supabase/functions/poll-games/feed.ts';
+import { boxscoreBatting, boxscoreSubs, clipsForHits, highlightClips, linescoreLive, linescoreRuns, linescoreTable, nextLastPlay, playHits, playLines, playsKey, savantHasVideo, scheduleGames, scheduleLineups } from '../supabase/functions/poll-games/feed.ts';
 
 const team = (id: number, score?: number) => ({ team: { id }, score });
 
@@ -394,5 +394,66 @@ describe('playLines', () => {
   it('skips plays that are not plate appearances, and the one still in progress', () => {
     expect(of(4, 6)).toBeUndefined();
     expect(of(5, 7)).toBeUndefined();
+  });
+});
+
+describe('last play', () => {
+  const live = linescoreLive({
+    currentInning: 6,
+    inningState: 'Top',
+    offense: { batter: { id: 3, fullName: 'Ben Rice' } },
+  })!;
+  const play = (atBat: number, batter: [number, string], event: string, more: object = {}) => ({
+    about: { atBatIndex: atBat, isComplete: true },
+    matchup: { batter: { id: batter[0], fullName: batter[1] } },
+    result: { event },
+    playEvents: [{}],
+    ...more,
+  });
+  const judge: [number, string] = [1, 'Aaron Judge'];
+  const flyout = play(10, judge, 'Flyout', { playEvents: [{}, { hitData: { location: '8' } }] });
+  const inProgress = { about: { atBatIndex: 11, isComplete: false }, matchup: { batter: { id: 3 } } };
+
+  it('reads the last finished at-bat, with where the ball went', () => {
+    expect(nextLastPlay(live, null, { allPlays: [flyout, inProgress], currentPlay: inProgress })).toEqual({
+      lastPlay: { atBat: 10, batterId: 1, batter: 'Judge', play: 'flyout to CF', runs: 0 },
+      playsAsOf: playsKey(live),
+    });
+  });
+
+  it('words events the way they read best', () => {
+    const word = (event: string, more = {}) => nextLastPlay(live, null, { allPlays: [play(4, judge, event, more)] }).lastPlay?.play;
+    expect(word('Strikeout')).toBe('strikeout');
+    expect(word('Home Run', { playEvents: [{ hitData: { location: '9' } }] })).toBe('homer to RF');
+    expect(word('Grounded Into DP', { playEvents: [{ hitData: { location: '6' } }] })).toBe('grounded into DP to SS');
+    expect(word('Intent Walk')).toBe('intentional walk');
+    expect(word('Caught Stealing 2B')).toBe('caught stealing 2B');
+    const vlad = nextLastPlay(live, null, { allPlays: [play(4, [2, 'Vladimir Guerrero Jr.'], 'Walk')] }).lastPlay;
+    expect(vlad?.batter).toBe('Guerrero Jr.');
+  });
+
+  it('counts only the runs that scored on the play itself', () => {
+    const scored = (playIndex: number) => ({ movement: { end: 'score' }, details: { playIndex } });
+    const single = play(7, judge, 'Single', {
+      playEvents: [{}, {}, { hitData: { location: '7' } }],
+      // One scored on a wild pitch earlier in the at-bat, two on the single, one was thrown out.
+      runners: [scored(1), scored(2), scored(2), { movement: { end: null }, details: { playIndex: 2 } }],
+    });
+    expect(nextLastPlay(live, null, { allPlays: [single] }).lastPlay).toMatchObject({ play: 'single to LF', runs: 2 });
+  });
+
+  it('waits for the play-by-play to catch up with the line score', () => {
+    const before = { lastPlay: nextLastPlay(live, null, { allPlays: [flyout] }).lastPlay, playsAsOf: '6|Top|1' };
+    // Still on the flyout, and its at-bat in progress is Judge's: it lags the line score.
+    const behind = { allPlays: [flyout], currentPlay: { about: { atBatIndex: 10, isComplete: true }, matchup: { batter: { id: 1 } } } };
+    expect(nextLastPlay(live, before, behind)).toEqual(before);
+    // Rice is up there too now (a pinch hitter, or the first at-bat of a half): up to date.
+    expect(nextLastPlay(live, before, { allPlays: [flyout, inProgress], currentPlay: inProgress })).toEqual({
+      lastPlay: before.lastPlay,
+      playsAsOf: playsKey(live),
+    });
+    // A newer finished at-bat replaces the play.
+    const walk = play(11, [3, 'Ben Rice'], 'Walk');
+    expect(nextLastPlay(live, before, { allPlays: [flyout, walk] }).lastPlay).toMatchObject({ atBat: 11, batter: 'Rice', play: 'walk' });
   });
 });

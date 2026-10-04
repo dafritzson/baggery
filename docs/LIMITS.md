@@ -201,6 +201,18 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   right after a poll on a busy day. One broadcast per poll keeps it to about one message per open
   app every 10 seconds. The draft room still uses Postgres Changes on low-traffic tables
   (`drafts`, `draft_actions`, …).
+- **Last play.** Each live game's card shows its last finished at-bat ("Judge flyout to CF · 1
+  run"). The box score and line score `poll-games` reads don't have it, so it reads the game's
+  play-by-play too, filtered with `fields=` to the event, batter, fielder and runners (~80 KB for
+  a whole game, ~4 KB gzipped, instead of ~0.7 MB), and only when the line score has moved on to
+  another inning, half or batter. MLB's play-by-play can lag its line score by a few seconds, so
+  the poller keeps reading it each poll until it has caught up. That's about one read per plate
+  appearance, ~80–100 a game, where every poll would be ~1,000: a few thousand more MLB requests
+  per project in a postseason month. Downloads into the function, not egress, and no new Edge
+  Function calls. It also reads the game's stored `live` (one small row) each poll to carry the
+  play over. The play rides in `mlb_games.live` (~100 bytes), which already changes and is
+  broadcast when the batter changes, so it adds about no broadcasts, just ~100 bytes to live
+  games' broadcast rows: under ~50 MB a month at 15 open apps.
 - **Box scores.** Tapping a game on the Games tab opens its box score, loaded then in four small
   requests: its batting lines with names (~20–26 rows), its line score, its posted lineups and
   announced starters, ~3–5 KB in all. A finished game's is kept for the session. A live game's
