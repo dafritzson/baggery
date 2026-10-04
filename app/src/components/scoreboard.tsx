@@ -23,6 +23,7 @@ import { TiebreakSheet } from '@/components/tiebreak-sheet';
 import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
+import { outNameStyle } from '@/lib/out-name';
 import { type Scores, coreSpells } from '@/lib/scores';
 import type { SeasonData } from '@/lib/season';
 import { ownerLine, teamName } from '@/lib/teams';
@@ -331,6 +332,7 @@ export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; sco
 
 function SeriesTable({ data, block, games }: { data: SeasonData; block: SeriesBlock; games: Scores['games'] }) {
   const compact = useLayout() === 'compact';
+  const theme = useTheme();
   // Hitters whose MLB team is out and has no games in this series: they'll need replacing.
   const inSeries = new Set(games.filter((g) => g.gameType === block.gameType).flatMap((g) => [g.homeTeamId, g.awayTeamId]));
   const gone = (mlbTeamId: number | undefined) =>
@@ -346,8 +348,13 @@ function SeriesTable({ data, block, games }: { data: SeasonData; block: SeriesBl
         key: String(p.playerId),
         label: (
           <>
-            <PlayerName playerId={p.playerId} type="smallBold" numberOfLines={1} style={out && styles.outName}>{name}</PlayerName>
-            {mlb && <ThemedText type="small" themeColor="textSecondary">{out ? `${mlb} · Out` : mlb}</ThemedText>}
+            <PlayerName playerId={p.playerId} type="smallBold" numberOfLines={1} style={out && outNameStyle(theme)}>{name}</PlayerName>
+            {mlb && (
+              <ThemedText type="small" themeColor="textSecondary">
+                {mlb}
+                {out && <ThemedText type="smallBold" themeColor="danger"> · Out</ThemedText>}
+              </ThemedText>
+            )}
           </>
         ),
         cells: p.games.map((v, i) => cell(v, block.columns[i].started)),
@@ -382,8 +389,6 @@ function SeriesTable({ data, block, games }: { data: SeasonData; block: SeriesBl
 }
 
 const styles = StyleSheet.create({
-  // A hitter whose MLB team is eliminated: struck through and faded until he's replaced.
-  outName: { textDecorationLine: 'line-through', opacity: 0.5 },
   // Wide enough for "▼9"; a rare "▼12" just grows it. Sits right after the name.
   moveSlot: { minWidth: 16, marginLeft: 4, alignItems: 'flex-end' },
   tieSlot: { width: 16, alignItems: 'center' },
