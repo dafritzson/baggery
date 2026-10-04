@@ -291,7 +291,7 @@ describe('almanacToJson', () => {
       players: new Map([[1, 'One'], [4, 'Four']]),
       scouting: [],
       badges: new Map([['a', [{ emoji: '🎯', name: 'Sharp', reason: 'Why' }]]]),
-      bets: [{ managerKey: 'a', year: 2021, playerId: 1, pick: 1, xBags: 9.5, bags: 8, diff: -1.5, live: false }],
+      bets: [{ managerKey: 'a', year: 2021, playerId: 1, pick: 1, bags: 8, spot: 8, board: 9.5, diff: -1.5, alternatives: [4], live: false }],
     };
     const back = almanacFromJson(JSON.parse(JSON.stringify(almanacToJson(data))));
     expect(back).toEqual(data);

@@ -159,7 +159,7 @@ function League({ data }: { data: AlmanacData }) {
               )}
               {bust && (
                 <MomentCard emoji="🪦" title="Biggest bust" color={managerColor(data, bust.managerKey)} headline={`${bust.bags} ${bust.bags === 1 ? 'bag' : 'bags'}`}
-                  detail={`${player(bust.playerId)}, ${bust.year} pick ${bust.pick} for ${data.managers.get(bust.managerKey)}: ${bust.xBags.toFixed(1)} expected`} />
+                  detail={`${player(bust.playerId)}, ${bust.year} pick ${bust.pick} for ${data.managers.get(bust.managerKey)}: ${Math.round(-bust.diff)} bags behind the board`} />
               )}
             </>
           );
@@ -219,15 +219,16 @@ function League({ data }: { data: AlmanacData }) {
             />
           }>
           <ThemedText type="small" themeColor="textSecondary">
-            {betsBy === 'busts' ? 'Draft 1 picks that fell furthest short of' : 'Draft 1 picks that beat'} their xBags at the draft: the
-            bags the draft room expected from his hitting and how far his team looked likely to go. Bags count every postseason game he
-            played, whoever had him by then. A pick from {a.liveYear ?? 'this year'} counts once his team is out.
+            {betsBy === 'busts' ? 'Draft 1 picks furthest behind' : 'Draft 1 picks furthest ahead of'} the board they were picked from: what
+            his roster spot produced (his postseason bags, plus a replacement&apos;s after his team went out) against the 3 best hitters
+            still undrafted at that pick, by xBags and by TB. A pick from {a.liveYear ?? 'this year'} counts once he and those hitters
+            are out.
           </ThemedText>
           <Leaderboard
             rows={(betsBy === 'busts' ? busts : steals).slice(0, 20).map((b, i) => ({
               key: `${i}`,
               title: player(b.playerId),
-              tags: [`${b.year}`, `Pick ${b.pick}`, `${b.xBags.toFixed(1)} xBags, ${b.bags} ${b.bags === 1 ? 'bag' : 'bags'}`, ...live(b.year)],
+              tags: [`${b.year}`, `Pick ${b.pick}`, `Spot ${Math.round(b.spot)}, board ${Math.round(b.board)}`, ...live(b.year)],
               manager: who(b.managerKey),
               label: `${b.diff > 0 ? '+' : '−'}${Math.abs(b.diff).toFixed(1)}`,
             }))}
