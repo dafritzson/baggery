@@ -186,7 +186,7 @@ export function WhenQueueRunsOut() {
 }
 
 /** Whether a rostered hitter leaves an empty spot: his MLB team is out, or he's off its postseason roster. */
-function isOut(data: SeasonData, playerId: number): boolean {
+export function isOut(data: SeasonData, playerId: number): boolean {
   const pool = data.poolByPlayer.get(playerId);
   return !pool || !pool.on_postseason_roster || !!data.mlbTeams.get(pool.mlb_team_id)?.eliminated;
 }

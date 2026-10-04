@@ -9,7 +9,7 @@ import { type DraftConfig, ROSTER_SIZE, type Turn, draftTurns, nextTurn } from '
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { Columns } from '@/components/columns';
-import { QueueList, queueTarget, useDraftQueue } from '@/components/draft-queue';
+import { QueueList, isOut, queueTarget, useDraftQueue } from '@/components/draft-queue';
 import { injuryText } from '@/components/injury';
 import { Loader } from '@/components/loader';
 import { PlayerName } from '@/components/player-name';
@@ -669,7 +669,12 @@ function PickSheet({
   onConfirm: (dropPlayerId?: number) => Promise<string | null>;
 }) {
   const theme = useTheme();
-  const [drop, setDrop] = useState<number | undefined>();
+  // Hitters whose team is out (or who are off its postseason roster) leave empty spots: the pick
+  // fills one by default, like the queue. Choosing someone still playing swaps him out instead.
+  const empty = dropOptions.filter((id) => isOut(data, id));
+  const alive = dropOptions.filter((id) => !isOut(data, id));
+  const [chosen, setDrop] = useState<number | undefined>();
+  const drop = chosen ?? empty[0];
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const injury = playerId !== null ? injuryText(data.poolByPlayer.get(playerId)) : null;
@@ -699,8 +704,21 @@ function PickSheet({
       {forGhost && <ThemedText type="smallBold">For the 👻 Ghost team</ThemedText>}
       {needsDrop && (
         <View style={{ gap: Spacing.one }}>
-          <ThemedText type="smallBold">Drop which player?</ThemedText>
-          {dropOptions.map((id) => (
+          <ThemedText type="smallBold">{empty.length ? 'He fills' : 'Drop which player?'}</ThemedText>
+          {empty.length > 0 && (
+            <Pressable
+              onPress={() => setDrop(empty[0])}
+              style={[styles.dropRow, { borderColor: empty.includes(drop ?? -1) ? theme.accent : theme.border }]}>
+              <ThemedText type="small">
+                {empty.length === 1 ? 'An empty spot' : `One of your ${empty.length} empty spots`} (
+                {empty.map((id) => `${playerName(data, id)}: ${outReason(data, id)}`).join(', ')})
+              </ThemedText>
+            </Pressable>
+          )}
+          {empty.length > 0 && alive.length > 0 && (
+            <ThemedText type="smallBold" themeColor="textSecondary">Or swap out</ThemedText>
+          )}
+          {alive.map((id) => (
             <Pressable
               key={id}
               onPress={() => setDrop(id)}
@@ -715,6 +733,12 @@ function PickSheet({
       <Button label="Cancel" variant="secondary" onPress={close} />
     </Sheet>
   );
+}
+
+/** Why a rostered hitter left an empty spot. */
+function outReason(data: SeasonData, playerId: number): string {
+  const pool = data.poolByPlayer.get(playerId);
+  return pool && data.mlbTeams.get(pool.mlb_team_id)?.eliminated ? 'team out' : 'off the postseason roster';
 }
 
 interface CommissionerActions {
