@@ -643,7 +643,7 @@ function PickCard({
       {dropId != null &&
         (burned ? (
           <ThemedText type="smallBold" numberOfLines={1} style={[styles.pickTeam, { color: theme.burn }]}>
-            🔥 Burned {playerName(data, dropId)}
+            🔥 Burned <ThemedText type="smallBold" style={[{ color: theme.burn }, styles.burnedName]}>{playerName(data, dropId)}</ThemedText>
           </ThemedText>
         ) : (
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.pickTeam}>
@@ -1001,6 +1001,7 @@ const styles = StyleSheet.create({
   picksList: { maxHeight: 340, borderTopWidth: StyleSheet.hairlineWidth },
   picksFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 48, pointerEvents: 'none' },
   pickCard: { paddingVertical: Spacing.two, paddingHorizontal: Spacing.three },
+  burnedName: { textDecorationLine: 'line-through', ...({ textDecorationThickness: 2 } as object) },
   burnGlow: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
   pickCardTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   pickPlayer: { flex: 1, fontSize: 15, lineHeight: 19 },
