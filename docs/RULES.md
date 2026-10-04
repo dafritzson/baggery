@@ -128,7 +128,8 @@ The eliminated managers' team, so they keep following along. It's in the Standin
   eliminated, or who is off its postseason roster), top of the queue first; the manager can
   instead have him replace a player who's still playing. A queued player with no spot to fill is
   skipped. Once nobody in the queue can be taken, autodraft goes back to TB as
-  above. A queue is private: only its manager sees it. On a ghost turn it's the queue of the
+  above (in a redraft that means it yields, after filling any spots left by eliminated hitters;
+  the Queue tab says so). A queue is private: only its manager sees it. On a ghost turn it's the queue of the
   manager making it.
 
 ## Out of scope for now

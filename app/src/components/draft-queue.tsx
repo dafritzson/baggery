@@ -134,8 +134,8 @@ export function QueueList({
     <Card>
       <ThemedText type="small" themeColor="textSecondary">
         Only you can see your queue. When autodraft picks for you (your switch, or the commissioner’s autopick), it
-        takes the top player here who’s still available. If the queue runs out, it goes back to the most regular-season
-        TB.
+        takes the top player here who’s still available.
+        {!dropFrom && ' If the queue runs out, it goes back to the most regular-season TB.'}
       </ThemedText>
       {dropFrom && (
         <ThemedText type="small" themeColor={empty.length ? 'text' : 'textSecondary'}>
@@ -145,6 +145,7 @@ export function QueueList({
         </ThemedText>
       )}
       {autodraft}
+      {dropFrom && <WhenQueueRunsOut />}
       {queue.error && <ThemedText themeColor="danger">{queue.error}</ThemedText>}
       {shown.length === 0 ? (
         <ThemedText type="small" themeColor="textSecondary">
@@ -167,6 +168,20 @@ export function QueueList({
         </View>
       )}
     </Card>
+  );
+}
+
+/** What autodraft does in a redraft once the queue is spent. */
+export function WhenQueueRunsOut() {
+  const theme = useTheme();
+  return (
+    <View style={[styles.whenEmpty, { backgroundColor: theme.backgroundSelected }]}>
+      <ThemedText type="smallBold">When the queue runs out</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        Autodraft yields the rest of your picks, after filling any spots left by eliminated hitters. You can also yield
+        yourself when you’re on the clock.
+      </ThemedText>
+    </View>
   );
 }
 
@@ -245,6 +260,7 @@ function IconButton({ label, hint, disabled = false, onPress }: { label: string;
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingVertical: Spacing.two, borderBottomWidth: StyleSheet.hairlineWidth },
+  whenEmpty: { borderRadius: Radius.md, padding: Spacing.three, gap: 2 },
   rank: { width: 20, textAlign: 'right', fontVariant: ['tabular-nums'] },
   main: { flex: 1, minWidth: 0, gap: 2 },
   icon: { width: 32, height: 32, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },

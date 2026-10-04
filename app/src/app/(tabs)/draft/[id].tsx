@@ -119,7 +119,8 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
     ) : (
       <Button
         label={turn?.ghost ? 'Pass this ghost turn' : "I'm done: yield my remaining picks"}
-        variant="secondary"
+        variant="success"
+        pulse
         onPress={() => run({ action: 'yield' })}
       />
     ));

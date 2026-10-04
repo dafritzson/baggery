@@ -1,10 +1,10 @@
-import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-type Variant = 'primary' | 'secondary' | 'danger';
+type Variant = 'primary' | 'secondary' | 'danger' | 'success';
 
 export function Button({
   label,
@@ -13,6 +13,7 @@ export function Button({
   disabled = false,
   loading = false,
   compact = false,
+  pulse = false,
 }: {
   label: string;
   onPress: () => void;
@@ -20,9 +21,11 @@ export function Button({
   disabled?: boolean;
   loading?: boolean;
   compact?: boolean;
+  /** A ring that fades in and out (global.css), for the move you most likely want to make. */
+  pulse?: boolean;
 }) {
   const theme = useTheme();
-  const background = variant === 'primary' ? theme.accent : variant === 'danger' ? theme.danger : theme.backgroundSelected;
+  const background = variant === 'primary' ? theme.accent : variant === 'danger' ? theme.danger : variant === 'success' ? theme.success : theme.backgroundSelected;
   const color = variant === 'secondary' ? theme.text : theme.accentText;
   const inactive = disabled || loading;
   return (
@@ -47,6 +50,14 @@ export function Button({
           {label}
         </ThemedText>
       )}
+      {pulse && !inactive && (
+        <View
+          pointerEvents="none"
+          style={[styles.pulse, { borderColor: background }]}
+          // dataSet isn't in React Native's types; react-native-web turns it into data-* attributes.
+          {...({ dataSet: { buttonPulse: '' } } as object)}
+        />
+      )}
     </Pressable>
   );
 }
@@ -61,4 +72,5 @@ const styles = StyleSheet.create({
   },
   compact: { minHeight: 36, paddingHorizontal: Spacing.three, borderRadius: Radius.md },
   label: { fontWeight: 700 },
+  pulse: { position: 'absolute', top: -5, right: -5, bottom: -5, left: -5, borderWidth: 3, borderRadius: Radius.lg + 5 },
 });

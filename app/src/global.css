@@ -234,6 +234,25 @@
 }
 
 /*
+ * A Button with `pulse` (components/button.tsx): a ring in the button's color that fades in and
+ * out, like the at-bat ring. Only its opacity animates.
+ */
+[data-button-pulse] {
+  will-change: opacity;
+  animation: button-pulse 1.4s ease-in-out infinite;
+}
+@keyframes button-pulse {
+  50% {
+    opacity: 0.15;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-button-pulse] {
+    animation: none;
+  }
+}
+
+/*
  * Zooming between the Games tab's Day, Round and Postseason views (lib/zoom.web.ts), while
  * <html> has data-zoom. The page scales around the focused game, cut off at its own edges, and
  * that game morphs into its place in the new view. The controls above it and the phone tab bar
