@@ -164,9 +164,13 @@ Things to change when the iOS app (phase 4) gets built, because the web can only
   Keep the web version for the web. The selected tab's bubble slides with a CSS transition
   (`data-tab-bubble` in `app/src/global.css`), which native ignores, so it just jumps there:
   animate it with Reanimated, or use the native tab bar.
-- **Hidden tabs.** Tabs stay mounted once opened, and on the web the ones not on show are hidden
-  with CSS `content-visibility` (`TabScreen` in `section-nav.tsx`). Native needs nothing: the tab
-  navigator detaches inactive screens with react-native-screens.
+- **Hidden tabs.** Tabs stay mounted once opened, and on the web the ones not on show stay drawn
+  under the one that is (`TabScreen` in `section-nav.tsx`): hiding them made Safari lay them out
+  again on every switch. Native needs nothing: the tab navigator detaches inactive screens with
+  react-native-screens.
+- **Icons.** On the web, `SymbolView` is `components/symbol.web.tsx`: the Material Symbols the
+  app uses as inline SVG, not expo-symbols' 1 MB font, which left icons blank until it loaded.
+  iOS and Android use expo-symbols (`components/symbol.tsx`).
 - **Live game ring.** Live games on the Games tab get a spinning rainbow ring, which is CSS in
   `app/src/global.css` (`data-live-glow`). Native ignores it, so draw it there too, e.g. a
   rotating `expo-linear-gradient` behind the card or a Skia sweep gradient.

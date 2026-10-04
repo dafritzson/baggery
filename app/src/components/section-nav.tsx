@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, type Tabs, useIsFocused, usePathname } from 'expo-router';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
+import { SymbolView, type SymbolViewProps } from '@/components/symbol';
 import { type ComponentProps, type ReactNode, type RefObject, createContext, use, useEffect, useLayoutEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -171,10 +171,10 @@ export function TabBar(props: TabBarProps) {
 }
 
 /**
- * A tab's page. Once opened it stays mounted, hidden while another tab is on show, so going back
- * to it is immediate and finds it as it was left. It's hidden with content-visibility (global.css),
- * which skips drawing it but keeps its layout for when it's back; display: none would throw that
- * away, and the whole page would be laid out again on every switch.
+ * A tab's page. Once opened it stays mounted, under the tab on show, so going back to it is
+ * immediate and finds it as it was left. It isn't hidden, just covered: Safari lays out a hidden
+ * page again when it's shown, whichever way it was hidden (global.css). Marked while covered, so
+ * its animations pause.
  */
 export function TabScreen({ children }: { children: ReactNode }) {
   const focused = useIsFocused();

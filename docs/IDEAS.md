@@ -6,7 +6,10 @@ move it into the code (and `RULES.md` or `PLAN.md` if it changes them) and delet
 ## Faster first visits to tabs
 
 Tabs now stay mounted once opened (`app/src/components/section-nav.tsx`), so going back to a tab
-takes a frame or two. What's left is each tab's first visit per app open, and on iPhone that's most
+skips React. On an iPhone 17 Pro it still takes 65–100 ms from tap to drawn (2026-10-04): React
+~15 ms, then Safari putting a different page on screen, about 50 ms however the old one is hidden
+or covered (tried content-visibility, display, visibility, opacity, transforms, z-order, a layer
+per tab, containment). Fewer DOM nodes per tab is what's left to try there. What's left is each tab's first visit per app open, and on iPhone that's most
 launches: iOS closes a Home Screen app that's been in the background a while.
 `scripts/bench-tabs.mjs` times it (phone viewport, 4x CPU slowdown, the 2025 season, 80 ms taps):
 Research ~255 ms to its first frame, Games ~100, Draft ~90, Almanac ~35 (then its data), Standings

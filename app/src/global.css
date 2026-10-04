@@ -375,17 +375,17 @@
 }
 
 /*
- * Tabs (section-nav.tsx). A tab that isn't on show stays mounted but isn't drawn. Its layout is
- * kept, so going back to it only has to draw it (display: none would lay the whole page out again).
- * Browsers without content-visibility just don't show it.
+ * Tabs (section-nav.tsx). A tab that isn't on show stays mounted and drawn, under the one that is:
+ * the tab navigator stacks the open tab on top, and each tab's page is opaque. Hiding the others
+ * cost more than it saved: on iPhone, a tab coming back from content-visibility: hidden (or
+ * display: none, visibility, opacity or inert) is laid out and styled again, about 65 ms for
+ * Research or the Almanac. Their looping animations pause while they're covered.
  */
-[data-tab-hidden] {
-  content-visibility: hidden;
-}
-@supports not (content-visibility: hidden) {
-  [data-tab-hidden] {
-    visibility: hidden;
-  }
+[data-tab-hidden] [data-live-ring]::before,
+[data-tab-hidden] [data-at-bat-ring],
+[data-tab-hidden] [data-button-pulse],
+[data-tab-hidden] [data-burn-flicker] {
+  animation-play-state: paused;
 }
 
 /*
