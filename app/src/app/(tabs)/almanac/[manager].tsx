@@ -276,7 +276,8 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
       {(busts.length > 0 || steals.length > 0) && (
         <Card title="Busts and steals">
           <ThemedText type="small" themeColor="textSecondary">
-            {name}&apos;s Draft 1 picks against their xBags at the draft: the bags each scored that postseason, against what was expected.
+            {name}&apos;s Draft 1 picks against the board: what each roster spot produced (his bags, plus a replacement&apos;s after his
+            team went out) against the 3 best hitters still undrafted at that pick.
           </ThemedText>
           {[...steals, ...busts].map((b) => (
             <View key={`${b.year}-${b.playerId}`}>
@@ -284,7 +285,8 @@ function Career({ data, managerKey }: { data: AlmanacData; managerKey: string })
                 {b.diff > 0 ? '💎 ' : '🪦 '}{player(b.playerId)}
               </Line>
               <ThemedText type="small" themeColor="textSecondary">
-                {b.year} pick {b.pick}{b.live ? ' (live)' : ''}: {b.xBags.toFixed(1)} xBags, {b.bags} {b.bags === 1 ? 'bag' : 'bags'}
+                {b.year} pick {b.pick}{b.live ? ' (live)' : ''}: spot {Math.round(b.spot)}, board {Math.round(b.board)} (
+                {b.alternatives.slice(0, 3).map(player).join(', ')})
               </ThemedText>
             </View>
           ))}
