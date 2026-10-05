@@ -9,7 +9,8 @@ import { teamColors } from '@/lib/team-colors';
 /**
  * A club's abbreviation on a tile in its colors. `faded` is for the loser of a finished game, so
  * the winner stands out. A hairline ring in dark mode keeps the darkest clubs (navy, black) from
- * melting into the card.
+ * melting into the card. The small tile has a fixed width, wide enough for any three-letter
+ * abbreviation, so tiles stacked on a card line up.
  */
 export function TeamTile({
   mlbTeamId,
@@ -39,7 +40,7 @@ export function TeamTile({
 }
 
 const styles = StyleSheet.create({
-  small: { minWidth: 54, height: 28, paddingHorizontal: 10, borderRadius: Radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  small: { width: 60, height: 28, borderRadius: Radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   smallText: { fontSize: 15, lineHeight: 20, fontWeight: 800, letterSpacing: 0.5 },
   large: { width: 56, height: 56, borderRadius: Radius.lg, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   largeText: { fontSize: 18, lineHeight: 22, fontWeight: 800, letterSpacing: 0.5 },
