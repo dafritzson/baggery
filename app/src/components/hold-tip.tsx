@@ -39,14 +39,17 @@ export function useHoldTip() {
       else fallback?.();
     };
   };
-  return { hold, tip: tip && <Bubble text={tip.text} box={tip.box} onClose={() => setTip(null)} /> };
+  return { hold, tip: tip && <TipBubble text={tip.text} box={tip.box} onClose={() => setTip(null)} /> };
 }
 
 const MARGIN = Spacing.two;
 const GAP = Spacing.one + 2;
 
-/** The tip above what's held (below it near the top of the screen), kept on screen. */
-function Bubble({ text, box, onClose }: { text: string; box: DOMRect; onClose: () => void }) {
+/**
+ * The tip above `box` (below it near the top of the screen), kept on screen, until the next touch,
+ * click or scroll. Web only.
+ */
+export function TipBubble({ text, box, onClose }: { text: string; box: DOMRect; onClose: () => void }) {
   const theme = useTheme();
   const { top: safeTop } = useSafeAreaInsets();
   const ref = useRef<View>(null);
