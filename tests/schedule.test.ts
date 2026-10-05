@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { type ScheduleGame, ifNecessary, neededGames, notNeeded, postseasonSeries, seriesLine } from '../supabase/functions/_shared/core/schedule.ts';
+import { type ScheduleGame, ifNecessary, neededGames, notNeeded, postseasonSeries, recordBefore, seriesLine } from '../supabase/functions/_shared/core/schedule.ts';
 
 const NYY = 147;
 const BOS = 111;
@@ -103,5 +103,24 @@ describe('seriesLine', () => {
     const [done] = postseasonSeries(games([[3, 1], [0, 2], [1, 4], [0, 5]]));
     expect(seriesLine(done, NYY)).toBe('won 3–1');
     expect(seriesLine(done, TOR)).toBe('lost 1–3');
+  });
+});
+
+describe('recordBefore', () => {
+  it("counts only the series' earlier games, from each team's side", () => {
+    const games = [
+      game({ gameType: 'D', seriesGameNumber: 1, homeTeamId: TOR, awayTeamId: NYY, homeScore: 3, awayScore: 1 }),
+      game({ gameType: 'D', seriesGameNumber: 2, homeTeamId: TOR, awayTeamId: NYY, homeScore: 0, awayScore: 2 }),
+      game({ gameType: 'D', seriesGameNumber: 3, homeTeamId: NYY, awayTeamId: TOR, homeScore: 5, awayScore: 4 }),
+      game({ gameType: 'D', seriesGameNumber: 4, homeTeamId: NYY, awayTeamId: TOR, status: 'Preview' }),
+      // Another series' game doesn't count.
+      game({ gameType: 'D', seriesGameNumber: 1, homeTeamId: SEA, awayTeamId: BOS, homeScore: 1, awayScore: 0 }),
+    ];
+    const before4 = recordBefore(games, games[3]);
+    expect(before4.get(NYY)).toEqual([2, 1]);
+    expect(before4.get(TOR)).toEqual([1, 2]);
+    // Game 3's record leaves out game 3 itself.
+    expect(recordBefore(games, games[2]).get(NYY)).toEqual([1, 1]);
+    expect(recordBefore(games, games[0]).get(TOR)).toEqual([0, 0]);
   });
 });

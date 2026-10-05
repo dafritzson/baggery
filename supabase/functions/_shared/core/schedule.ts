@@ -104,3 +104,21 @@ export function seriesLine(series: Series, teamId: number): string {
   if (mine === 0 && theirs === 0) return score;
   return `${mine > theirs ? 'leads' : mine < theirs ? 'trails' : 'tied'} ${score}`;
 }
+
+/**
+ * Each team's series record going into a game, from its earlier games: [wins, losses], by team
+ * id. Game 1's is 0–0.
+ */
+export function recordBefore(games: ScheduleGame[], game: ScheduleGame): Map<number, [number, number]> {
+  const series = postseasonSeries(games).find((s) => s.key === seriesKey(game));
+  let [home, away] = [0, 0];
+  for (const g of series?.games.slice(0, game.seriesGameNumber - 1) ?? []) {
+    const w = g ? gameWinner(g) : null;
+    if (w === game.homeTeamId) home++;
+    else if (w === game.awayTeamId) away++;
+  }
+  return new Map<number, [number, number]>([
+    [game.homeTeamId, [home, away]],
+    [game.awayTeamId, [away, home]],
+  ]);
+}
