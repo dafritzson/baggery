@@ -1,6 +1,6 @@
 // Bag celebrations: which bags get the rain and popup (components/bag-celebration), and whether
 // this device wants them at all (Settings). Bags come from the live scores broadcast while the
-// app is on screen, or from a tapped bag alert's link (`/games?bag=`).
+// app is on screen, or from a tapped bag alert's link (`/games?bag=`, see lib/notification-taps).
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useGlobalSearchParams } from 'expo-router';
@@ -54,8 +54,8 @@ export function useCelebrationsEnabled(): boolean {
   );
 }
 
-// Bags already celebrated, so tapping the alert for one you saw live (the page reloads) doesn't
-// show it again. The last few dozen are plenty.
+// Bags already celebrated, so the live scores don't show one twice (say, after the page reloads).
+// A tapped alert always shows its bag, seen or not. The last few dozen are plenty.
 const SHOWN_KEY = 'baggery.celebrated';
 let shown: string[] = [];
 const shownLoaded = AsyncStorage.getItem(SHOWN_KEY)
@@ -64,6 +64,11 @@ const shownLoaded = AsyncStorage.getItem(SHOWN_KEY)
     if (Array.isArray(keys)) shown = keys.filter((k) => typeof k === 'string');
   })
   .catch(() => {});
+
+// Tapped bags shown lately: a tap can arrive twice, in the link the app opened with and again
+// from the service worker (lib/notification-taps), and is shown once.
+const TAP_REPEAT_MS = 30 * 1000;
+const tapped = new Map<string, number>();
 
 function markShown(key: string) {
   shown = [...shown.filter((k) => k !== key), key].slice(-50);
@@ -83,9 +88,15 @@ export function useBagCelebrations(): { current: Celebration | null; done: () =>
   const [queue, setQueue] = useState<Celebration[]>([]);
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
 
-  const show = useCallback((celebration: Celebration) => {
+  const show = useCallback((celebration: Celebration, tap = false) => {
     const key = bagKey(celebration.bag);
-    if (shown.includes(key)) return;
+    if (tap) {
+      const now = Date.now();
+      if (now - (tapped.get(key) ?? 0) < TAP_REPEAT_MS) return;
+      tapped.set(key, now);
+    } else if (shown.includes(key)) {
+      return;
+    }
     markShown(key);
     setQueue((q) => [...q, celebration]);
   }, []);
@@ -111,7 +122,7 @@ export function useBagCelebrations(): { current: Celebration | null; done: () =>
     return () => pending.forEach(clearTimeout);
   }, []);
 
-  // A tapped bag alert: its bag, once the scores have loaded for the popup's stats.
+  // A tapped bag alert: its bag, every time, once the scores have loaded for the popup's stats.
   const { bag: bagParam } = useGlobalSearchParams<{ bag?: string }>();
   useEffect(() => {
     if (!bagParam || !data || !scores) return;
@@ -119,8 +130,9 @@ export function useBagCelebrations(): { current: Celebration | null; done: () =>
     const bag = parseBagParam(bagParam);
     if (!bag || !on) return;
     const game = scores.games.find((g) => g.gamePk === bag.gamePk);
-    const teamId = (game && ownerAt(coreSpells(data), bag.playerId, game.start)) ?? null;
-    shownLoaded.then(() => show({ bag, teamId, yours: !!teamId && teamId === data.myTeam?.id }));
+    // Whoever had him when the game started, or now if the scores don't have the game yet.
+    const teamId = ownerAt(coreSpells(data), bag.playerId, game?.start ?? new Date().toISOString()) ?? null;
+    shownLoaded.then(() => show({ bag, teamId, yours: !!teamId && teamId === data.myTeam?.id }, true));
   }, [bagParam, data, scores, on, show]);
 
   const done = useCallback(() => setQueue((q) => q.slice(1)), []);
