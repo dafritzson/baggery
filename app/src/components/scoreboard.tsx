@@ -28,7 +28,7 @@ import { type Scores, coreSpells } from '@/lib/scores';
 import type { SeasonData } from '@/lib/season';
 import { ownerLine, teamName } from '@/lib/teams';
 
-/** Height of the round chips' row and the team panel's header, which sit side by side. */
+/** Height of the round toggle and the team panel's header, which sit side by side. */
 const CHIPS_ROW = 40;
 
 export const ROUNDS: { round: FantasyRound; label: string; series: string }[] = [
@@ -37,11 +37,11 @@ export const ROUNDS: { round: FantasyRound; label: string; series: string }[] = 
   { round: 3, label: 'Round 3', series: 'World Series' },
 ];
 
-/** Round picker chips. */
-export function RoundChips({ round, onChange }: { round: FantasyRound; onChange: (round: FantasyRound) => void }) {
+/** Round picker: a toggle across the full width, one segment per round, the picked one in the accent. */
+export function RoundToggle({ round, onChange }: { round: FantasyRound; onChange: (round: FantasyRound) => void }) {
   const theme = useTheme();
   return (
-    <View style={styles.chips} accessibilityRole="tablist">
+    <View style={[styles.rounds, { backgroundColor: theme.backgroundElement, boxShadow: theme.sunken }]} accessibilityRole="tablist">
       {ROUNDS.map((r) => {
         const active = r.round === round;
         return (
@@ -50,11 +50,10 @@ export function RoundChips({ round, onChange }: { round: FantasyRound; onChange:
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
             onPress={() => onChange(r.round)}
-            style={({ pressed }) => [
-              styles.chip,
-              { backgroundColor: active ? theme.accent : theme.backgroundElement, boxShadow: pressed ? theme.sunken : theme.raised },
-            ]}>
-            <ThemedText type="smallBold" style={{ color: active ? theme.accentText : theme.text }}>{r.label}</ThemedText>
+            style={[styles.roundItem, active && { backgroundColor: theme.accent, boxShadow: theme.raised }]}>
+            <ThemedText type="smallBold" numberOfLines={1} style={{ color: active ? theme.accentText : theme.textSecondary }}>
+              {r.label}
+            </ThemedText>
           </Pressable>
         );
       })}
@@ -318,7 +317,7 @@ export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; sco
           {totalsStrip}
         </View>
       ) : (
-        // As tall as the round chips' row beside it, so both columns' tables start level.
+        // As tall as the round toggle beside it, so both columns' tables start level.
         <View style={styles.teamHead}>
           <OwnerBadge teamId={team.id} owner={team.is_ghost ? '👻' : owner} photo={photo} mine={mine} size={36} />
           {label}
@@ -397,8 +396,9 @@ const styles = StyleSheet.create({
   moveSlot: { minWidth: 16, marginLeft: 4, alignItems: 'flex-end' },
   tieSlot: { width: 16, alignItems: 'center' },
   move: { fontSize: 11, lineHeight: 14, fontWeight: 700, fontVariant: ['tabular-nums'] },
-  chips: { flexDirection: 'row', gap: Spacing.one, flexWrap: 'wrap', minHeight: CHIPS_ROW, alignItems: 'center', alignContent: 'center' },
-  chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
+  // As tall as the team panel's header beside it on desktops, like the Standings / My team toggle.
+  rounds: { flexDirection: 'row', height: CHIPS_ROW, borderRadius: Radius.lg, padding: 3 },
+  roundItem: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.lg },
   // Section heads are one line of fixed height, so tables side by side start level.
   section: { gap: Spacing.three },
   sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: Spacing.two, height: 16 },

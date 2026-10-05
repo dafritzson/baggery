@@ -25,7 +25,7 @@ import type { FantasyRound } from '@core/types.ts';
 import { CloseRoundCard } from '@/components/close-round-card';
 import { Columns } from '@/components/columns';
 import { Loader } from '@/components/loader';
-import { RoundChips, StandingsTable, TeamScoreboard } from '@/components/scoreboard';
+import { RoundToggle, StandingsTable, TeamScoreboard } from '@/components/scoreboard';
 import { SeasonScrubber, rankedTeamIds, roundTeamIds } from '@/components/season-scrubber';
 import { useTabRetap } from '@/components/section-nav';
 import { Screen } from '@/components/screen';
@@ -178,7 +178,7 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
     const stops = stopsFor(timeline, stepZoom(timeline, z), at);
     go(stops.find((s) => sameStop(s, at)) ?? nearestStop(timeline, stops, stopPosition(timeline, at)));
   };
-  // A round chip goes to the end of that round (or the latest moment, for the one being played).
+  // A round in the toggle goes to the end of that round (or the latest moment, for the one being played).
   const pickRound = (r: FantasyRound) => {
     setPlaying(false);
     const last = days.findLastIndex((d) => d.round === r);
@@ -216,7 +216,7 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
 
   const standings = (
     <View style={[styles.stack, wide && styles.wideStack]}>
-      <RoundChips round={round} onChange={pickRound} />
+      <RoundToggle round={round} onChange={pickRound} />
       <StandingsTable
         data={data}
         scores={shown}
