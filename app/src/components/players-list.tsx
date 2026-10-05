@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { Platform, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import * as DropdownMenu from 'zeego/dropdown-menu';
@@ -7,6 +8,7 @@ import type { MatchupSeries } from '@core/matchups.ts';
 import type { TeamOdds } from '@core/odds.ts';
 import { expectedBags } from '@core/stats.ts';
 
+import { ColumnInfo } from '@/components/column-info';
 import { COLUMNS, type Column, type ColumnFilters, type ColumnKey, DEFAULT_COLUMNS, type PlayerRow, PlayerTable } from '@/components/player-table';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -31,7 +33,8 @@ export interface Board {
   alive: Set<number>;
   /**
    * Starts filtered to who can be drafted (unowned players on alive teams), with the Owner and
-   * Alive filters on: a draft's board, until the season is over. Research starts unfiltered.
+   * Alive filters on, and back on each time the screen comes back into view: a draft's board and
+   * Research, until the season is over.
    */
   draftFilters: boolean;
   /** Only players on their team's postseason roster. */
@@ -70,14 +73,14 @@ export function startFilters(board: Board): ColumnFilters {
 }
 
 /**
- * The board now: every postseason roster, owned players and eliminated teams included, unfiltered.
- * Once the season is over it's the whole player pool.
+ * The board now: every postseason roster, owned players and eliminated teams included, starting
+ * filtered to who can be drafted. Once the season is over it's the whole player pool, unfiltered.
  */
 export function currentBoard(data: SeasonData): Board {
   const owners = ownership(data.spells);
   const alive = new Set([...data.mlbTeams.values()].filter((t) => !t.eliminated).map((t) => t.id));
   if (data.season.status === 'complete') return { owners, alive, draftFilters: false, rosterOnly: false, injured: true };
-  return { owners, alive, draftFilters: false, rosterOnly: true, injured: injuredDraftable(data) };
+  return { owners, alive, draftFilters: true, rosterOnly: true, injured: injuredDraftable(data) };
 }
 
 /** Who can be drafted now, whatever the board shows: for the Draft button and the queue. */
@@ -112,7 +115,7 @@ export function useDraftBoard(data: SeasonData, draft: Draft): Board {
 
   return useMemo(() => {
     // Starts filtered to who can still be drafted, while there's a draft left.
-    if (draft.status !== 'complete') return { ...currentBoard(data), draftFilters: data.season.status !== 'complete' };
+    if (draft.status !== 'complete') return currentBoard(data);
     const locks = draft.locks_at ? Date.parse(draft.locks_at) : Infinity;
     return {
       owners: ownership(data.spells, locks),
@@ -242,6 +245,18 @@ export function PlayersList({
   const [teamFilter, setTeamFilter] = useState<number | null>(null);
   const shownBoard = useMemo(() => board ?? currentBoard(data), [board, data]);
   const [filters, setFilters] = useState<ColumnFilters>(() => startFilters(shownBoard));
+  // Coming back to the screen turns the Owner and Alive filters back on, keeping any others. Not
+  // when the board refreshes while in view, which would undo clearing them.
+  const boardRef = useRef(shownBoard);
+  useEffect(() => {
+    boardRef.current = shownBoard;
+  }, [shownBoard]);
+  useFocusEffect(
+    useCallback(() => {
+      const start = startFilters(boardRef.current);
+      if (Object.keys(start).length) setFilters((f) => ({ ...f, ...start }));
+    }, []),
+  );
   const totals = usePostseasonTotals(data.season.year, shownBoard.statsBefore);
   const { scores } = useScores();
   // Waits for the games, so a series under way isn't shown from 0-0.
@@ -363,7 +378,10 @@ function describeFilter(c: Column, range: Range): string {
   return range.min !== null ? `${c.label} ≥ ${format(range.min)}` : `${c.label} ≤ ${format(range.max!)}`;
 }
 
-/** A small icon in the table's header with a checklist of its columns; stays open while you tick. */
+/**
+ * A small icon in the table's header with a checklist of its columns; stays open while you tick.
+ * Each is just its name, with an info icon to tap for what it is.
+ */
 function ColumnsMenu({ offered, value, onChange }: {
   /** The columns it lists: the postseason ones once it has games, Draft 1's before. */
   offered: Column[];
@@ -412,7 +430,8 @@ function ColumnsMenu({ offered, value, onChange }: {
             value={value.includes(c.key) ? 'on' : 'off'}
             onValueChange={() => toggle(c.key)}
             shouldDismissMenuOnSelect={false}>
-            <DropdownMenu.ItemTitle>{`${c.label} · ${c.title}`}</DropdownMenu.ItemTitle>
+            <DropdownMenu.ItemTitle>{c.label}</DropdownMenu.ItemTitle>
+            <ColumnInfo text={c.title} label={c.label} />
             <DropdownMenu.ItemIndicator className="menu-check">✓</DropdownMenu.ItemIndicator>
           </DropdownMenu.CheckboxItem>
         ))}
