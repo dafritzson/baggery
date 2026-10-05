@@ -427,36 +427,48 @@ class ScrubGesture {
   }).panHandlers;
 }
 
+type BagVideoLinks = { playId: string; clip: string | null; savant: boolean; soon: boolean };
+
+/**
+ * Bags whose videos are settled (Savant's is up, or it's too late for more to come), kept for the
+ * session: the scrubber stops on the same bags again and again.
+ */
+const settledVideos = new Map<string, BagVideoLinks>();
+
 /**
  * A bag's videos, as links: MLB's clip once one is posted and Savant's, which comes the day after
- * the game. Loaded when playback stops on the bag (one hit, well under 1 KB), never while playing.
- * The row keeps its height while loading, so the card doesn't jump.
+ * the game. Loaded when playback stops on the bag (one hit, well under 1 KB), never while playing,
+ * and only once a session once they're settled. The row keeps its height while loading, so the
+ * card doesn't jump.
  */
 function BagVideos({ bag }: { bag: Bag }) {
   const theme = useTheme();
-  const [hit, setHit] = useState<{ playId: string; clip: string | null; savant: boolean; soon: boolean } | null>(null);
+  const [hit, setHit] = useState<BagVideoLinks | null>(null);
   useEffect(() => {
+    if (settledVideos.has(bag.playId)) return;
     let stale = false;
     supabase
       .from('mlb_hits')
       .select('clip_slug, savant_ready')
       .eq('play_id', bag.playId)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         if (stale) return;
-        setHit({
+        const links = {
           playId: bag.playId,
           clip: data?.clip_slug ?? null,
           savant: data?.savant_ready ?? false,
           // Savant posts a game's videos the next day; after that a missing one isn't coming.
           soon: Date.now() - new Date(bag.endedAt).getTime() < 36 * 3600_000,
-        });
+        };
+        if (!error && (links.savant || !links.soon)) settledVideos.set(bag.playId, links);
+        setHit(links);
       });
     return () => {
       stale = true;
     };
   }, [bag.playId, bag.endedAt]);
-  const loaded = hit?.playId === bag.playId ? hit : null;
+  const loaded = settledVideos.get(bag.playId) ?? (hit?.playId === bag.playId ? hit : null);
   const chip = (label: string, url: string) => (
     <Pressable
       accessibilityRole="link"
