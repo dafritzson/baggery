@@ -218,6 +218,13 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   play over. The play rides in `mlb_games.live` (~100 bytes), which already changes and is
   broadcast when the batter changes, so it adds about no broadcasts, just ~100 bytes to live
   games' broadcast rows: under ~50 MB a month at 15 open apps.
+- **Starters on game cards.** The Games tab's cards for games still to come show each team's
+  announced starter, read from `mlb_probables` in one request for every game not yet started
+  (two rows of ~60 bytes a game: ~4 KB at the start of the postseason, under 1 KB by the World
+  Series). It's read when the Games tab opens and again when that set of games changes (one
+  starts, or MLB schedules more), a few times a day. At ~15 people opening the tab ~10 times a
+  day, that's under 20 MB a month. The series records beside them come from the scores already
+  loaded. No new Edge Function calls, MLB requests, polling or realtime channels.
 - **Box scores.** Tapping a game on the Games tab opens its box score, loaded then in four small
   requests: its batting lines with names (~20–26 rows), its line score, its posted lineups and
   announced starters, ~3–5 KB in all. A finished game's is kept for the session. A live game's
