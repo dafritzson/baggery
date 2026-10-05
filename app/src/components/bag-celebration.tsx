@@ -18,7 +18,6 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { bagHitBags, bagKey, bagSummary, hitHeadline, ordinal, shakeStrength } from '@core/bag-celebration.ts';
 
 import { GAME_FONT } from '@/components/bag-game';
-import { noSelect } from '@/components/hold-tip';
 import { BagRain } from '@/components/bag-rain';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -40,6 +39,22 @@ const POPUP_DELAY_MS = 500;
 const GRASS = '#0E7A4B';
 /** The countdown runs even with reduce motion on: it's a timer, not decoration. */
 const always = { reduceMotion: ReduceMotion.Never };
+
+/**
+ * Web: iOS Safari starts selecting text (or lifts the headshot) about a second into a hold, even
+ * with user-select off in a style, and the selection cancels the hold. Stop it where it starts.
+ */
+function blockSelection(node: View | null) {
+  if (Platform.OS !== 'web' || !node) return;
+  const el = node as unknown as HTMLElement;
+  const stop = (e: Event) => e.preventDefault();
+  el.addEventListener('selectstart', stop);
+  el.addEventListener('contextmenu', stop);
+  return () => {
+    el.removeEventListener('selectstart', stop);
+    el.removeEventListener('contextmenu', stop);
+  };
+}
 
 /**
  * Bag celebrations over the whole app: bag emoji pour down, the screen shakes and a popup says
@@ -110,9 +125,11 @@ function CelebrationView({ celebration, onDone }: { celebration: Celebration; on
       </Animated.View>
       {rain && <BagRain bag={bag} />}
       <View style={styles.center} pointerEvents="box-none">
-        {/* Held to pause it, so a long press mustn't select its text or bring up the callout menu. */}
-        <Animated.View style={[styles.cardWrap, noSelect, cardStyle]}>
+        <Animated.View style={[styles.cardWrap, cardStyle]}>
           <Pressable
+            ref={blockSelection}
+            // Held to pause it, so a long press mustn't select its text or lift its image (global.css).
+            {...({ dataSet: { noSelect: '' } } as object)}
             onPress={() => {
               close();
               openPlayer(bag.playerId);
