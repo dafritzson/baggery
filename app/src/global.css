@@ -430,3 +430,19 @@ body[data-shake] {
   88% { transform: translate(calc(var(--shake-px) * 0.08), 0) rotate(0.05deg); }
   100% { transform: translate(0, 0) rotate(0); }
 }
+
+/*
+ * Things you hold, like the bag popup (data-no-select): no text selection, magnifier or image
+ * callout. Prefixed for iOS Safari, on every descendant and !important, so react-native-web's
+ * own styles (added after this sheet) can't turn selection back on for a Text or image.
+ */
+[data-no-select],
+[data-no-select] * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+[data-no-select] img {
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
