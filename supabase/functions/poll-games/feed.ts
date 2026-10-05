@@ -1,7 +1,7 @@
 // Turns MLB Stats API responses into rows for mlb_games and player_game_stats. Pure, so the
 // unit tests can run it on sample responses.
 
-import type { Linescore, LineupPlayer } from '../_shared/core/box-score.ts';
+import type { Linescore, LineupPlayer, PitcherStats } from '../_shared/core/box-score.ts';
 import type { LastPlay, LivePlayer, LiveState } from '../_shared/core/live.ts';
 
 export type GameType = 'F' | 'D' | 'L' | 'W';
@@ -25,6 +25,8 @@ export interface GameRow {
   away_score: number | null;
   series_game_number: number | null;
   games_in_series: number | null;
+  /** "Truist Park · Atlanta", for the Games tab's cards of games to come. */
+  venue: string | null;
 }
 
 export interface BattingRow {
@@ -80,11 +82,48 @@ export function scheduleGames(data: any, year: number, knownTeamIds: Set<number>
       away_score: away.score ?? null,
       series_game_number: g.seriesGameNumber ?? null,
       games_in_series: g.gamesInSeries ?? null,
+      venue: venueLabel(g.venue),
     };
     const seen = games.get(row.game_pk);
     if (!seen || seen.detailed_state === 'Postponed') games.set(row.game_pk, row);
   }
   return [...games.values()];
+}
+
+/**
+ * A ballpark and its city from the schedule's `hydrate=venue(location)`: "Truist Park · Atlanta",
+ * or the park alone if MLB leaves out the city or the name already has it.
+ */
+// deno-lint-ignore no-explicit-any
+export function venueLabel(venue: any): string | null {
+  const name: string | undefined = venue?.name;
+  if (!name) return null;
+  const city: string | undefined = venue.location?.city;
+  return city && !name.includes(city) ? `${name} · ${city}` : name;
+}
+
+/**
+ * His season line from `/people/{id}/stats?stats=season&group=pitching`: a traded pitcher has a
+ * line per team plus a combined one without a team, which is the one wanted.
+ */
+// deno-lint-ignore no-explicit-any
+function seasonLine(data: any): any | null {
+  // deno-lint-ignore no-explicit-any
+  const rows: any[] = data?.stats?.find((s: any) => s.type?.displayName === 'season')?.splits ?? [];
+  return (rows.length === 1 ? rows[0] : rows.find((r) => !r.team))?.stat ?? null;
+}
+
+/** A starter's numbers from his regular-season (gameType=R) and postseason (gameType=P) lines. */
+// deno-lint-ignore no-explicit-any
+export function pitcherStats(regular: any, postseason: any): PitcherStats {
+  const season = seasonLine(regular);
+  const post = seasonLine(postseason);
+  return {
+    era: season?.era ?? null,
+    post: post
+      ? { w: post.wins ?? 0, l: post.losses ?? 0, era: post.era ?? '-.--', ip: post.inningsPitched ?? '0.0', k: post.strikeOuts ?? 0 }
+      : null,
+  };
 }
 
 export interface ProbableRow {

@@ -4,6 +4,7 @@ import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { BAG_EMOJI, hitBags } from '@core/bag-celebration.ts';
 import { neededGames, postseasonSeries, recordBefore } from '@core/schedule.ts';
+import type { PitcherStats } from '@core/box-score.ts';
 import type { LastPlay } from '@core/live.ts';
 import { SERIES } from '@core/scoreboard.ts';
 import type { GameType } from '@core/types.ts';
@@ -28,7 +29,7 @@ import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { dayLabel, gameDay, useToday } from '@/lib/game-day';
 import { lineScore, ownerOf, seriesLabel, statusLine } from '@/lib/game-labels';
-import { type Probable, useProbables } from '@/lib/probables';
+import { type Previews, type Probable, usePreviews } from '@/lib/previews';
 import { type BattingLine, type GameInfo, type ScoreHit, type Scores, useScores } from '@/lib/scores';
 import { type SeasonData, useSeason } from '@/lib/season';
 import { ownerName, teamName } from '@/lib/teams';
@@ -75,8 +76,8 @@ export default function GamesScreen() {
   const [boxPk, setBoxPk] = useState<number | null>(null);
   // The MLB team whose popup is open.
   const [teamId, setTeamId] = useState<number | null>(null);
-  // Announced starters of the games still to come, for their cards.
-  const probables = useProbables(scores ? scores.games.filter((g) => g.status === 'Preview').map((g) => g.gamePk) : []);
+  // Ballparks and announced starters of the games still to come, for their cards.
+  const previews = usePreviews(scores ? scores.games.filter((g) => g.status === 'Preview').map((g) => g.gamePk) : []);
 
   if (loading || (data && !scores)) {
     return <Screen width="wide"><Loader /></Screen>;
@@ -159,7 +160,7 @@ export default function GamesScreen() {
                       <View key={g.gamePk} style={styles.row}>
                         {games.slice(row * 2, row * 2 + 2).map((game) => (
                           <View key={game.gamePk} style={styles.cell} {...zoomKey(`game-${game.gamePk}`)}>
-                            <GameCard data={data} scores={scores} probables={probables} game={game} onOpen={() => setBoxPk(game.gamePk)} onTeam={setTeamId} fill />
+                            <GameCard data={data} scores={scores} previews={previews} game={game} onOpen={() => setBoxPk(game.gamePk)} onTeam={setTeamId} fill />
                           </View>
                         ))}
                         {row * 2 + 1 >= games.length && <View style={styles.cell} />}
@@ -167,7 +168,7 @@ export default function GamesScreen() {
                     ))
                 : games.map((g) => (
                     <View key={g.gamePk} {...zoomKey(`game-${g.gamePk}`)}>
-                      <GameCard data={data} scores={scores} probables={probables} game={g} onOpen={() => setBoxPk(g.gamePk)} onTeam={setTeamId} />
+                      <GameCard data={data} scores={scores} previews={previews} game={g} onOpen={() => setBoxPk(g.gamePk)} onTeam={setTeamId} />
                     </View>
                   ))}
             </View>
@@ -421,8 +422,8 @@ interface CardProps {
   data: SeasonData;
   scores: Scores;
   game: GameInfo;
-  /** Announced starters, by "gamePk:teamId". */
-  probables: Map<string, Probable>;
+  /** Ballparks and announced starters of games to come. */
+  previews: Previews;
   /** Opens the game's box score. */
   onOpen: () => void;
   /** Opens an MLB team's popup, from its abbreviation. */
@@ -506,7 +507,7 @@ function LiveGlow({ live, fill, children }: { live: boolean; fill?: boolean; chi
 }
 
 /** A game that's on or still to come: who's up, the score, and the baggers so far. */
-function OpenCard({ data, scores, probables, game, fill, onTeam }: CardProps) {
+function OpenCard({ data, scores, previews, game, fill, onTeam }: CardProps) {
   const theme = useTheme();
   const compact = useLayout() === 'compact';
   const live = game.status === 'Live';
@@ -583,9 +584,14 @@ function OpenCard({ data, scores, probables, game, fill, onTeam }: CardProps) {
             </ThemedText>
           )}
         </View>
+        {game.status === 'Preview' && previews.venues.has(game.gamePk) && (
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.venue}>
+            {previews.venues.get(game.gamePk)}
+          </ThemedText>
+        )}
         {live && game.live?.lastPlay && <LastPlayLine play={game.live.lastPlay} whose={bagger(game.live.lastPlay.batterId)} />}
         {game.status === 'Preview' ? (
-          <Matchup game={game} sides={sides} games={scores.games} probables={probables} onTeam={onTeam} />
+          <Matchup game={game} sides={sides} games={scores.games} probables={previews.probables} onTeam={onTeam} />
         ) : (
           <View style={styles.teams}>
             <View style={styles.upCards}>
@@ -614,8 +620,9 @@ function OpenCard({ data, scores, probables, game, fill, onTeam }: CardProps) {
 }
 
 /**
- * A game still to come, a row per team: its announced starter ("Max Fried LHP", or "Starter TBD"),
- * its series record going in (from game 2 on), and its tile.
+ * A game still to come, a row per team: its announced starter and his hand ("Max Fried LHP", or
+ * "Starter TBD"), with his regular-season ERA and postseason line under it, then its series record
+ * going in (from game 2 on) and its tile.
  */
 function Matchup({
   game,
@@ -638,16 +645,17 @@ function Matchup({
         const wl = record?.get(t.teamId);
         return (
           <View key={t.which} style={styles.matchupRow}>
-            <ThemedText type="small" numberOfLines={1} style={styles.starter}>
+            <View style={styles.starter}>
               {starter ? (
-                <>
+                <ThemedText type="small" numberOfLines={1} style={styles.starterName}>
                   {starter.name}
-                  {starter.hand && <ThemedText type="small" themeColor="textSecondary">{` ${starter.hand}HP`}</ThemedText>}
-                </>
+                  {starter.hand && <ThemedText type="small" themeColor="textSecondary" style={styles.starterName}>{` ${starter.hand}HP`}</ThemedText>}
+                </ThemedText>
               ) : (
-                <ThemedText type="small" themeColor="textSecondary">Starter TBD</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary" style={styles.starterName}>Starter TBD</ThemedText>
               )}
-            </ThemedText>
+              {starter?.stats && <PitcherLine stats={starter.stats} />}
+            </View>
             {wl && (
               <ThemedText type="smallBold" themeColor="textSecondary" style={styles.record} accessibilityLabel={`${t.abbr} ${wl[0]} and ${wl[1]} in the series`}>
                 {`${wl[0]}–${wl[1]}`}
@@ -658,6 +666,22 @@ function Matchup({
         );
       })}
     </View>
+  );
+}
+
+/** "2.49 ERA · Post: 1–0, 0.00, 7.0 IP, 9 K", the ERA in bold; on a narrow card the end gives way (…). */
+function PitcherLine({ stats }: { stats: PitcherStats }) {
+  const post = stats.post ? `Post: ${stats.post.w}–${stats.post.l}, ${stats.post.era}, ${stats.post.ip} IP, ${stats.post.k} K` : 'Post: first start';
+  return (
+    <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.pitcherLine}>
+      {stats.era && (
+        <>
+          <ThemedText type="smallBold" style={styles.pitcherLine}>{stats.era}</ThemedText>
+          {' ERA · '}
+        </>
+      )}
+      {post}
+    </ThemedText>
   );
 }
 
@@ -782,9 +806,13 @@ const styles = StyleSheet.create({
   upName: { flexShrink: 1, minWidth: 0, fontSize: 11, lineHeight: 14 },
   upLine: { marginLeft: 'auto', paddingLeft: 4, flexShrink: 0, textAlign: 'right', fontSize: 10, lineHeight: 14, fontVariant: ['tabular-nums'] },
   // A game to come: starter, series record and tile on each team's row.
-  matchup: { gap: Spacing.half },
+  matchup: { gap: Spacing.two + 2 },
   matchupRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   starter: { flex: 1, minWidth: 0 },
+  starterName: { fontSize: 14, lineHeight: 18 },
+  pitcherLine: { fontSize: 12, lineHeight: 16, fontVariant: ['tabular-nums'] },
+  // Tucked up under the header.
+  venue: { fontSize: 12, lineHeight: 16, marginTop: -Spacing.one },
   record: { fontVariant: ['tabular-nums'] },
   scores: { marginLeft: 'auto', flexDirection: 'row', gap: Spacing.two },
   scoreColumn: { alignItems: 'flex-end', gap: Spacing.half },

@@ -109,3 +109,11 @@ export function extraBaseHits(lines: BoxLine[]): { label: '2B' | '3B' | 'HR'; te
     return [{ label, text }];
   });
 }
+
+/** An announced starter's numbers, for the Games tab's cards (mlb_probables.stats). */
+export interface PitcherStats {
+  /** Regular-season ERA, as MLB gives it ("2.49"); null if he hasn't pitched. */
+  era: string | null;
+  /** This postseason so far; null before he pitches in it. */
+  post: { w: number; l: number; era: string; ip: string; k: number } | null;
+}
