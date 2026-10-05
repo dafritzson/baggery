@@ -18,6 +18,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { bagHitBags, bagKey, bagSummary, hitHeadline, ordinal, shakeStrength } from '@core/bag-celebration.ts';
 
 import { GAME_FONT } from '@/components/bag-game';
+import { noSelect } from '@/components/hold-tip';
 import { BagRain } from '@/components/bag-rain';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -109,7 +110,8 @@ function CelebrationView({ celebration, onDone }: { celebration: Celebration; on
       </Animated.View>
       {rain && <BagRain bag={bag} />}
       <View style={styles.center} pointerEvents="box-none">
-        <Animated.View style={[styles.cardWrap, cardStyle]}>
+        {/* Held to pause it, so a long press mustn't select its text or bring up the callout menu. */}
+        <Animated.View style={[styles.cardWrap, noSelect, cardStyle]}>
           <Pressable
             onPress={() => {
               close();
