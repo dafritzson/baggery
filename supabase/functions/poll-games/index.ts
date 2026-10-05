@@ -2,9 +2,11 @@
 // player_game_stats, which the standings are scored from.
 //
 // POST {}                    from pg_cron (x-poller-secret header): polls the latest season's
-//                            games. The cron job calls every 10 seconds while there's something to
-//                            fetch (private.poll_due): live games every call, the schedule every
-//                            minute while games are on (10 otherwise), finished games every 10.
+//                            games. The cron job runs every 15 seconds while games are on (once a
+//                            minute on staging) and once a minute otherwise (private.poller), and
+//                            calls when there's something to fetch (private.poll_due): live games
+//                            every call, the schedule every minute while games are on (10
+//                            otherwise), finished games every 10.
 //                            Then queues the cut alerts of games just finished and the stat
 //                            correction alerts, and sends the alerts that are due (bag, sub, cut,
 //                            lineup and stat correction alerts: alerts.ts).
@@ -156,7 +158,7 @@ async function saveGame(gamePk: number, alerts: boolean): Promise<number> {
 
 /**
  * A game's hits and their videos (mlb_hits), and every play's batting lines (mlb_play_lines). Its
- * play-by-play when the box score has hits not yet matched to a play (at most every 20 seconds),
+ * play-by-play when the box score has hits not yet matched to a play (at most every 10 seconds),
  * and once more 10 minutes after it ends so the lines have the whole game; then its highlights
  * while hits are still without an official clip (every 2 minutes while live, every 10 after;
  * finished games stop being polled after 6 hours). `force` reads both regardless (reloading a
@@ -168,7 +170,7 @@ async function saveVideos(gamePk: number, force: boolean): Promise<number> {
       select
         ((select coalesce(sum(h), 0) from player_game_stats where game_pk = g.game_pk)
            > (select count(*) from mlb_hits where game_pk = g.game_pk)
-           and (r.plays_read_at is null or r.plays_read_at < now() - interval '20 seconds'))
+           and (r.plays_read_at is null or r.plays_read_at < now() - interval '10 seconds'))
         or (g.status = 'Final' and g.final_seen_at < now() - interval '10 minutes'
             and (r.plays_read_at is null or r.plays_read_at < g.final_seen_at + interval '10 minutes')) as plays,
         exists (select 1 from mlb_hits where game_pk = g.game_pk and clip_slug is null)
