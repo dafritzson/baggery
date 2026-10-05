@@ -1,11 +1,11 @@
 // Mirrors postseason games and box scores from the MLB Stats API into mlb_games and
 // player_game_stats, which the standings are scored from.
 //
-// POST {}                    from pg_cron (x-poller-secret header): polls the latest season's
-//                            games. The cron job runs every 15 seconds while games are on (once a
-//                            minute on staging) and once a minute otherwise (private.poller), and
-//                            calls when there's something to fetch (private.poll_due): live games
-//                            every call, the schedule every minute while games are on (10
+// POST { polls, every }      from pg_cron (x-poller-secret header): polls the latest season's
+//                            games, `polls` times `every` seconds apart (pollRepeatedly). The cron
+//                            job calls once a minute (every 15 s with more than two games live),
+//                            when there's something to fetch (private.poll_due): live games
+//                            every poll, the schedule every minute while games are on (10
 //                            otherwise), finished games every 10.
 //                            Then queues the cut alerts of games just finished and the stat
 //                            correction alerts, and sends the alerts that are due (bag, sub, cut,
@@ -508,9 +508,9 @@ async function syncSchedule(year: number, all: boolean): Promise<number> {
 }
 
 /** Holds a short lease so overlapping cron calls don't poll at the same time. */
-async function withLease<T>(run: () => Promise<T>): Promise<T | { skipped: true }> {
+async function withLease<T>(seconds: number, run: () => Promise<T>): Promise<T | { skipped: true }> {
   const [lease] = await sql`
-    update private.poller set running_until = now() + interval '55 seconds'
+    update private.poller set running_until = now() + ${seconds} * interval '1 second'
     where running_until is null or running_until < now()
     returning 1`;
   if (!lease) return { skipped: true };
@@ -521,8 +521,80 @@ async function withLease<T>(run: () => Promise<T>): Promise<T | { skipped: true 
   }
 }
 
+/**
+ * One poll of the latest season and everything that follows it: rounds that close themselves, and
+ * the alerts that are due.
+ */
+async function pollOnce(year: number) {
+  const result = await poll(year, false);
+  // Rounds whose series are all decided (and settled for stat corrections) close themselves.
+  // A failure here mustn't stop the scores.
+  let closedRounds: number[] = [];
+  try {
+    closedRounds = await sql.begin((tx) => autoCloseRounds(tx));
+  } catch (e) {
+    console.error('auto-close', e);
+  }
+  // Push notifications for the bags this poll (or an earlier one, after a spoiler delay) found,
+  // and the lineup changes, cut line crossings and stat corrections.
+  let bagAlerts = 0;
+  try {
+    bagAlerts = await sendBagAlerts();
+  } catch (e) {
+    console.error('bag alerts', e);
+  }
+  try {
+    await queueCutAlerts();
+  } catch (e) {
+    console.error('cut alerts', e);
+  }
+  try {
+    await queueCorrectionAlerts();
+  } catch (e) {
+    console.error('correction alerts', e);
+  }
+  let otherAlerts = 0;
+  try {
+    otherAlerts = await sendQueuedAlerts();
+  } catch (e) {
+    console.error('alerts', e);
+  }
+  return { ...result, closedRounds, bagAlerts, otherAlerts };
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * `polls` polls `every` seconds apart in this one call (each only if something is due then), so
+ * the cron job can call once a minute while games are on and still poll every 15 seconds: every
+ * call writes a few KB of Supabase logs (the gateway's line, the runtime's "booted" and "shutdown"),
+ * and log ingestion is metered. Four polls fit well inside the 2 s CPU limit with up to two live
+ * games (~180 ms each, 400 ms at most, October 2026); with more, the cron job calls every 15 s
+ * for one poll each (private.poll_games).
+ */
+async function pollRepeatedly(year: number, polls: number, every: number) {
+  const start = Date.now();
+  const results = [];
+  for (let i = 0; i < polls; i++) {
+    if (i > 0) {
+      await sleep(start + i * every * 1000 - Date.now());
+      const [{ due }] = await sql`select private.poll_due() as due`;
+      if (!due) continue;
+    }
+    results.push(await pollOnce(year));
+  }
+  return { polls: results.length, ...results.at(-1) };
+}
+
 serve(async (req) => {
-  const body = (await req.json().catch(() => ({}))) as { setup?: boolean; seasonId?: string; videos?: boolean; after?: number };
+  const body = (await req.json().catch(() => ({}))) as {
+    setup?: boolean;
+    seasonId?: string;
+    videos?: boolean;
+    after?: number;
+    polls?: number;
+    every?: number;
+  };
 
   if (body.setup) {
     // Only ever points the cron job at this function, so it needs no auth.
@@ -537,44 +609,10 @@ serve(async (req) => {
     if (secret !== cfg?.secret) throw new UserError('Not allowed.', 403);
     const [latest] = await sql`select max(year) as year from seasons`;
     if (!latest?.year) return json({ skipped: true });
-    return json(
-      await withLease(async () => {
-        const result = await poll(latest.year, false);
-        // Rounds whose series are all decided (and settled for stat corrections) close themselves.
-        // A failure here mustn't stop the scores.
-        let closedRounds: number[] = [];
-        try {
-          closedRounds = await sql.begin((tx) => autoCloseRounds(tx));
-        } catch (e) {
-          console.error('auto-close', e);
-        }
-        // Push notifications for the bags this poll (or an earlier one, after a spoiler delay) found,
-        // and the lineup changes, cut line crossings and stat corrections.
-        let bagAlerts = 0;
-        try {
-          bagAlerts = await sendBagAlerts();
-        } catch (e) {
-          console.error('bag alerts', e);
-        }
-        try {
-          await queueCutAlerts();
-        } catch (e) {
-          console.error('cut alerts', e);
-        }
-        try {
-          await queueCorrectionAlerts();
-        } catch (e) {
-          console.error('correction alerts', e);
-        }
-        let otherAlerts = 0;
-        try {
-          otherAlerts = await sendQueuedAlerts();
-        } catch (e) {
-          console.error('alerts', e);
-        }
-        return { ...result, closedRounds, bagAlerts, otherAlerts };
-      }),
-    );
+    const polls = Math.min(Math.max(body.polls ?? 1, 1), 4);
+    const every = Math.min(Math.max(body.every ?? 15, 5), 30);
+    // Held for the whole call, plus room for the last poll to finish.
+    return json(await withLease((polls - 1) * every + 30, () => pollRepeatedly(latest.year, polls, every)));
   }
 
   const userId = await requireUser(req);

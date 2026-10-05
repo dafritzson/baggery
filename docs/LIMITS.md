@@ -18,7 +18,7 @@ and both run the poller.
 | File storage | 1 GB | Profile photos, ~15 KB each (256 px JPEG): under 1 MB for the league | ✅ |
 | Egress | 5 GB / month | Low after the scores broadcast (see below). This is the one to watch | ⚠️ |
 | Cached egress (CDN) | 5 GB / month | Photos only, ~5 MB / month | ✅ |
-| Edge Function invocations | 500k / month | ~45k production, ~15k staging for a whole postseason (measured: ~345 calls per live hour per project at the old 10 s cadence) | ✅ |
+| Edge Function invocations | 500k / month | ~15k per project for a whole postseason (measured: ~345 calls per live hour per project at the old 10 s cadence, one poll a call) | ✅ |
 | Log ingestion | 1 GB / month (Supabase says enforcement isn't live yet) | ~30 MB a game day for both projects, ~0.9 GB in a month of games; was ~65 MB a day before the poll schedules below | ⚠️ |
 | Realtime concurrent connections | 200 | One per open app | ✅ |
 | Realtime messages per second | 100 | One broadcast per poll, per open app | ✅ |
@@ -34,16 +34,20 @@ Supabase billing and usage pages; the dashboard shows actual usage.
 - **Edge Function invocations.** Only calls that fetch something count. The pg_cron job runs a
   check inside the database (`private.poll_due()`), which isn't an invocation, and calls
   `poll-games` only when there's work:
-  - live games: every run, so ~240 calls per hour of live baseball on production (every 15 s)
-    and ~60 on staging (every minute). Overlapping games share each call;
+  - live games: every 15 s on production, 4 polls per call, so ~60 calls per hour of live
+    baseball (~240 with more than two games live at once), and every minute on staging (~60).
+    Overlapping games share each poll;
   - the schedule: every minute around game time, every 10 minutes otherwise;
   - finished games: every 10 minutes for 6 hours (official scoring changes).
 
-  The job runs on `private.poller.live_schedule` while a game is live or starts within 10 minutes,
-  or alerts are waiting, and once a minute otherwise (`idle_schedule`); `private.poll_games()`
-  switches the job between them. Production uses the default 15 s; staging is set by hand to
-  every minute (`update private.poller set live_schedule = '* * * * *'`), so a new staging project
-  needs that line.
+  The cron job runs once a minute. While a game is live or starts within 10 minutes, or alerts
+  are waiting, each call polls every `private.poller.live_every` seconds itself (4 polls at the
+  default 15 s, ~50 s a call), so there's one call a minute instead of one per poll: same
+  freshness, a quarter of the calls and their logs (see Logs). Each poll uses ~180 ms of CPU
+  (400 ms at most with two live games), so four fit in a call's 2 s; with more than two games live
+  at once, the job instead runs every 15 s with one poll a call. Staging is set by hand to
+  `live_every = 60` (one poll a minute), so a new staging project needs
+  `update private.poller set live_every = 60`.
   `player-stats` (the player popup) caches its results in memory, and `draft` runs only on draft
   actions; both are small next to the poller. `almanac` runs when the Almanac tab is first opened
   in an open app (the tab stays open after that), and when a manager's page opens more than 5
