@@ -35,6 +35,7 @@ import {
   linescoreRuns,
   linescoreTable,
   nextLastPlay,
+  pitcherStats,
   playHits,
   playLines,
   playsKey,
@@ -398,9 +399,38 @@ async function syncProbables(rows: ProbableRow[], gamePks: number[]) {
   await sql`
     insert into mlb_probables ${sql(rows, 'game_pk', 'mlb_team_id', 'pitcher_id', 'pitcher_name', 'hand')}
     on conflict (game_pk, mlb_team_id) do update set
-      pitcher_id = excluded.pitcher_id, pitcher_name = excluded.pitcher_name, hand = excluded.hand
+      pitcher_id = excluded.pitcher_id, pitcher_name = excluded.pitcher_name, hand = excluded.hand,
+      -- A different starter's numbers are read again.
+      stats = case when mlb_probables.pitcher_id = excluded.pitcher_id then mlb_probables.stats end,
+      stats_at = case when mlb_probables.pitcher_id = excluded.pitcher_id then mlb_probables.stats_at end
     where (mlb_probables.pitcher_id, mlb_probables.pitcher_name, mlb_probables.hand)
       is distinct from (excluded.pitcher_id, excluded.pitcher_name, excluded.hand)`;
+}
+
+/**
+ * Reads the numbers of the starters of games still to come (mlb_probables.stats) that don't have
+ * them yet, or last had them over 6 hours ago: a few at a time, two small MLB requests each.
+ */
+async function syncPitcherStats(year: number) {
+  const due = await sql`
+    select p.game_pk, p.mlb_team_id, p.pitcher_id from mlb_probables p
+    join mlb_games g using (game_pk)
+    where g.season_year = ${year} and g.status = 'Preview'
+      and (p.stats_at is null or p.stats_at < now() - interval '6 hours')
+    order by g.start_time
+    limit 6`;
+  for (const r of due) {
+    const path = (gameType: string) =>
+      `/people/${r.pitcher_id}/stats?stats=season&group=pitching&gameType=${gameType}&sportId=1&season=${year}`;
+    try {
+      const [regular, postseason] = await Promise.all([mlb(path('R')), mlb(path('P'))]);
+      await sql`
+        update mlb_probables set stats = ${sql.json(JSON.parse(JSON.stringify(pitcherStats(regular, postseason))))}, stats_at = now()
+        where game_pk = ${r.game_pk} and mlb_team_id = ${r.mlb_team_id} and pitcher_id = ${r.pitcher_id}`;
+    } catch (e) {
+      console.error('pitcher stats', r.pitcher_id, e);
+    }
+  }
 }
 
 /**
@@ -424,8 +454,8 @@ async function syncLineups(lineups: LineupRow[]) {
 async function syncSchedule(year: number, all: boolean): Promise<number> {
   const teams = await knownTeamIds(year);
   // The person part brings each probable pitcher's hand, for the draft table's platoons; the
-  // lineups are for lineup alerts.
-  const schedule = await mlb(`/schedule?sportId=1&season=${year}&gameType=F,D,L,W&hydrate=probablePitcher,person,lineups`);
+  // lineups are for lineup alerts; the venue's location brings its city.
+  const schedule = await mlb(`/schedule?sportId=1&season=${year}&gameType=F,D,L,W&hydrate=probablePitcher,person,lineups,venue(location)`);
   const games = scheduleGames(schedule, year, teams);
   if (games.length) {
     const settled = all ? new Date(Date.now() - 24 * 3600 * 1000).toISOString() : new Date().toISOString();
@@ -434,7 +464,7 @@ async function syncSchedule(year: number, all: boolean): Promise<number> {
       insert into mlb_games ${sql(
         rows,
         'game_pk', 'season_year', 'game_type', 'start_time', 'start_time_tbd', 'official_date', 'status', 'detailed_state', 'home_team_id', 'away_team_id',
-        'home_score', 'away_score', 'series_game_number', 'games_in_series', 'final_seen_at',
+        'home_score', 'away_score', 'series_game_number', 'games_in_series', 'venue', 'final_seen_at',
       )}
       on conflict (game_pk) do update set
         game_type = excluded.game_type, start_time = excluded.start_time, start_time_tbd = excluded.start_time_tbd,
@@ -446,20 +476,23 @@ async function syncSchedule(year: number, all: boolean): Promise<number> {
         away_score = case when excluded.status = 'Live' and mlb_games.status = 'Live'
           then mlb_games.away_score else excluded.away_score end,
         series_game_number = excluded.series_game_number, games_in_series = excluded.games_in_series,
+        venue = coalesce(excluded.venue, mlb_games.venue),
         final_seen_at = case when excluded.status = 'Final'
           then coalesce(mlb_games.final_seen_at, excluded.final_seen_at) end,
         updated_at = now()
       where (mlb_games.game_type, mlb_games.start_time, mlb_games.start_time_tbd, mlb_games.official_date,
              mlb_games.status, mlb_games.detailed_state, mlb_games.home_team_id, mlb_games.away_team_id,
-             mlb_games.series_game_number, mlb_games.games_in_series)
+             mlb_games.series_game_number, mlb_games.games_in_series, mlb_games.venue)
           is distinct from
             (excluded.game_type, excluded.start_time, excluded.start_time_tbd, excluded.official_date,
              excluded.status, excluded.detailed_state, excluded.home_team_id, excluded.away_team_id,
-             excluded.series_game_number, excluded.games_in_series)
+             excluded.series_game_number, excluded.games_in_series, coalesce(excluded.venue, mlb_games.venue))
          or (excluded.status <> 'Live'
              and (mlb_games.home_score, mlb_games.away_score) is distinct from (excluded.home_score, excluded.away_score))`;
   }
   await syncProbables(scheduleProbables(schedule, games), games.map((g) => g.game_pk));
+  // A failure here mustn't stop the scores.
+  await syncPitcherStats(year).catch((e) => console.error('pitcher stats', e));
   const lineups = scheduleLineups(schedule, games);
   await syncLineups(lineups);
   if (!all) {

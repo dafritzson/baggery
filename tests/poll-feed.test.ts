@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boxscoreBatting, boxscoreSubs, clipsForHits, highlightClips, linescoreLive, linescoreRuns, linescoreTable, nextLastPlay, playHits, playLines, playsKey, savantHasVideo, scheduleGames, scheduleLineups } from '../supabase/functions/poll-games/feed.ts';
+import { boxscoreBatting, boxscoreSubs, clipsForHits, highlightClips, linescoreLive, linescoreRuns, linescoreTable, nextLastPlay, playHits, playLines, pitcherStats, playsKey, savantHasVideo, scheduleGames, scheduleLineups, venueLabel } from '../supabase/functions/poll-games/feed.ts';
 
 const team = (id: number, score?: number) => ({ team: { id }, score });
 
@@ -38,7 +38,19 @@ describe('schedule feed', () => {
       away_score: 3,
       series_game_number: 1,
       games_in_series: 5,
+      venue: null,
     });
+  });
+
+  it('names the ballpark and its city', () => {
+    expect(venueLabel({ id: 4705, name: 'Truist Park', location: { city: 'Atlanta' } })).toBe('Truist Park · Atlanta');
+    // No city given, or the name already has it.
+    expect(venueLabel({ id: 22, name: 'Dodger Stadium' })).toBe('Dodger Stadium');
+    expect(venueLabel({ name: 'Oriole Park at Camden Yards', location: { city: 'Baltimore' } })).toBe('Oriole Park at Camden Yards · Baltimore');
+    expect(venueLabel({ name: 'Kansas City Stadium', location: { city: 'Kansas City' } })).toBe('Kansas City Stadium');
+    expect(venueLabel(undefined)).toBeNull();
+    const [row] = scheduleGames({ dates: [{ games: [game(1, { venue: { name: 'Truist Park', location: { city: 'Atlanta' } } })] }] }, 2025, known);
+    expect(row.venue).toBe('Truist Park · Atlanta');
   });
 
   it('flags games with no start time yet', () => {
@@ -455,5 +467,31 @@ describe('last play', () => {
     // A newer finished at-bat replaces the play.
     const walk = play(11, [3, 'Ben Rice'], 'Walk');
     expect(nextLastPlay(live, before, { allPlays: [flyout, walk] }).lastPlay).toMatchObject({ atBat: 11, batter: 'Rice', play: 'walk' });
+  });
+});
+
+describe('pitcherStats', () => {
+  const line = (splits: object[]) => ({ stats: [{ type: { displayName: 'season' }, group: { displayName: 'pitching' }, splits }] });
+  const stat = (era: string, extra: object = {}) => ({ era, wins: 1, losses: 0, inningsPitched: '7.0', strikeOuts: 9, ...extra });
+
+  it('takes his regular-season ERA and his postseason line', () => {
+    expect(pitcherStats(line([{ team: { id: 119 }, stat: stat('2.49') }]), line([{ team: { id: 119 }, stat: stat('0.00') }]))).toEqual({
+      era: '2.49',
+      post: { w: 1, l: 0, era: '0.00', ip: '7.0', k: 9 },
+    });
+  });
+
+  it("uses a traded pitcher's combined line", () => {
+    const regular = line([
+      { team: { id: 111 }, stat: stat('4.10') },
+      { team: { id: 119 }, stat: stat('2.00') },
+      { stat: stat('3.05') },
+    ]);
+    expect(pitcherStats(regular, line([])).era).toBe('3.05');
+  });
+
+  it('has no postseason line before he pitches in it', () => {
+    expect(pitcherStats(line([{ stat: stat('2.86') }]), line([]))).toEqual({ era: '2.86', post: null });
+    expect(pitcherStats({ stats: [] }, {})).toEqual({ era: null, post: null });
   });
 });
