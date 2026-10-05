@@ -2,6 +2,7 @@ import { router, useGlobalSearchParams } from 'expo-router';
 import { createContext, createElement, type ReactNode, use, useCallback, useEffect, useRef, useState } from 'react';
 
 import type { DraftAction, DraftConfig, GhostTurn } from '@core/draft.ts';
+import type { Row } from '@core/score-feed.ts';
 
 import { useAuth } from '@/lib/auth';
 import { photoUrl } from '@/lib/avatars';
@@ -148,6 +149,20 @@ const LIVE_TABLES = [
   'season_player_pool',
 ] as const;
 
+/** What the season_load function returns: each list's rows as the tables' queries gave them. */
+interface SeasonLoad {
+  seasons: Row[];
+  season: SeasonData['season'] | null;
+  teams: Row[];
+  drafts: Row[];
+  spells: Row[];
+  pool: Row[];
+  mlb_teams: Row[];
+  members: { user_id: string; role: string }[];
+  profiles: { id: string; display_name: string; avatar_path: string | null; google_avatar_url: string | null }[];
+  actions: Row[];
+}
+
 /**
  * The season for `year` (the latest when unset or missing), plus every year that has a season.
  * Null when a query failed, so a network blip isn't mistaken for "no season".
@@ -156,44 +171,17 @@ async function fetchSeason(
   userId: string | undefined,
   year: number | undefined,
 ): Promise<{ data: SeasonData | null; years: number[] } | null> {
-  const { data: seasons, error } = await supabase
-    .from('seasons')
-    .select('id, year, status, league_id, survivors_after_round, imported_at, manual_rounds')
-    .order('year', { ascending: false });
-  if (error) return null;
+  // One request (the season_load function) for what used to be nine: the same rows, with fewer
+  // requests' worth of Supabase logs and round trips.
+  const { data: loaded, error } = await supabase.rpc('season_load', { p_year: year ?? null });
+  if (error || !loaded) return null;
+  const { seasons, season, teams, drafts, spells, pool, mlb_teams, members, profiles, actions } = loaded as SeasonLoad;
   const years = seasons.map((s) => s.year as number);
-  const season = (year && seasons.find((s) => s.year === year)) || seasons[0];
   if (!season) return { data: null, years };
-
-  const [teams, drafts, spells, pool, seasonTeams, members, profiles] = await Promise.all([
-    supabase.from('fantasy_teams').select('*').eq('season_id', season.id).order('slot'),
-    supabase.from('drafts').select('*').eq('season_id', season.id).order('number'),
-    supabase.from('roster_spells').select('*').eq('season_id', season.id),
-    supabase
-      .from('season_player_pool')
-      .select(
-        'mlb_player_id, mlb_team_id, regular_season_tb, plate_appearances, at_bats, games_played, hits, doubles, triples, home_runs, runs, rbi, walks, strikeouts, hit_by_pitch, sac_flies, slg, ops_plus, on_postseason_roster, injured_list, injury, injury_return, player:mlb_players(id, full_name, primary_position)',
-      )
-      .eq('season_id', season.id),
-    supabase
-      .from('season_mlb_teams')
-      .select('eliminated, wins, has_bye, seed, team:mlb_teams(id, name, abbreviation, league)')
-      .eq('season_id', season.id),
-    supabase.from('league_members').select('user_id, role').eq('league_id', season.league_id),
-    supabase.from('profiles').select('id, display_name, avatar_path, google_avatar_url'),
-  ]);
-  if ([teams, drafts, spells, pool, seasonTeams, members, profiles].some((r) => r.error)) return null;
-  const draftIds = (drafts.data ?? []).map((d) => d.id);
-  const { data: actions, error: actionsError } = await supabase
-    .from('draft_actions')
-    .select('*')
-    .in('draft_id', draftIds)
-    .order('action_number');
-  if (actionsError) return null;
 
   const players = new Map<number, Player>();
   const poolRows: PoolEntry[] = [];
-  for (const row of pool.data ?? []) {
+  for (const row of pool) {
     const player = row.player as unknown as Player;
     players.set(player.id, player);
     poolRows.push({
@@ -223,27 +211,27 @@ async function fetchSeason(
     });
   }
   const mlbTeams = new Map<number, MlbTeam>();
-  for (const row of seasonTeams.data ?? []) {
+  for (const row of mlb_teams) {
     const team = row.team as unknown as Pick<MlbTeam, 'id' | 'name' | 'abbreviation' | 'league'>;
     mlbTeams.set(team.id, { ...team, eliminated: row.eliminated, wins: row.wins, has_bye: row.has_bye, seed: row.seed });
   }
 
-  const teamRows = (teams.data ?? []) as Team[];
+  const teamRows = teams as Team[];
   const myTeam = teamRows.find((t) => t.user_id === userId) ?? null;
-  const commissionerIds = new Set((members.data ?? []).filter((m) => m.role === 'commissioner').map((m) => m.user_id as string));
-  const owners = new Map((profiles.data ?? []).map((p) => [p.id as string, (p.display_name as string).split(' ')[0]]));
+  const commissionerIds = new Set(members.filter((m) => m.role === 'commissioner').map((m) => m.user_id));
+  const owners = new Map(profiles.map((p) => [p.id, p.display_name.split(' ')[0]]));
   const photos = new Map(
-    (profiles.data ?? []).flatMap((p) => {
+    profiles.flatMap((p) => {
       const url = photoUrl(p);
-      return url ? [[p.id as string, url] as const] : [];
+      return url ? [[p.id, url] as const] : [];
     }),
   );
   const data: SeasonData = {
     season,
     teams: teamRows,
-    drafts: (drafts.data ?? []) as Draft[],
-    actions: (actions ?? []) as DraftActionRow[],
-    spells: (spells.data ?? []) as Spell[],
+    drafts: drafts as Draft[],
+    actions: actions as DraftActionRow[],
+    spells: spells as Spell[],
     pool: poolRows,
     players,
     mlbTeams,

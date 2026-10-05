@@ -15,9 +15,6 @@ export function coreSpells(data: SeasonData): RosterSpell[] {
   return data.spells.map((s) => ({ teamId: s.fantasy_team_id, playerId: s.mlb_player_id, from: s.from_at, to: s.to_at }));
 }
 
-const GAME_COLUMNS =
-  'game_pk, game_type, series_game_number, start_time, start_time_tbd, official_date, status, detailed_state, home_team_id, away_team_id, home_score, away_score, live, games_in_series, final_seen_at';
-
 /**
  * One subscription to the "scores" broadcast, shared by every useScores (Games and Standings can
  * both be mounted, and a second channel on the same topic would replace the first). Listeners
@@ -111,30 +108,11 @@ function useLiveScores(data: SeasonData | null): ScoresState {
   const refetch = useCallback(async () => {
     if (!year) return;
     const fetchId = ++latest.current;
-    const { data: games } = await supabase.from('mlb_games').select(GAME_COLUMNS).eq('season_year', year);
-    const gamePks = (games ?? []).map((g) => g.game_pk as number);
+    // One request (the scores_load function) for what used to be four: the games, the rostered
+    // players' TB and hits (so the Games tab can draw bags hit by hit), and live games' lines.
     const playerIds = playerKey ? playerKey.split(',').map(Number) : [];
-    const { data: stats } =
-      gamePks.length && playerIds.length
-        ? await supabase
-            .from('player_game_stats')
-            .select('game_pk, mlb_player_id, tb, ab, h, bb, hbp, sf, hr, r, rbi')
-            .in('game_pk', gamePks)
-            .in('mlb_player_id', playerIds)
-        : { data: [] };
-    // Their hits one by one, so the Games tab can draw bags hit by hit.
-    const { data: hits } =
-      gamePks.length && playerIds.length
-        ? await supabase
-            .from('mlb_hits')
-            .select('play_id, game_pk, mlb_player_id, event, ended_at, has_video')
-            .in('game_pk', gamePks)
-            .in('mlb_player_id', playerIds)
-        : { data: [] };
-    const livePks = (games ?? []).filter((g) => g.status === 'Live').map((g) => g.game_pk as number);
-    const { data: lines } = livePks.length
-      ? await supabase.from('player_game_stats').select('game_pk, mlb_player_id, ab, h, doubles, triples, hr, bb, batting_order').in('game_pk', livePks)
-      : { data: [] };
+    const { data: loaded } = await supabase.rpc('scores_load', { p_year: year, p_players: playerIds });
+    const { games, stats, hits, lines } = (loaded ?? {}) as { games?: Row[]; stats?: Row[]; hits?: Row[]; lines?: Row[] };
     if (fetchId !== latest.current) return;
     setScores({
       games: (games ?? []).filter((g) => g.series_game_number !== null).map(toGame),
