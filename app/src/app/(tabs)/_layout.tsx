@@ -6,6 +6,7 @@ import { BagCelebrations } from '@/components/bag-celebration';
 import { TabBar, TabBarContext, type TabBarProps, TabScreen } from '@/components/section-nav';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/lib/auth';
+import { useNotificationTaps } from '@/lib/notification-taps';
 import { PlayerProvider } from '@/lib/player';
 import { ScoresProvider } from '@/lib/scores';
 import { SeasonProvider } from '@/lib/season';
@@ -19,6 +20,7 @@ import { SeasonProvider } from '@/lib/season';
 export default function TabsLayout() {
   const { session } = useAuth();
   const tabBarRef = useRef<TabBarProps | null>(null);
+  useNotificationTaps();
   return (
     // Remount for a different user, so season data is loaded for the right one.
     <SeasonProvider key={session?.user.id}>
