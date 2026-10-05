@@ -83,6 +83,11 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   sign-in is renewed), `lib/season.ts` retries up to 6 times over about a minute, then stops. A good
   start costs nothing extra; a bad one at most 6 more loads (~1 MB), and a lasting server error
   can't turn into endless reloads.
+  Both big loads are one request each: the season (`season_load`, nine tables) and the scores
+  (`scores_load`: games, the rostered players' TB and hits, live games' lines), Postgres functions
+  with the same row level security as the tables. The app reloads both after every reconnect
+  (~200 times a day on production in October 2026), and each request costs ~3 KB of Supabase logs
+  plus usually a CORS preflight, so one request instead of 13 saves ~8 MB of logs a day.
   The scores load once per app open for every screen (`ScoresProvider` in `lib/scores.ts`), not
   each time Games or Standings mounts, so bag celebrations can use them anywhere. That's the same
   single load for anyone who opens either tab (most visits) and saves the second load when both
