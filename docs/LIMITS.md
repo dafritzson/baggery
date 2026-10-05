@@ -14,11 +14,12 @@ and both run the poller.
 |---|---|---|---|
 | API requests | Unlimited | | ✅ |
 | Monthly active users | 50,000 | ~12 managers plus a few spectators | ✅ |
-| Database size | 500 MB | Under 20 MB even after several seasons: a postseason is ~45 games and ~1,500 batting lines, plus the pool and draft | ✅ |
+| Database size | 500 MB | ~45 MB per project in October 2026 (seven seasons, play-by-play lines, and up to 14 MB of pg_cron run history before it was purged daily) | ✅ |
 | File storage | 1 GB | Profile photos, ~15 KB each (256 px JPEG): under 1 MB for the league | ✅ |
 | Egress | 5 GB / month | Low after the scores broadcast (see below). This is the one to watch | ⚠️ |
 | Cached egress (CDN) | 5 GB / month | Photos only, ~5 MB / month | ✅ |
-| Edge Function invocations | 500k / month | ~120–150k per project in a busy postseason month, so ~250–300k for staging plus production | ⚠️ |
+| Edge Function invocations | 500k / month | ~45k production, ~15k staging for a whole postseason (measured: ~345 calls per live hour per project at the old 10 s cadence) | ✅ |
+| Log ingestion | 1 GB / month (Supabase says enforcement isn't live yet) | ~30 MB a game day for both projects, ~0.9 GB in a month of games; was ~65 MB a day before the poll schedules below | ⚠️ |
 | Realtime concurrent connections | 200 | One per open app | ✅ |
 | Realtime messages per second | 100 | One broadcast per poll, per open app | ✅ |
 | Realtime messages per month | ~2M (from memory, not checked) | Far below since the broadcast change | ✅ |
@@ -30,19 +31,33 @@ Supabase billing and usage pages; the dashboard shows actual usage.
 
 ### Why the watched items stay inside
 
-- **Edge Function invocations.** Only calls that fetch something count. pg_cron runs a check
-  inside the database every 10 seconds (`private.poll_due()`), which isn't an invocation, and calls
+- **Edge Function invocations.** Only calls that fetch something count. The pg_cron job runs a
+  check inside the database (`private.poll_due()`), which isn't an invocation, and calls
   `poll-games` only when there's work:
-  - live games: every 10 s, ~360 calls per hour of live baseball per project;
+  - live games: every run, so ~240 calls per hour of live baseball on production (every 15 s)
+    and ~60 on staging (every minute). Overlapping games share each call;
   - the schedule: every minute around game time, every 10 minutes otherwise;
   - finished games: every 10 minutes for 6 hours (official scoring changes).
 
-  Polling live games every 5 s would roughly double that, close to or over the quota. That's why
-  it's 10 s. If more headroom is needed, staging could poll live games less often.
+  The job runs on `private.poller.live_schedule` while a game is live or starts within 10 minutes,
+  or alerts are waiting, and once a minute otherwise (`idle_schedule`); `private.poll_games()`
+  switches the job between them. Production uses the default 15 s; staging is set by hand to
+  every minute (`update private.poller set live_schedule = '* * * * *'`), so a new staging project
+  needs that line.
   `player-stats` (the player popup) caches its results in memory, and `draft` runs only on draft
   actions; both are small next to the poller. `almanac` runs when the Almanac tab is first opened
   in an open app (the tab stays open after that), and when a manager's page opens more than 5
   minutes after the last call (the app caches it): a few thousand calls a month at most.
+- **Logs.** Supabase meters every log line its services write (1 GB a month on Free, shared by
+  both projects), and nearly all of ours are written per poll by Supabase itself, not by our code:
+  the function gateway's request line, the runtime's "booted" and "shutdown", the connection
+  pooler's connections (~4.4 KB a call in all), plus the API gateway's line per app request
+  (~2.7 KB each; ~5,600 a day on production in early October). pg_cron's "cron job starting" lines
+  (~1 KB per run, every run, work or not) are off: `cron.log_statement=false`, set per project with
+  `supabase --experimental postgres-config update` (it restarts the database). That's why idle
+  hours run once a minute and why live polling isn't faster: at 10 s everywhere, with cron logging
+  on, both projects together were on course for ~2 GB a month. pg_cron's run history
+  (`cron.job_run_details`) is purged daily to two days.
 - **The Almanac.** The `almanac` function reads every season's rows next to the database and sends
   back only the computed Almanac: ~133 KB measured locally with all seven seasons (2020–2026),
   about 30 KB of it the Draft 1 picks behind busts and steals. For busts and steals it also reads
@@ -162,7 +177,7 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   broadcast, and Savant marks one game at a time about hourly, so that's a few hundred extra
   small broadcasts in a postseason month (~40 games × ~15 open apps × a few KB: under 5 MB).
 - **Sub and cut alerts.** No new MLB requests: a hitter coming off the bench (👀) or being
-  replaced (😠) is read from the box score `poll-games` already fetches every 10 s. Each read runs
+  replaced (😠) is read from the box score `poll-games` already fetches each poll. Each read runs
   one small query that finds the drafted hitters' new changes (usually none, so a few bytes back).
   Cut alerts (🥵 / 😮‍💨) rank the round once per finished game, when its final box score is read
   again ~10 minutes after it ends: ~45 rankings a postseason, each reading the round's batting
@@ -204,7 +219,7 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   opens and after a failed save; it isn't realtime, so picks send nothing extra.
 - **Realtime messages per second.** The old per-row Postgres Changes could burst 150–250 messages
   right after a poll on a busy day. One broadcast per poll keeps it to about one message per open
-  app every 10 seconds. The draft room still uses Postgres Changes on low-traffic tables
+  app every 15 seconds. The draft room still uses Postgres Changes on low-traffic tables
   (`drafts`, `draft_actions`, …).
 - **Last play.** Each live game's card shows its last finished at-bat ("Judge flyout to CF · 1
   run"). The box score and line score `poll-games` reads don't have it, so it reads the game's
@@ -212,7 +227,7 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   a whole game, ~4 KB gzipped, instead of ~0.7 MB), and only when the line score has moved on to
   another inning, half or batter. MLB's play-by-play can lag its line score by a few seconds, so
   the poller keeps reading it each poll until it has caught up. That's about one read per plate
-  appearance, ~80–100 a game, where every poll would be ~1,000: a few thousand more MLB requests
+  appearance, ~80–100 a game, where every poll would be ~700: a few thousand more MLB requests
   per project in a postseason month. Downloads into the function, not egress, and no new Edge
   Function calls. It also reads the game's stored `live` (one small row) each poll to carry the
   play over. The play rides in `mlb_games.live` (~100 bytes), which already changes and is
@@ -242,7 +257,7 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   strikeouts (~40 bytes more per broadcast row; a strikeout changes AB too, so no extra rows are
   sent). `mlb_games` gains the line score by inning (~100 bytes), read from the linescore
   `poll-games` already fetches; every broadcast `mlb_games` row carries it, so a live game's
-  broadcasts grow by ~100 bytes each: at 15 open apps, ~360 polls an hour and ~45 three-hour
+  broadcasts grow by ~100 bytes each: at 15 open apps, ~240 polls an hour and ~45 three-hour
   games, up to ~70 MB a month, less since only changed rows are sent. The scores load doesn't
   select it. Posted lineups go to their own table (`mlb_lineups`, not broadcast), written from
   the schedule read that lineup alerts already use, only when a lineup changes.
@@ -268,8 +283,8 @@ limited to what changed (live games' box scores, not the whole schedule every po
 Before merging a change that touches any of these, estimate its cost for a busy postseason month
 (~25 game days, several live games at once, ~15 open apps) and update this page:
 
-- **New polling, cron jobs or shorter intervals:** Edge Function invocations × 2 projects, and
-  MLB API load.
+- **New polling, cron jobs or shorter intervals:** Edge Function invocations × 2 projects, log
+  lines (~4.4 KB per poll call), and MLB API load.
 - **New realtime listeners or broadcasts:** messages per second in a burst right after a poll,
   and connections per open app. Prefer one broadcast per poll over per-row Postgres Changes on
   tables that change during games.
