@@ -1,8 +1,7 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, type Tabs, useIsFocused, usePathname } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from '@/components/symbol';
 import { type ComponentProps, type ReactNode, type RefObject, createContext, use, useEffect, useLayoutEffect, useState } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Image, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -10,7 +9,8 @@ import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
-import { liquidBackdrop } from '@/lib/liquid-lens';
+import { DEFAULT_OPTICS } from '@/lib/glass-optics';
+import { type LiquidGlass, useLiquidGlass } from '@/lib/liquid-glass';
 import { useSeason } from '@/lib/season';
 
 /** What the tab navigator ((tabs)/_layout.tsx) hands its tab bar: its state, and its navigation. */
@@ -213,10 +213,11 @@ export const BOTTOM_TAB_BAR_SPACE = 88;
 
 /**
  * Phone: a floating "liquid glass" pill of section buttons (icon and label) over the bottom of the
- * screen. Content scrolls behind it: clear, saturated glass with a bright rim and a sheen, and in
- * Chromium a lens that bends what's behind the edges. The selected tab is a glass bubble that
- * springs over to whichever tab you pick: on web a CSS transition of its transform (global.css),
- * which the browser runs off the main thread, so it keeps moving while the new tab draws.
+ * screen. Content scrolls behind it, through glass modeled on Apple's (lib/glass-optics.ts): a
+ * flat middle that leaves it readable, a rounded rim that refracts it (in Chromium) and catches a
+ * highlight where it faces the light. The selected tab is a bubble that springs over to whichever
+ * tab you pick: on web a CSS transition of its transform (global.css), which the browser runs off
+ * the main thread, so it keeps moving while the new tab draws.
  */
 function BottomTabBar() {
   const dark = useColorScheme() === 'dark';
@@ -228,6 +229,9 @@ function BottomTabBar() {
   // Where each tab sits in the bar, for the bubble to slide to.
   const [frames, setFrames] = useState<Record<string, { x: number; width: number }>>({});
   const target = active && frames[active.label];
+  const [pillSize, setPillSize] = useState<{ width: number; height: number } | null>(null);
+  const glass = useLiquidGlass(pillSize, 999);
+  const bubbleGlass = useLiquidGlass(target && pillSize && { width: target.width, height: pillSize.height - 10 }, 999, BUBBLE_OPTICS);
 
   return (
     <SafeAreaView
@@ -238,18 +242,12 @@ function BottomTabBar() {
       {...({ dataSet: { tabBar: '' } } as object)}>
       <View
         accessibilityRole="tablist"
-        style={[
-          styles.bottomPill,
-          { backgroundColor: look.fill, boxShadow: look.rim },
-          look.backdrop,
-        ]}>
-        {/* Light across the top of the glass. */}
-        <LinearGradient
-          colors={[look.sheen, 'rgba(255, 255, 255, 0)']}
-          locations={[0, 0.6]}
-          style={[StyleSheet.absoluteFill, styles.round]}
-          pointerEvents="none"
-        />
+        onLayout={(e) => {
+          const { width, height } = e.nativeEvent.layout;
+          setPillSize((s) => (s?.width === width && s.height === height ? s : { width, height }));
+        }}
+        style={[styles.bottomPill, { backgroundColor: look.fill, boxShadow: look.shadow }, backdrop(glass, look)]}>
+        <Highlight glass={glass} opacity={look.specular} />
         {target && (
           <View
             pointerEvents="none"
@@ -259,11 +257,11 @@ function BottomTabBar() {
                 width: target.width,
                 transform: [{ translateX: target.x }],
                 backgroundColor: look.bubble,
-                boxShadow: look.bubbleRim,
               },
             ]}
-            {...({ dataSet: { tabBubble: '' } } as object)}
-          />
+            {...({ dataSet: { tabBubble: '' } } as object)}>
+            <Highlight glass={bubbleGlass} opacity={look.bubbleSpecular} />
+          </View>
         )}
         {sections.map((s) => {
           const selected = s === active;
@@ -297,45 +295,67 @@ function BottomTabBar() {
  */
 const OVER_ARTWORK = (pathname: string) => pathname === '/';
 
-// Web: clear glass that blurs a little and brings out the colors behind it. In Chromium the lens
-// bends what's behind the rim, so the blur stays light enough to see it (react-native-web passes
-// backdrop-filter through, with the -webkit- prefix).
-const backdrop = (withLens: string, withoutLens: string) =>
-  Platform.OS === 'web' ? ({ backdropFilter: liquidBackdrop(withLens, withoutLens) } as object) : null;
+/** The glass's highlight, stretched over it (web only). */
+function Highlight({ glass, opacity }: { glass: LiquidGlass; opacity: number }) {
+  if (!glass.specular) return null;
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.round, { opacity }]}>
+      <Image source={{ uri: glass.specular }} resizeMode="stretch" style={StyleSheet.absoluteFill} />
+    </View>
+  );
+}
 
-/** The bar's glass: fill, rim (brightest at the top, where the light hits), sheen, bubble and labels. */
+/** The bubble is a thin sheet on the bar's glass: it catches the light but doesn't bend it. */
+const BUBBLE_OPTICS = { ...DEFAULT_OPTICS, bezel: 10, thickness: 0 };
+
+// Web: the glass's backdrop-filter. In Chromium the lens bends what's behind the rim, then a light
+// blur; elsewhere a stronger blur alone (react-native-web passes backdrop-filter through, with the
+// -webkit- prefix).
+const backdrop = (glass: LiquidGlass, look: (typeof LOOKS)[keyof typeof LOOKS]) =>
+  Platform.OS === 'web'
+    ? ({ backdropFilter: glass.lens ? `${glass.lens} ${look.withLens}` : look.withoutLens } as object)
+    : null;
+
+/**
+ * The bar's glass: a faint tint, a soft shadow under it, how strong its highlight is, the bubble
+ * and the labels. The tint stays faint and the colors only a little richer, so it reads as glass
+ * rather than frosted plastic.
+ */
 const LOOKS = {
   light: {
-    fill: 'rgba(255, 255, 255, 0.18)',
-    rim: 'inset 0 1px 0.5px rgba(255, 255, 255, 0.95), inset 0 -1px 0.5px rgba(255, 255, 255, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.55), 0 10px 30px rgba(16, 24, 40, 0.18)',
-    sheen: 'rgba(255, 255, 255, 0.55)',
-    bubble: 'rgba(255, 255, 255, 0.55)',
-    bubbleRim: 'inset 0 1px 0 rgba(255, 255, 255, 1), inset 0 0 0 1px rgba(255, 255, 255, 0.8), 0 2px 8px rgba(16, 24, 40, 0.12)',
+    fill: 'rgba(255, 255, 255, 0.28)',
+    shadow: '0 8px 24px rgba(16, 24, 40, 0.14)',
+    specular: 1,
+    bubble: 'rgba(120, 120, 128, 0.14)',
+    bubbleSpecular: 0.7,
     label: Colors.light.textSecondary,
     selected: Colors.light.accent,
-    backdrop: backdrop('blur(3px) saturate(220%) brightness(1.06)', 'blur(8px) saturate(220%) brightness(1.06)'),
+    withLens: 'blur(6px) saturate(170%) brightness(1.05)',
+    withoutLens: 'blur(12px) saturate(170%) brightness(1.05)',
   },
   dark: {
-    fill: 'rgba(255, 255, 255, 0.07)',
-    rim: 'inset 0 1px 0.5px rgba(255, 255, 255, 0.35), inset 0 -1px 0.5px rgba(255, 255, 255, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 10px 30px rgba(0, 0, 0, 0.55)',
-    sheen: 'rgba(255, 255, 255, 0.14)',
-    bubble: 'rgba(255, 255, 255, 0.13)',
-    bubbleRim: 'inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.12)',
+    fill: 'rgba(30, 32, 38, 0.30)',
+    shadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
+    specular: 0.75,
+    bubble: 'rgba(255, 255, 255, 0.10)',
+    bubbleSpecular: 0.6,
     label: Colors.dark.textSecondary,
     selected: Colors.dark.accent,
-    backdrop: backdrop('blur(3px) saturate(220%) brightness(1.06)', 'blur(8px) saturate(220%) brightness(1.06)'),
+    withLens: 'blur(6px) saturate(160%) brightness(0.9)',
+    withoutLens: 'blur(12px) saturate(160%) brightness(0.9)',
   },
   // Over busy, colorful artwork: a smoky glass that darkens and calms what's behind it, with white
   // labels, so they stand out on grass, dirt or sky alike.
   overArtwork: {
-    fill: 'rgba(12, 18, 30, 0.46)',
-    rim: 'inset 0 1px 0.5px rgba(255, 255, 255, 0.45), inset 0 -1px 0.5px rgba(255, 255, 255, 0.15), inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 10px 30px rgba(0, 0, 0, 0.35)',
-    sheen: 'rgba(255, 255, 255, 0.16)',
-    bubble: 'rgba(255, 255, 255, 0.24)',
-    bubbleRim: 'inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.2)',
+    fill: 'rgba(12, 18, 30, 0.42)',
+    shadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
+    specular: 0.9,
+    bubble: 'rgba(255, 255, 255, 0.18)',
+    bubbleSpecular: 0.7,
     label: 'rgba(255, 255, 255, 0.82)',
     selected: '#FFFFFF',
-    backdrop: backdrop('blur(10px) saturate(140%) brightness(0.85)', 'blur(14px) saturate(140%) brightness(0.85)'),
+    withLens: 'blur(10px) saturate(140%) brightness(0.85)',
+    withoutLens: 'blur(16px) saturate(140%) brightness(0.85)',
   },
 };
 
