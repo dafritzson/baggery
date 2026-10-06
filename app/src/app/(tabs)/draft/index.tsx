@@ -12,6 +12,7 @@ import { TeamTile } from '@/components/team-roster';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
+import { useTheme } from '@/hooks/use-theme';
 import { formatLockTime } from '@/lib/format';
 import { type Draft, type SeasonData, type Team, currentRosters, useSeason } from '@/lib/season';
 import { callFunction, supabase } from '@/lib/supabase';
@@ -154,10 +155,29 @@ function DraftsCard({ data }: { data: SeasonData }) {
 }
 
 function TeamsCard({ data }: { data: SeasonData }) {
+  const theme = useTheme();
   const rosters = currentRosters(data);
   const [renaming, setRenaming] = useState<Team | null>(null);
+  const [folded, setFolded] = useState<Set<string>>(new Set());
+  const allFolded = data.teams.length > 0 && data.teams.every((t) => folded.has(t.id));
+  function toggle(teamId: string) {
+    const next = new Set(folded);
+    if (!next.delete(teamId)) next.add(teamId);
+    setFolded(next);
+  }
   return (
-    <Card title="Teams">
+    <Card
+      title="Teams"
+      action={
+        data.teams.length > 0 && (
+          <Pressable
+            onPress={() => setFolded(allFolded ? new Set() : new Set(data.teams.map((t) => t.id)))}
+            hitSlop={8}
+            accessibilityRole="button">
+            <ThemedText type="small" style={{ color: theme.accent }}>{allFolded ? 'Expand all' : 'Collapse all'}</ThemedText>
+          </Pressable>
+        )
+      }>
       <View style={styles.teams}>
         {data.teams.map((team) => (
           <TeamTile
@@ -165,6 +185,8 @@ function TeamsCard({ data }: { data: SeasonData }) {
             data={data}
             team={team}
             roster={rosters.get(team.id) ?? []}
+            open={!folded.has(team.id)}
+            onToggle={() => toggle(team.id)}
             onRename={data.isCommissioner && team.id !== data.myTeam?.id && team.user_id ? () => setRenaming(team) : undefined}
           />
         ))}

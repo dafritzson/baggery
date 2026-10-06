@@ -28,23 +28,29 @@ export function emptySlots(data: SeasonData, roster: number[], whenEmpty = false
 /**
  * A team as a tile: its manager's badge, name and tags over its hitters, with empty slots for the
  * picks still to come. Tapping the header folds the hitters away, leaving their headshots in a
- * small stack. Sits on a card (`backgroundElement`); my team's tile is tinted.
+ * small stack. Sits on a card (`backgroundElement`); my team's tile is tinted. Pass `open` and
+ * `onToggle` to fold it from outside (an "Expand all" control, say); otherwise it folds itself.
  */
 export function TeamTile({
   data,
   team,
   roster,
   onRename,
+  open: openProp,
+  onToggle,
   style,
 }: {
   data: SeasonData;
   team: Team;
   roster: number[];
   onRename?: () => void;
+  open?: boolean;
+  onToggle?: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
   const theme = useTheme();
-  const [open, setOpen] = useState(true);
+  const [openState, setOpen] = useState(true);
+  const open = openProp ?? openState;
   const mine = team.id === data.myTeam?.id;
   const commish = !!team.user_id && data.commissionerIds.has(team.user_id);
   // Past seasons' teams are named after their manager: no need to say it twice.
@@ -57,7 +63,7 @@ export function TeamTile({
   return (
     <View style={[styles.tile, { backgroundColor: surface }, style]}>
       <Pressable
-        onPress={() => setOpen(!open)}
+        onPress={onToggle ?? (() => setOpen(!open))}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         accessibilityHint={open ? 'Hides the players' : 'Shows the players'}
