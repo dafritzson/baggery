@@ -171,8 +171,8 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   after, until every hit has a clip. Those are downloads into the function, not egress. The app
   downloads a hitter's hits (well under 1 KB) only when someone taps ▶, and the videos stream
   from MLB and Savant, not us. The Standings scrubber also shows a bag's video links when playback
-  stops on it: one hit's `clip_slug` and `savant_ready` (a few hundred bytes), never while playing.
-  At ~10 scrubbing sessions a day stopping on ~30 bags each, that's under 10 MB a month.
+  stops on it, from the hit's `clip_slug` and `savant_ready` in the scores (load and broadcast):
+  no request of its own. It used to load them per stop, ~370 requests a game day on production.
   The commissioner's Reload button costs about 10 calls per season.
   Savant's videos come the day after a game, so from 12 hours after first pitch the poller loads
   one Savant page (~85–100 KB) per game each hour until it has the video, at most 48 times: ~15–25
@@ -180,7 +180,9 @@ Supabase billing and usage pages; the dashboard shows actual usage.
 - **Bags hit by hit.** The scores load also brings rostered players' hits (play ID, game, player,
   type, time: ~120 bytes each), a few hundred rows by the World Series, so ~20–40 KB more per full
   load late in the postseason. Each new hit rides in the poll's one broadcast. Each hit also
-  carries `has_video` (~20 bytes more in the load and in each broadcast row), so the Games tab's
+  carries its `clip_slug` and `savant_ready` (~60 bytes more, ~20 KB more per load by the World
+  Series: up to ~0.1 GB a month at the reload rate, less compressed) for the scrubber's video
+  links, and `has_video` (~20 bytes more in the load and in each broadcast row), so the Games tab's
   ▶ only shows once there's a video: a clip turning up and a game's Savant videos being marked
   ready now ride a poll's broadcast too. Clips come during or just after live polls that already
   broadcast, and Savant marks one game at a time about hourly, so that's a few hundred extra

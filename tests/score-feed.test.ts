@@ -129,7 +129,9 @@ describe('hits in the score feed', () => {
 
   it("folds rostered players' hits in this season's games into the scores", () => {
     const next = applyChanges(scores(), { hits: [hitRow('p1', 1, OHTANI), hitRow('p2', 1, HARPER), hitRow('p3', 99, OHTANI)] }, 2026, rostered);
-    expect(next.hits).toEqual([{ playId: 'p1', gamePk: 1, playerId: OHTANI, event: 'HR', endedAt: '2026-10-04T23:00:00Z', hasVideo: false }]);
+    expect(next.hits).toEqual([
+      { playId: 'p1', gamePk: 1, playerId: OHTANI, event: 'HR', endedAt: '2026-10-04T23:00:00Z', hasVideo: false, clip: null, savant: false },
+    ]);
     // The same play again (say its type changed) replaces it.
     const again = applyChanges(next, { hits: [hitRow('p1', 1, OHTANI, '2B')] }, 2026, rostered);
     expect(again.hits!.map((h) => h.event)).toEqual(['2B']);
@@ -140,6 +142,14 @@ describe('hits in the score feed', () => {
     expect(next.hits!.map((h) => h.hasVideo)).toEqual([false]);
     const clipped = applyChanges(next, { hits: [hitRow('p1', 1, OHTANI, 'HR', true)] }, 2026, rostered);
     expect(clipped.hits!.map((h) => h.hasVideo)).toEqual([true]);
+  });
+
+  it("carries the hit's clip and Savant video as they turn up, for the Standings scrubber's links", () => {
+    const next = applyChanges(scores(), { hits: [hitRow('p1', 1, OHTANI)] }, 2026, rostered);
+    const clipped = applyChanges(next, { hits: [{ ...hitRow('p1', 1, OHTANI, 'HR', true), clip_slug: 'ohtani-homers' }] }, 2026, rostered);
+    expect(clipped.hits!.map((h) => [h.clip, h.savant])).toEqual([['ohtani-homers', false]]);
+    const savant = applyChanges(clipped, { hits: [{ ...hitRow('p1', 1, OHTANI, 'HR', true), clip_slug: 'ohtani-homers', savant_ready: true }] }, 2026, rostered);
+    expect(savant.hits!.map((h) => [h.clip, h.savant])).toEqual([['ohtani-homers', true]]);
   });
 });
 

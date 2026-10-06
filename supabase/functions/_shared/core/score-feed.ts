@@ -47,6 +47,10 @@ export interface ScoreHit {
   endedAt: string | null;
   /** MLB's clip or Savant's video of it is up. */
   hasVideo: boolean;
+  /** MLB's clip, once posted (its slug). */
+  clip: string | null;
+  /** Savant's video is up (the day after the game). */
+  savant: boolean;
 }
 
 export interface Scores {
@@ -84,7 +88,16 @@ export function toGame(g: Row): GameInfo {
 }
 
 export function toHit(h: Row): ScoreHit {
-  return { playId: h.play_id, gamePk: h.game_pk, playerId: h.mlb_player_id, event: h.event, endedAt: h.ended_at ?? null, hasVideo: h.has_video ?? false };
+  return {
+    playId: h.play_id,
+    gamePk: h.game_pk,
+    playerId: h.mlb_player_id,
+    event: h.event,
+    endedAt: h.ended_at ?? null,
+    hasVideo: h.has_video ?? false,
+    clip: h.clip_slug ?? null,
+    savant: h.savant_ready ?? false,
+  };
 }
 
 export function toLine(l: Row): BattingLine {
