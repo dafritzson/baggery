@@ -157,8 +157,10 @@ score, an undrafted hitter at bat gets a pulsing blue ring with no fill.
 Things to change when the iOS app (phase 4) gets built, because the web can only imitate them.
 
 - **Tab bar glass.** The phone tab bar (`BottomTabBar` in `app/src/components/section-nav.tsx`)
-  imitates Liquid Glass on the web: translucent fill, blur, a bright rim, a sheen, and in Chromium
-  an SVG lens (`app/src/lib/liquid-lens.ts`). On iOS, render it with `GlassView` from
+  imitates Liquid Glass on the web, from a model of its optics (`app/src/lib/glass-optics.ts`): a
+  flat-topped slab with a rounded rim that refracts what's behind it by Snell's law (an SVG
+  displacement lens, Chromium only) and catches a specular highlight (every browser), drawn for the
+  bar's exact size by `app/src/lib/liquid-glass.ts`. On iOS, render it with `GlassView` from
   `expo-glass-effect` (already a dependency) for Apple's real Liquid Glass on iOS 26, which also
   adapts its tint to what's behind it, so the per-page "over artwork" style isn't needed there.
   Keep the web version for the web. The selected tab's bubble slides with a CSS transition
