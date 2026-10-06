@@ -3,7 +3,8 @@
 //
 // POST { polls, every }      from pg_cron (x-poller-secret header): polls the latest season's
 //                            games, `polls` times `every` seconds apart (pollRepeatedly). The cron
-//                            job calls once a minute (every 15 s with more than two games live),
+//                            job calls every 2 minutes while games are on (every 15 s with more
+//                            than two games live) and once a minute otherwise,
 //                            when there's something to fetch (private.poll_due): live games
 //                            every poll, the schedule every minute while games are on (10
 //                            otherwise), finished games every 10.
@@ -566,11 +567,12 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * `polls` polls `every` seconds apart in this one call (each only if something is due then), so
- * the cron job can call once a minute while games are on and still poll every 15 seconds: every
+ * the cron job can call every 2 minutes while games are on and still poll every 15 seconds: every
  * call writes a few KB of Supabase logs (the gateway's line, the runtime's "booted" and "shutdown"),
- * and log ingestion is metered. Four polls fit well inside the 2 s CPU limit with up to two live
- * games (~180 ms each, 400 ms at most, October 2026); with more, the cron job calls every 15 s
- * for one poll each (private.poll_games).
+ * and log ingestion is metered. A call's polls share one warmed-up function, so later ones cost
+ * little: 4 polls used 234 ms of CPU at the median and 422 ms at most with two live games
+ * (October 2026), and 8 fit well inside the 2 s limit. With more than two games live, the cron
+ * job calls every 15 s for one poll each (private.poll_games).
  */
 async function pollRepeatedly(year: number, polls: number, every: number) {
   const start = Date.now();
@@ -578,6 +580,8 @@ async function pollRepeatedly(year: number, polls: number, every: number) {
   for (let i = 0; i < polls; i++) {
     if (i > 0) {
       await sleep(start + i * every * 1000 - Date.now());
+      // More than 5 s behind (the last poll ran long): stop, so the call ends inside its lease.
+      if (Date.now() - (start + i * every * 1000) > 5000) break;
       const [{ due }] = await sql`select private.poll_due() as due`;
       if (!due) continue;
     }
@@ -609,10 +613,10 @@ serve(async (req) => {
     if (secret !== cfg?.secret) throw new UserError('Not allowed.', 403);
     const [latest] = await sql`select max(year) as year from seasons`;
     if (!latest?.year) return json({ skipped: true });
-    const polls = Math.min(Math.max(body.polls ?? 1, 1), 4);
+    const polls = Math.min(Math.max(body.polls ?? 1, 1), 8);
     const every = Math.min(Math.max(body.every ?? 15, 5), 30);
-    // Held for the whole call, plus room for the last poll to finish.
-    return json(await withLease((polls - 1) * every + 30, () => pollRepeatedly(latest.year, polls, every)));
+    // Held for the whole call, but expiring before the next one if this call dies (CPU limit).
+    return json(await withLease(Math.max(polls * every - 5, 30), () => pollRepeatedly(latest.year, polls, every)));
   }
 
   const userId = await requireUser(req);
