@@ -29,7 +29,8 @@
 // --release puts eliminated managers' hitters back in the pool, for anyone to draft: the 2 out
 // after the DS before Draft 3, the 2 out after the CS before Draft 4. `roster` releases the
 // hitters on their roster when they're knocked out, `discarded` the ones they dropped in earlier
-// redrafts, and `both` both.
+// redrafts, and `both` both. It also prints how many released hitters each draft gets back
+// (counting only those whose MLB team is still playing) and how many of them are drafted again.
 //
 // Each run takes a real season and plays today's 12-team postseason with its teams: in each
 // league the 3 division winners (seeds 1–3, the top 2 with byes) and the 3 best other records.
@@ -348,6 +349,12 @@ interface Run {
   noneAlive: number[];
   /** With --ghost-in-cs: the ghost's slot in the WS snake (0 = picks first). */
   ghostSlot: number;
+  /**
+   * With --release, for Drafts 3 and 4: hitters released whose MLB team plays the next round
+   * (the ones a manager can draft), and how many of them are drafted again in that draft.
+   */
+  released: number[];
+  retaken: number[];
 }
 
 function simulate(ps: Postseason): Run {
@@ -407,16 +414,23 @@ function simulate(ps: Postseason): Run {
   // A team short of 4 hitters adds instead of swapping. `who` is whose opinions a team drafts by.
   // Who each manager has dropped, and with --release, putting eliminated managers' hitters back.
   const dropped: number[][] = Array.from({ length: MANAGERS }, () => []);
-  const release = (out: number[], rosters: number[][], drafted: Uint8Array) => {
+  // Returns the released hitters whose team plays round r.
+  const release = (out: number[], rosters: number[][], drafted: Uint8Array, r: number) => {
     // A hitter they dropped may have been released before and be on someone's roster again.
     const kept = new Set(rosters.filter((_, m) => !out.includes(m)).flat());
+    const usable = new Set<number>();
     for (const m of out) {
       const freed = [
         ...(RELEASE === 'roster' || RELEASE === 'both' ? rosters[m] : []),
         ...(RELEASE === 'discarded' || RELEASE === 'both' ? dropped[m] : []),
       ];
-      for (const i of freed) if (!kept.has(i)) drafted[i] = 0;
+      for (const i of freed) {
+        if (kept.has(i)) continue;
+        drafted[i] = 0;
+        if (plays(r, i)) usable.add(i);
+      }
     }
+    return [...usable];
   };
   const redraft = (order: number[], rosters: number[][], drafted: Uint8Array, r: number, who = (m: number) => m) => {
     const yielded = new Set<number>();
@@ -477,7 +491,7 @@ function simulate(ps: Postseason): Run {
   const ranked1 = rank([...Array(MANAGERS).keys()], (m) => total[m]);
   const alive2 = ranked1.slice(0, 5);
   const dsOut = ranked1.slice(5).reverse();
-  release(dsOut, rosters, drafted);
+  const released3 = release(dsOut, rosters, drafted, L);
   const swaps3 = redraft(alive2, rosters, drafted, L);
   const regular = (i: number) => plays(W, i) && regulars.has(i);
   const regularsBefore = hs.filter((_, i) => regular(i) && !drafted[i]).length;
@@ -515,6 +529,7 @@ function simulate(ps: Postseason): Run {
       drafted[i] = 1;
     }
   }
+  const retaken3 = released3.filter((i) => drafted[i]).length;
 
   // Fantasy round 2: the bottom 2 are out. The trigger compares bags from the Wild Card on.
   const round2 = new Map(alive2.map((m) => [m, rosterBags(L, rosters[m])]));
@@ -522,7 +537,7 @@ function simulate(ps: Postseason): Run {
   const ranked2 = rank(alive2, (m) => round2.get(m)!);
   const finalists = ranked2.slice(0, 3);
   const csOut = ranked2.slice(3).reverse();
-  release(csOut, rosters, drafted);
+  const released4 = release(csOut, rosters, drafted, W);
   const sum = (ms: number[]) => ms.reduce((s, m) => s + total[m], 0);
   const ghostCSBags = ghostCS.reduce((s, g) => s + bags(L, g.i), 0);
   const trigger = !OWN_ROSTERS && !GHOST_IN_CS && sum(dsOut) + ghostCSBags + sum(csOut) > sum(finalists);
@@ -565,7 +580,7 @@ function simulate(ps: Postseason): Run {
     const top = Math.max(...finalists.map((m) => rosterBags(W, rs[m])));
     const tied = finalists.filter((m) => rosterBags(W, rs[m]) === top).length;
     const g = ghost.reduce((s, x) => s + bags(W, x.i), 0);
-    return { win: g > top ? 1 : g === top ? 1 / (tied + 1) : 0, top, swaps, left };
+    return { win: g > top ? 1 : g === top ? 1 / (tied + 1) : 0, top, swaps, left, d };
   };
   const plain = wsRound(false, false);
 
@@ -573,12 +588,14 @@ function simulate(ps: Postseason): Run {
   // of the first CS-out manager to join it.
   let ghostSlot = -1;
   let inCSWin = 0;
+  let draft4 = plain.d;
   if (GHOST_IN_CS) {
     const G = MANAGERS;
     const rs = [...rosters.map((r) => [...r]), ghostCS.map((g) => g.i)];
     const order = rank([...finalists, G], (m) => (m === G ? ghostCSBags : round2.get(m)!));
     ghostSlot = order.indexOf(G);
-    redraft(order, rs, drafted.slice(), W, (m) => (m === G ? csOut[0] : m));
+    draft4 = drafted.slice();
+    redraft(order, rs, draft4, W, (m) => (m === G ? csOut[0] : m));
     const top = Math.max(...finalists.map((m) => rosterBags(W, rs[m])));
     const tied = finalists.filter((m) => rosterBags(W, rs[m]) === top).length;
     const g = rosterBags(W, rs[G]);
@@ -612,6 +629,8 @@ function simulate(ps: Postseason): Run {
     bagsToCS: [sum(finalists), sum(dsOut) + sum(csOut)],
     noneAlive,
     ghostSlot,
+    released: [released3.length, released4.length],
+    retaken: [retaken3, released4.filter((i) => draft4[i]).length],
   };
 }
 
@@ -707,6 +726,10 @@ interface Tally {
   bagsToCS: number[];
   noneAlive: number[];
   ghostSlots: number[];
+  released: number[];
+  retaken: number[];
+  /** Runs with at least 1 usable hitter released, by draft. */
+  anyReleased: number[];
 }
 const tally = (): Tally => ({
   runs: 0,
@@ -724,6 +747,9 @@ const tally = (): Tally => ({
   bagsToCS: [0, 0],
   noneAlive: [0, 0],
   ghostSlots: [0, 0, 0, 0],
+  released: [0, 0],
+  retaken: [0, 0],
+  anyReleased: [0, 0],
 });
 const all = tally();
 const withReal = tally();
@@ -747,6 +773,11 @@ for (const ps of postseasons) {
       r.bagsToCS.forEach((b, i) => (x.bagsToCS[i] += b));
       r.noneAlive.forEach((c, i) => (x.noneAlive[i] += c));
       if (r.ghostSlot >= 0) x.ghostSlots[r.ghostSlot]++;
+      r.released.forEach((c, i) => {
+        x.released[i] += c;
+        x.anyReleased[i] += +(c > 0);
+        x.retaken[i] += r.retaken[i];
+      });
     }
   }
 }
@@ -798,6 +829,16 @@ if (GHOST_IN_CS) {
       `${pct(all.winsTriggered / Math.max(all.triggers, 1))} of the runs where it fired and ` +
       `${pct(all.winsNot / Math.max(all.runs - all.triggers, 1))} of the rest.`,
   );
+}
+
+if (RELEASE !== 'none') {
+  console.log('\nReleased hitters still playing, per draft (what managers can draft again)');
+  for (const [i, d] of [3, 4].entries()) {
+    console.log(
+      `  Draft ${d}: ${(all.released[i] / all.runs).toFixed(2)} on average, at least 1 in ` +
+        `${pct(all.anyReleased[i] / all.runs, 0)} of runs; ${(all.retaken[i] / all.runs).toFixed(2)} drafted again`,
+    );
+  }
 }
 
 if (BY_YEAR && GHOST_IN_CS) {
