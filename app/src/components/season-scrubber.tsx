@@ -27,9 +27,8 @@ import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { playerName, shortDate } from '@/lib/format';
-import { type GameInfo, coreSpells } from '@/lib/scores';
+import { type GameInfo, coreSpells, useScores } from '@/lib/scores';
 import type { SeasonData } from '@/lib/season';
-import { supabase } from '@/lib/supabase';
 import { teamName } from '@/lib/teams';
 
 const CHART_H = 120;
@@ -270,7 +269,7 @@ export function SeasonScrubber({
         </View>
         <ThemedText type="small" themeColor="textSecondary" numberOfLines={2} style={styles.sub}>{sub}</ThemedText>
         {/* The links' row is always there, empty without links, so the card keeps its height. */}
-        {bag && !playing ? <BagVideos bag={bag} /> : <View style={styles.videos} />}
+        {bag && !playing ? <BagVideos key={bag.playId} bag={bag} /> : <View style={styles.videos} />}
       </View>
 
       <View style={styles.plot} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
@@ -427,48 +426,19 @@ class ScrubGesture {
   }).panHandlers;
 }
 
-type BagVideoLinks = { playId: string; clip: string | null; savant: boolean; soon: boolean };
-
-/**
- * Bags whose videos are settled (Savant's is up, or it's too late for more to come), kept for the
- * session: the scrubber stops on the same bags again and again.
- */
-const settledVideos = new Map<string, BagVideoLinks>();
-
 /**
  * A bag's videos, as links: MLB's clip once one is posted and Savant's, which comes the day after
- * the game. Loaded when playback stops on the bag (one hit, well under 1 KB), never while playing,
- * and only once a session once they're settled. The row keeps its height while loading, so the
- * card doesn't jump.
+ * the game. From the hit in the scores, which the scores broadcast keeps current, so they need no
+ * request of their own and turn up as soon as a video is posted. Shown when playback stops on the
+ * bag, never while playing; the row keeps its height either way, so the card doesn't jump.
  */
 function BagVideos({ bag }: { bag: Bag }) {
   const theme = useTheme();
-  const [hit, setHit] = useState<BagVideoLinks | null>(null);
-  useEffect(() => {
-    if (settledVideos.has(bag.playId)) return;
-    let stale = false;
-    supabase
-      .from('mlb_hits')
-      .select('clip_slug, savant_ready')
-      .eq('play_id', bag.playId)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (stale) return;
-        const links = {
-          playId: bag.playId,
-          clip: data?.clip_slug ?? null,
-          savant: data?.savant_ready ?? false,
-          // Savant posts a game's videos the next day; after that a missing one isn't coming.
-          soon: Date.now() - new Date(bag.endedAt).getTime() < 36 * 3600_000,
-        };
-        if (!error && (links.savant || !links.soon)) settledVideos.set(bag.playId, links);
-        setHit(links);
-      });
-    return () => {
-      stale = true;
-    };
-  }, [bag.playId, bag.endedAt]);
-  const loaded = settledVideos.get(bag.playId) ?? (hit?.playId === bag.playId ? hit : null);
+  const { scores } = useScores();
+  const hit = scores?.hits?.find((h) => h.playId === bag.playId);
+  // Savant posts a game's videos the next day; after that a missing one isn't coming.
+  const [shownAt] = useState(() => Date.now());
+  const soon = shownAt - new Date(bag.endedAt).getTime() < 36 * 3600_000;
   const chip = (label: string, url: string) => (
     <Pressable
       accessibilityRole="link"
@@ -482,9 +452,9 @@ function BagVideos({ bag }: { bag: Bag }) {
   );
   return (
     <View style={styles.videos}>
-      {loaded?.clip && chip('MLB clip', clipUrl(loaded.clip))}
-      {loaded?.savant && chip('Savant', savantUrl(bag.playId))}
-      {loaded && !loaded.savant && loaded.soon && (
+      {hit?.clip && chip('MLB clip', clipUrl(hit.clip))}
+      {hit?.savant && chip('Savant', savantUrl(bag.playId))}
+      {hit && !hit.savant && soon && (
         <View style={[styles.chip, styles.pending, { borderColor: theme.textSecondary }]}>
           <ThemedText type="small" themeColor="textSecondary" style={styles.chipText}>Savant video tomorrow</ThemedText>
         </View>
