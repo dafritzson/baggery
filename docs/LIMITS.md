@@ -34,18 +34,19 @@ Supabase billing and usage pages; the dashboard shows actual usage.
 - **Edge Function invocations.** Only calls that fetch something count. The pg_cron job runs a
   check inside the database (`private.poll_due()`), which isn't an invocation, and calls
   `poll-games` only when there's work:
-  - live games: every 15 s on production, 4 polls per call, so ~60 calls per hour of live
+  - live games: every 15 s on production, 8 polls per call, so ~30 calls per hour of live
     baseball (~240 with more than two games live at once), and every minute on staging (~60).
     Overlapping games share each poll;
   - the schedule: every minute around game time, every 10 minutes otherwise;
   - finished games: every 10 minutes for 6 hours (official scoring changes).
 
-  The cron job runs once a minute. While a game is live or starts within 10 minutes, or alerts
-  are waiting, each call polls every `private.poller.live_every` seconds itself (4 polls at the
-  default 15 s, ~50 s a call), so there's one call a minute instead of one per poll: same
-  freshness, a quarter of the calls and their logs (see Logs). Each poll uses ~180 ms of CPU
-  (400 ms at most with two live games), so four fit in a call's 2 s; with more than two games live
-  at once, the job instead runs every 15 s with one poll a call. Staging is set by hand to
+  The cron job runs once a minute, and every 2 minutes while a game is live or starts within 10
+  minutes, or alerts are waiting: each of those calls polls every `private.poller.live_every`
+  seconds itself (8 polls at the default 15 s, ~110 s a call, inside the 150 s wall clock limit),
+  so there's one call per 8 polls: same freshness, an eighth of the calls and their logs (see
+  Logs). A call's polls share one warmed-up function: 4 polls used 234 ms of CPU at the median and
+  422 ms at most with two live games (October 5), so 8 fit well in a call's 2 s. With more than
+  two games live at once, the job instead runs every 15 s with one poll a call. Staging is set by hand to
   `live_every = 60` (one poll a minute), so a new staging project needs
   `update private.poller set live_every = 60`.
   `player-stats` (the player popup) caches its results in memory, and `draft` runs only on draft
