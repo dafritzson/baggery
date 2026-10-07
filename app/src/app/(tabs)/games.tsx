@@ -3,7 +3,7 @@ import { type LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, Vi
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
 import { BAG_EMOJI, hitBags } from '@core/bag-celebration.ts';
-import { neededGames, postseasonSeries, recordBefore } from '@core/schedule.ts';
+import { neededGames, postseasonSeries, recordBefore, seriesOf, seriesSummary } from '@core/schedule.ts';
 import type { PitcherStats } from '@core/box-score.ts';
 import type { LastPlay } from '@core/live.ts';
 import { SERIES } from '@core/scoreboard.ts';
@@ -28,7 +28,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { dayLabel, gameDay, useToday } from '@/lib/game-day';
-import { lineScore, ownerOf, seriesLabel, statusLine } from '@/lib/game-labels';
+import { lineScore, ownerOf, seriesLabel, shortSeriesLabel, statusLine } from '@/lib/game-labels';
 import { type Previews, type Probable, usePreviews } from '@/lib/previews';
 import { type BattingLine, type GameInfo, type ScoreHit, type Scores, useScores } from '@/lib/scores';
 import { type SeasonData, useSeason } from '@/lib/season';
@@ -181,7 +181,7 @@ export default function GamesScreen() {
           </View>
         </>
       )}
-      {boxGame && <BoxScoreSheet data={data} game={boxGame} onClose={() => setBoxPk(null)} />}
+      {boxGame && <BoxScoreSheet key={boxGame.gamePk} data={data} game={boxGame} onClose={() => setBoxPk(null)} onOpenGame={setBoxPk} />}
       {teamId !== null && <TeamPopup data={data} scores={scores} mlbTeamId={teamId} onClose={() => setTeamId(null)} onOpenGame={setBoxPk} />}
     </Screen>
   );
@@ -562,6 +562,10 @@ function OpenCard({ data, scores, previews, game, fill, onTeam }: CardProps) {
       </View>
     );
   };
+  // Live, the header says who leads the series going in (before first pitch, each team's record
+  // is by its tile instead); phones shorten the series' name to make room for it.
+  const series = live && game.seriesGameNumber > 1 ? seriesOf(scores.games, game) : undefined;
+  const record = series && series.wins.some((w) => w > 0) ? seriesSummary(series, (id) => data.mlbTeams.get(id)?.abbreviation ?? '—') : null;
   const sides = (['away', 'home'] as const).map((which) => {
     const teamId = which === 'away' ? game.awayTeamId : game.homeTeamId;
     const score = which === 'away' ? game.awayScore : game.homeScore;
@@ -574,7 +578,15 @@ function OpenCard({ data, scores, previews, game, fill, onTeam }: CardProps) {
     <LiveGlow live={live} fill={fill}>
       <Card style={[fill && styles.fill, compact && styles.cardCompact]}>
         <View style={styles.cardHead}>
-          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.headLabel}>{seriesLabel(game)}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.headLabel}>
+            {record && compact ? shortSeriesLabel(game) : seriesLabel(game)}
+            {record && (
+              <>
+                {' · '}
+                <ThemedText type="smallBold">{record}</ThemedText>
+              </>
+            )}
+          </ThemedText>
           {live && game.live ? (
             <LiveStatus live={game.live} />
           ) : (

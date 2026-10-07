@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { type ScheduleGame, ifNecessary, neededGames, notNeeded, postseasonSeries, recordBefore, seriesLine } from '../supabase/functions/_shared/core/schedule.ts';
+import { type ScheduleGame, ifNecessary, neededGames, notNeeded, postseasonSeries, recordBefore, seriesLine, seriesOf, seriesStakes, seriesSummary } from '../supabase/functions/_shared/core/schedule.ts';
 
 const NYY = 147;
 const BOS = 111;
@@ -122,5 +122,39 @@ describe('recordBefore', () => {
     // Game 3's record leaves out game 3 itself.
     expect(recordBefore(games, games[2]).get(NYY)).toEqual([1, 1]);
     expect(recordBefore(games, games[0]).get(TOR)).toEqual([0, 0]);
+  });
+});
+
+describe('seriesSummary and seriesStakes', () => {
+  const abbr = (id: number) => ({ [NYY]: 'NYY', [TOR]: 'TOR' })[id] ?? '?';
+  const d = (n: number, home: number, away: number, homeScore: number | null, awayScore: number | null, status: ScheduleGame['status'] = 'Final') =>
+    game({ gameType: 'D', seriesGameNumber: n, homeTeamId: home, awayTeamId: away, homeScore, awayScore, status });
+
+  it('says best of before any game is decided, and nothing is at stake', () => {
+    const [s] = postseasonSeries([d(1, TOR, NYY, 1, 0, 'Live')]);
+    expect(seriesSummary(s, abbr)).toBe('Best of 5');
+    expect(seriesStakes(s)).toBeNull();
+  });
+
+  it('names the leader, leaving a live game out, and who can clinch', () => {
+    const games = [d(1, TOR, NYY, 4, 1), d(2, TOR, NYY, 3, 6), d(3, NYY, TOR, 0, 5), d(4, NYY, TOR, 3, 2, 'Live')];
+    const s = seriesOf(games, games[3])!;
+    expect(seriesSummary(s, abbr)).toBe('TOR leads 2–1');
+    expect(seriesStakes(s)).toEqual({ kind: 'clinch', teamId: TOR });
+  });
+
+  it('calls a tie, and a deciding game when both are a win away', () => {
+    const tied = postseasonSeries([d(1, TOR, NYY, 4, 1), d(2, TOR, NYY, 3, 6)])[0];
+    expect(seriesSummary(tied, abbr)).toBe('Series tied 1–1');
+    expect(seriesStakes(tied)).toBeNull();
+    const decider = postseasonSeries([d(1, TOR, NYY, 4, 1), d(2, TOR, NYY, 3, 6), d(3, NYY, TOR, 0, 5), d(4, NYY, TOR, 3, 2)])[0];
+    expect(seriesSummary(decider, abbr)).toBe('Series tied 2–2');
+    expect(seriesStakes(decider)).toEqual({ kind: 'decider' });
+  });
+
+  it('says who won once it is over', () => {
+    const s = postseasonSeries([d(1, TOR, NYY, 4, 1), d(2, TOR, NYY, 3, 6), d(3, NYY, TOR, 0, 5), d(4, NYY, TOR, 1, 2)])[0];
+    expect(seriesSummary(s, abbr)).toBe('TOR won 3–1');
+    expect(seriesStakes(s)).toBeNull();
   });
 });

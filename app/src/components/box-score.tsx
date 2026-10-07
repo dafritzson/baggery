@@ -1,9 +1,10 @@
 import { type ReactNode, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { hitBags } from '@core/bag-celebration.ts';
 import { type BoxLine, type BoxRow, type Linescore, boxTotals, extraBaseHits, teamBox } from '@core/box-score.ts';
 import type { LivePlayer, LiveState } from '@core/live.ts';
+import { gameWinner, ifNecessary, notNeeded, seriesOf, seriesStakes, seriesSummary } from '@core/schedule.ts';
 
 import { type Bagger, HitterRow, UpTag } from '@/components/at-bat';
 import { betweenInnings, LiveStatus, LiveStatusStack } from '@/components/live-status';
@@ -15,6 +16,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Toggle } from '@/components/toggle';
 import { Radius, Spacing } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { type BoxScore, useBoxScore } from '@/lib/box-score';
@@ -22,6 +24,7 @@ import { lineScore, nickname, ownerOf, seriesLabel, statusLine } from '@/lib/gam
 import { PlayerProvider } from '@/lib/player';
 import { type GameInfo, useScores } from '@/lib/scores';
 import { type SeasonData, ghostManagers } from '@/lib/season';
+import { teamColors } from '@/lib/team-colors';
 import { ownerName, teamName } from '@/lib/teams';
 
 type Side = 'away' | 'home';
@@ -63,9 +66,20 @@ function OwnerLabel({ bagger, owner, out }: Owner) {
  * starting lineups side by side. Once it starts: every hitter's line in batting order, a team at a
  * time on phones (both side by side on wider screens), with the line score on top. Your hitters
  * are dark green, other managers' dark blue, and the hitter at bat gets a pulsing ring (blue with no
- * fill if nobody drafted him).
+ * fill if nobody drafted him). Under the score, the series game by game; tapping another of its
+ * games opens that one's box score (`onOpenGame`).
  */
-export function BoxScoreSheet({ data, game, onClose }: { data: SeasonData; game: GameInfo; onClose: () => void }) {
+export function BoxScoreSheet({
+  data,
+  game,
+  onClose,
+  onOpenGame,
+}: {
+  data: SeasonData;
+  game: GameInfo;
+  onClose: () => void;
+  onOpenGame?: (gamePk: number) => void;
+}) {
   const theme = useTheme();
   const wide = useLayout() === 'wide';
   const { box, failed } = useBoxScore(game);
@@ -154,6 +168,7 @@ export function BoxScoreSheet({ data, game, onClose }: { data: SeasonData; game:
                     <UpNow live={live} box={box} />
                   </View>
                 )}
+                <SeriesStrip data={data} game={game} onOpenGame={onOpenGame} style={[styles.bandPart, styles.bandSeries, { borderLeftColor: theme.border }]} />
               </View>
             ) : (
               <>
@@ -161,6 +176,7 @@ export function BoxScoreSheet({ data, game, onClose }: { data: SeasonData; game:
                   {scoreLine}
                   {live && <LiveStatus live={live} />}
                 </View>
+                <SeriesStrip data={data} game={game} onOpenGame={onOpenGame} />
                 {live && !betweenInnings(live) && <UpNow live={live} box={box} compact />}
                 {!preview && box?.linescore && <LinescoreTable linescore={box.linescore} away={abbr('away')} home={abbr('home')} />}
               </>
@@ -185,6 +201,106 @@ export function BoxScoreSheet({ data, game, onClose }: { data: SeasonData; game:
         </PlayerProvider>
       )}
     </PopupSheet>
+  );
+}
+
+/**
+ * A game's series, a cell per game: who won each one played and by how much, the live game outlined
+ * in red (the one this box score is for, in gray, if it isn't live), then the day of each game to
+ * come, "if needed" for those the series may not reach. Games a decided series won't play are left
+ * out. Over it, who leads and, before this game ends, what its win would decide.
+ */
+function SeriesStrip({
+  data,
+  game,
+  onOpenGame,
+  style,
+}: {
+  data: SeasonData;
+  game: GameInfo;
+  onOpenGame?: (gamePk: number) => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const theme = useTheme();
+  const { scores } = useScores();
+  const series = scores ? seriesOf(scores.games, game) : undefined;
+  if (!series || series.bestOf < 2) return null;
+  const abbr = (teamId: number) => data.mlbTeams.get(teamId)?.abbreviation ?? '—';
+  const stakes = game.status === 'Final' ? null : seriesStakes(series);
+  const cells = series.games.map((g, i) => ({ g, number: i + 1 })).filter(({ number }) => !notNeeded(series, number));
+  return (
+    <View style={[styles.series, style]}>
+      <View style={styles.seriesHead}>
+        <ThemedText type="smallBold" numberOfLines={1}>{seriesSummary(series, abbr)}</ThemedText>
+        {stakes && (
+          <ThemedText
+            type="small"
+            numberOfLines={1}
+            style={[styles.stakes, stakes.kind === 'decider' && styles.stakesDecider, { color: stakes.kind === 'decider' ? theme.danger : theme.textSecondary }]}>
+            {stakes.kind === 'clinch'
+              ? `${abbr(stakes.teamId)} can clinch`
+              : series.gameType === 'W'
+                ? 'Winner takes the World Series'
+                : 'Winner advances'}
+          </ThemedText>
+        )}
+      </View>
+      <View style={styles.seriesGames}>
+        {cells.map(({ g, number }) => {
+          const live = g?.status === 'Live';
+          const runs = g && (g.status === 'Final' || live) && g.homeScore !== null && g.awayScore !== null ? { home: g.homeScore, away: g.awayScore } : null;
+          const hi = runs ? Math.max(runs.home, runs.away) : 0;
+          const lo = runs ? Math.min(runs.home, runs.away) : 0;
+          // The winner, or the team ahead in the live game.
+          const ahead = !g || !runs || hi === lo ? null : g.status === 'Final' ? gameWinner(g) : runs.home > runs.away ? g.homeTeamId : g.awayTeamId;
+          const current = g?.gamePk === game.gamePk;
+          const tappable = !!g && !current && !!onOpenGame;
+          return (
+            <Pressable
+              key={number}
+              disabled={!tappable}
+              onPress={() => g && onOpenGame?.(g.gamePk)}
+              accessibilityRole={tappable ? 'button' : undefined}
+              accessibilityLabel={`Game ${number}${runs ? `, ${ahead ? `${abbr(ahead)} ` : ''}${hi} to ${lo}` : ''}`}
+              style={[
+                styles.seriesGame,
+                runs ? { backgroundColor: theme.backgroundElement } : { borderColor: theme.border, borderWidth: StyleSheet.hairlineWidth },
+                (live || current) && { borderColor: live ? theme.danger : theme.textSecondary, borderWidth: 1.5 },
+              ]}>
+              <ThemedText style={[styles.seriesNumber, { color: live ? theme.danger : theme.textSecondary }]}>
+                {`G${number}${live ? ' ●' : ''}`}
+              </ThemedText>
+              {runs ? (
+                <>
+                  {ahead ? <MiniTile teamId={ahead} abbr={abbr(ahead)} /> : <View style={styles.miniTileSpace} />}
+                  <ThemedText style={[styles.seriesScore, live && styles.bold]}>{`${hi}–${lo}`}</ThemedText>
+                </>
+              ) : (
+                <>
+                  <ThemedText themeColor="textSecondary" style={styles.seriesDay}>
+                    {g ? new Date(g.start).toLocaleDateString(undefined, { weekday: 'short' }) : '—'}
+                  </ThemedText>
+                  <ThemedText themeColor="textSecondary" numberOfLines={1} style={styles.seriesIf}>
+                    {ifNecessary(series, number) ? 'if needed' : ' '}
+                  </ThemedText>
+                </>
+              )}
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+/** A club's abbreviation on a small tile in its colors, like TeamTile's but sized for a strip cell. */
+function MiniTile({ teamId, abbr }: { teamId: number; abbr: string }) {
+  const dark = useColorScheme() === 'dark';
+  const { bg, fg } = teamColors(teamId);
+  return (
+    <View style={[styles.miniTile, { backgroundColor: bg, borderColor: dark ? 'rgba(255, 255, 255, 0.22)' : 'transparent' }]}>
+      <ThemedText style={[styles.miniTileText, { color: fg }]}>{abbr}</ThemedText>
+    </View>
   );
 }
 
@@ -479,7 +595,22 @@ const styles = StyleSheet.create({
   band: { flexDirection: 'row', alignItems: 'stretch' },
   bandScore: { flexShrink: 1, minWidth: 0, gap: Spacing.two, paddingRight: Spacing.four },
   bandPart: { justifyContent: 'center', paddingHorizontal: Spacing.four, borderLeftWidth: StyleSheet.hairlineWidth },
-  bandUp: { flex: 1, minWidth: 0, paddingRight: 0 },
+  bandUp: { flex: 1, minWidth: 0 },
+  // Room for seven games.
+  bandSeries: { width: 300, flexShrink: 0, paddingRight: 0 },
+  series: { gap: Spacing.one },
+  seriesHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: Spacing.two },
+  stakes: { flexShrink: 1, minWidth: 0, fontSize: 12, lineHeight: 16 },
+  stakesDecider: { fontWeight: 700 },
+  seriesGames: { flexDirection: 'row', gap: Spacing.one },
+  seriesGame: { flex: 1, minWidth: 0, maxWidth: 64, alignItems: 'center', gap: 2, paddingTop: Spacing.one, paddingBottom: Spacing.one + 1, borderRadius: Radius.md },
+  seriesNumber: { fontSize: 10, lineHeight: 13, fontWeight: 700, letterSpacing: 0.3 },
+  seriesScore: { fontSize: 11, lineHeight: 14, fontVariant: ['tabular-nums'] },
+  seriesDay: { fontSize: 11, lineHeight: 18 },
+  seriesIf: { fontSize: 9, lineHeight: 14 },
+  miniTile: { height: 18, paddingHorizontal: 4, borderRadius: Radius.sm, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  miniTileSpace: { height: 18 },
+  miniTileText: { fontSize: 10, lineHeight: 13, fontWeight: 800, letterSpacing: 0.3 },
   upRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   upColumn: { gap: Spacing.one + 2 },
   upBatter: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, minWidth: 0 },
