@@ -8,6 +8,8 @@ export interface BagGameScores {
   record: { score: number; name: string; yours: boolean } | null;
   /** Your best, 0 if you haven't played. */
   mine: number;
+  /** Games you've finished, 0 if none. */
+  games: number;
   /** Your first name, for the stadium scoreboard. */
   myName: string;
 }
@@ -46,18 +48,20 @@ async function fetchScores(userId: string | undefined): Promise<BagGameScores | 
   const [bests, me] = await Promise.all([
     supabase
       .from('bag_game_bests')
-      .select('user_id, score, profile:profiles(display_name)')
+      .select('user_id, score, games, profile:profiles(display_name)')
       .order('score', { ascending: false })
       .order('scored_at', { ascending: false }), // the last to reach a tied record holds it
     supabase.from('profiles').select('display_name').eq('id', userId ?? '').maybeSingle(),
   ]);
   if (bests.error) return undefined;
   const top = bests.data[0];
+  const mine = bests.data.find((row) => row.user_id === userId);
   const firstName = (name: string | undefined) => name?.split(' ')[0];
   const name = firstName((top?.profile as unknown as { display_name: string } | null)?.display_name);
   return {
     record: top && top.score > 0 ? { score: top.score, name: name ?? 'someone', yours: top.user_id === userId } : null,
-    mine: bests.data.find((row) => row.user_id === userId)?.score ?? 0,
+    mine: mine?.score ?? 0,
+    games: mine?.games ?? 0,
     myName: firstName(me.data?.display_name) ?? 'You',
   };
 }
