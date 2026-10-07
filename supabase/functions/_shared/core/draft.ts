@@ -46,8 +46,8 @@ export interface DraftState {
   actions: DraftAction[];
   /** Current roster of each team participating in this draft. */
   rosters: Map<TeamId, PlayerId[]>;
-  /** Every player who has ever been on any roster this season. */
-  everRostered: Set<PlayerId>;
+  /** Players who can't be drafted again this season (see takenPlayers). */
+  taken: Set<PlayerId>;
   /** Players currently eligible to be drafted (in the pool and their MLB team alive). */
   eligible: Set<PlayerId>;
   /**
@@ -119,7 +119,7 @@ export function validateAction(state: DraftState, action: DraftAction): string |
   }
 
   const roster = state.rosters.get(action.teamId) ?? [];
-  if (state.everRostered.has(action.addPlayerId)) return 'That player has already been drafted.';
+  if (state.taken.has(action.addPlayerId)) return 'That player has already been drafted.';
   if (!state.eligible.has(action.addPlayerId)) return 'That player is not eligible.';
 
   // The ghost fills its empty spots without dropping anyone; after that it redrafts like anyone.
@@ -152,20 +152,38 @@ export function mustReplace(state: DraftState, teamId: TeamId): number {
  * eliminated hitter's spot, a ghost's empty spot) can be passed instead, so the draft can end.
  */
 export function undraftedLeft(state: DraftState): boolean {
-  for (const p of state.eligible) if (!state.everRostered.has(p)) return true;
+  for (const p of state.eligible) if (!state.taken.has(p)) return true;
   return false;
+}
+
+/** A player's time on a fantasy roster, as far as who can draft him goes. */
+export interface Stint {
+  teamId: TeamId;
+  playerId: PlayerId;
+  /** He was dropped (the stint has ended). */
+  dropped: boolean;
+}
+
+/**
+ * Who can't be drafted: everyone on a roster now, and everyone a team still alive has dropped
+ * (burned). A player an eliminated manager dropped goes back in the pool, so their discards can
+ * be drafted again; once someone does, the same rules apply to him again. (The ghost is cut only
+ * after the last round, so its drops stay burned.)
+ */
+export function takenPlayers(stints: Stint[], eliminatedTeams: Set<TeamId>): Set<PlayerId> {
+  return new Set(stints.filter((s) => !s.dropped || !eliminatedTeams.has(s.teamId)).map((s) => s.playerId));
 }
 
 /** Applies a legal action to the roster state. Does not validate. */
 export function applyAction(state: DraftState, action: DraftAction): DraftState {
   const rosters = new Map(state.rosters);
-  const everRostered = new Set(state.everRostered);
+  const taken = new Set(state.taken);
   if (action.type === 'pick') {
     const roster = (rosters.get(action.teamId) ?? []).filter((p) => p !== action.dropPlayerId);
     rosters.set(action.teamId, [...roster, action.addPlayerId]);
-    everRostered.add(action.addPlayerId);
+    taken.add(action.addPlayerId);
   }
-  return { ...state, actions: [...state.actions, action], rosters, everRostered };
+  return { ...state, actions: [...state.actions, action], rosters, taken };
 }
 
 /**
@@ -211,7 +229,7 @@ export function autodraftAction(
   const turn = nextTurn(state.config, state.actions);
   if (!turn) return null;
   const teamId = turn.teamId;
-  const available = (id: PlayerId) => state.eligible.has(id) && !state.everRostered.has(id);
+  const available = (id: PlayerId) => state.eligible.has(id) && !state.taken.has(id);
 
   const roster = state.rosters.get(teamId) ?? [];
   const filling = state.config.kind === 'initial' || turn.ghost?.kind === 'add' || (turn.ghost && roster.length < ROSTER_SIZE);

@@ -90,7 +90,7 @@ export function validateSeasonImport(data: unknown): string | null {
 
   if (!Array.isArray(s.drafts) || s.drafts.length !== 4) return 'The season needs drafts 1 to 4.';
   const rosters = new Map<string, PlayerId[]>(managers.map((m) => [m, []]));
-  let everRostered = new Set<PlayerId>();
+  let taken = new Set<PlayerId>();
   let lastLock = '';
   for (const spec of IMPORT_DRAFTS) {
     const d = s.drafts[spec.number - 1];
@@ -114,7 +114,7 @@ export function validateSeasonImport(data: unknown): string | null {
       config: { kind: spec.kind, order: d.pickOrder, rounds: 4 },
       actions: [],
       rosters: new Map(d.pickOrder.map((m: string) => [m, rosters.get(m)!])),
-      everRostered,
+      taken,
       eligible: playerIds,
     };
     for (const [i, a] of d.actions.entries()) {
@@ -133,7 +133,7 @@ export function validateSeasonImport(data: unknown): string | null {
     for (const r of state.rosters.values()) {
       if (r.length !== 4) return `After ${label}, a roster doesn't have 4 players.`;
     }
-    everRostered = state.everRostered;
+    taken = state.taken;
   }
   return null;
 }

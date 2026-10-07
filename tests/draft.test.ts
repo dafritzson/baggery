@@ -12,6 +12,7 @@ import {
   randomOrder,
   redraftOrder,
   snakeSlots,
+  takenPlayers,
   validateAction,
 } from '../supabase/functions/_shared/core/draft.ts';
 
@@ -24,7 +25,7 @@ function state(config: DraftConfig, overrides: Partial<DraftState> = {}): DraftS
     config,
     actions: [],
     rosters: new Map(order.map((t) => [t, []])),
-    everRostered: new Set(),
+    taken: new Set(),
     eligible: new Set(Array.from({ length: 100 }, (_, i) => i + 1)),
     ...overrides,
   };
@@ -81,7 +82,7 @@ describe('validateAction: initial draft', () => {
   });
 
   it('rejects a player who was ever drafted', () => {
-    expect(validateAction(state(initial, { everRostered: new Set([1]) }), pick('A', 1))).toMatch(/already been drafted/);
+    expect(validateAction(state(initial, { taken: new Set([1]) }), pick('A', 1))).toMatch(/already been drafted/);
   });
 
   it('rejects an ineligible player', () => {
@@ -111,8 +112,8 @@ describe('validateAction: redraft', () => {
     ['B', [20, 21, 22, 23]],
     ['C', [30, 31, 32, 33]],
   ]);
-  const everRostered = new Set([...rosters.values()].flat());
-  const s = () => state(redraft, { rosters, everRostered });
+  const taken = new Set([...rosters.values()].flat());
+  const s = () => state(redraft, { rosters, taken });
 
   it('accepts drop + add', () => {
     expect(validateAction(s(), pick('A', 1, 10))).toBeNull();
@@ -139,17 +140,17 @@ describe('validateAction: redraft', () => {
   });
 
   it('won’t let a team yield while it has a hitter whose MLB team is eliminated', () => {
-    const out = state(redraft, { rosters, everRostered, eliminated: new Set([10, 12, 20]) });
+    const out = state(redraft, { rosters, taken, eliminated: new Set([10, 12, 20]) });
     expect(mustReplace(out, 'A')).toBe(2);
     expect(validateAction(out, yieldTurn('A'))).toMatch(/Replace your 2 eliminated hitters/);
     // Once they're replaced it can yield.
-    const replaced = state(redraft, { rosters: new Map([...rosters, ['A', [1, 11, 2, 13]]]), everRostered, eliminated: new Set([10, 12]) });
+    const replaced = state(redraft, { rosters: new Map([...rosters, ['A', [1, 11, 2, 13]]]), taken, eliminated: new Set([10, 12]) });
     expect(validateAction(replaced, yieldTurn('A'))).toBeNull();
   });
 
   it('lets a team with an eliminated hitter yield once nobody is left to replace him', () => {
-    const everyone = new Set([...everRostered, ...Array.from({ length: 100 }, (_, i) => i + 1)]);
-    const out = state(redraft, { rosters, everRostered: everyone, eliminated: new Set([10]) });
+    const everyone = new Set([...taken, ...Array.from({ length: 100 }, (_, i) => i + 1)]);
+    const out = state(redraft, { rosters, taken: everyone, eliminated: new Set([10]) });
     expect(mustReplace(out, 'A')).toBe(0);
     expect(validateAction(out, yieldTurn('A'))).toBeNull();
   });
@@ -163,7 +164,7 @@ describe('autodraftAction', () => {
   ];
 
   it('initial draft: takes the most regular-season TB available', () => {
-    const s = state(initial, { everRostered: new Set([2]) });
+    const s = state(initial, { taken: new Set([2]) });
     expect(autodraftAction(s, candidates, [])).toEqual(pick('A', 3));
   });
 
@@ -184,12 +185,12 @@ describe('autodraftAction', () => {
 
   describe('with a queue', () => {
     it('initial draft: takes the first queued player still available, however few TB he has', () => {
-      const s = state(initial, { everRostered: new Set([7]) });
+      const s = state(initial, { taken: new Set([7]) });
       expect(autodraftAction(s, candidates, [], [{ playerId: 7 }, { playerId: 1 }, { playerId: 2 }])).toEqual(pick('A', 1));
     });
 
     it('skips queued players who are taken or not eligible, then falls back to the most TB', () => {
-      const s = state(initial, { everRostered: new Set([7]), eligible: new Set([1, 2, 3]) });
+      const s = state(initial, { taken: new Set([7]), eligible: new Set([1, 2, 3]) });
       expect(autodraftAction(s, candidates, [], [{ playerId: 7 }, { playerId: 50 }])).toEqual(pick('A', 2));
     });
 
@@ -290,7 +291,7 @@ describe('ghost turns', () => {
       ['G', [30, 31]],
     ]);
   const s4 = (actions: DraftAction[] = []) => {
-    let s = state(draft4, { rosters: rosters4(), everRostered: new Set([10, 11, 12, 13, 20, 21, 22, 23, 30, 31]) });
+    let s = state(draft4, { rosters: rosters4(), taken: new Set([10, 11, 12, 13, 20, 21, 22, 23, 30, 31]) });
     for (const a of actions) s = applyAction(s, a);
     return s;
   };
@@ -366,7 +367,7 @@ describe('ghost turns', () => {
 
   it('with nobody undrafted left, an add can be passed, and autodraft passes it', () => {
     // Only 1 and 2 are eligible; A and B take them, so the ghost's add finds nobody.
-    const s = state(draft4, { rosters: rosters4(), everRostered: new Set([10, 11, 12, 13, 20, 21, 22, 23, 30, 31]), eligible: new Set([1, 2]) });
+    const s = state(draft4, { rosters: rosters4(), taken: new Set([10, 11, 12, 13, 20, 21, 22, 23, 30, 31]), eligible: new Set([1, 2]) });
     const empty = [pick('A', 1, 10), pick('B', 2, 20)].reduce(applyAction, s);
     expect(validateAction(empty, yieldTurn('G'))).toBeNull();
     expect(autodraftAction(empty, [{ playerId: 1, regularSeasonTb: 300 }], [])).toEqual(yieldTurn('G'));
@@ -381,5 +382,31 @@ describe('ghost turns', () => {
   it('a ghost add takes the queued player without a drop', () => {
     const add = s4([pick('A', 5, 10), pick('B', 6, 20)]);
     expect(autodraftAction(add, [{ playerId: 2, regularSeasonTb: 350 }], [], [{ playerId: 1, dropPlayerId: 30 }])).toEqual(pick('G', 1));
+  });
+});
+
+describe('takenPlayers', () => {
+  const stint = (playerId: number, teamId: string, dropped = false) => ({ teamId, playerId, dropped });
+
+  it('takes rostered players and burns players dropped by a team still alive', () => {
+    expect(takenPlayers([stint(1, 'A'), stint(2, 'B', true)], new Set())).toEqual(new Set([1, 2]));
+  });
+
+  it("puts an eliminated manager's drops back in the pool, but not their roster", () => {
+    const taken = takenPlayers([stint(1, 'E'), stint(2, 'E', true), stint(3, 'B', true)], new Set(['E']));
+    expect(taken).toEqual(new Set([1, 3]));
+  });
+
+  it('takes a released player once someone drafts him again, and burns him if they drop him', () => {
+    const released = stint(2, 'E', true);
+    expect(takenPlayers([released, stint(2, 'B')], new Set(['E']))).toEqual(new Set([2]));
+    expect(takenPlayers([released, stint(2, 'B', true)], new Set(['E']))).toEqual(new Set([2]));
+    expect(takenPlayers([released, stint(2, 'B', true)], new Set(['E', 'B']))).toEqual(new Set());
+  });
+
+  it('lets a released player be drafted', () => {
+    const taken = takenPlayers([stint(2, 'E', true)], new Set(['E']));
+    const s = state(redraft, { rosters: new Map([['A', [10, 11, 12, 13]], ['B', []], ['C', []]]), taken });
+    expect(validateAction(s, pick('A', 2, 10))).toBeNull();
   });
 });

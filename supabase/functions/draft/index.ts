@@ -18,6 +18,7 @@ import {
   nextTurn,
   randomOrder,
   redraftOrder,
+  takenPlayers,
   validateAction,
 } from '../_shared/core/draft.ts';
 import type { FantasyRound } from '../_shared/core/types.ts';
@@ -92,7 +93,7 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
        from season_player_pool p
        join season_mlb_teams t on t.season_id = p.season_id and t.mlb_team_id = p.mlb_team_id
        where p.season_id = ${draft.season_id}`,
-    tx`select id, user_id, autodraft, is_ghost from fantasy_teams where season_id = ${draft.season_id}`,
+    tx`select id, user_id, autodraft, is_ghost, eliminated_after_round from fantasy_teams where season_id = ${draft.season_id}`,
     tx`select fantasy_team_id, mlb_player_id, drop_player_id from draft_queue where draft_id = ${draftId} order by position`,
   ]);
   const queues = new Map<string, QueueEntry[]>();
@@ -130,7 +131,11 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
               },
       ),
       rosters,
-      everRostered: new Set(spells.map((s) => s.mlb_player_id)),
+      // Burned for good, except what eliminated managers dropped: that's back in the pool.
+      taken: takenPlayers(
+        spells.map((s) => ({ teamId: s.fantasy_team_id, playerId: s.mlb_player_id, dropped: s.dropped_by_draft_id !== null })),
+        new Set(teams.filter((t) => t.eliminated_after_round !== null).map((t) => t.id)),
+      ),
       eligible: new Set(available.map((p) => p.mlb_player_id)),
       // Players on a knocked-out MLB team can't stay on a roster (no yielding while holding one).
       eliminated: new Set(pool.filter((p) => p.eliminated).map((p) => p.mlb_player_id)),
@@ -173,7 +178,7 @@ async function commit(tx: Tx, ctx: Ctx, action: DraftAction, madeBy: string | nu
     if (drop !== null) {
       await tx`
         update roster_spells set to_at = ${at}, dropped_by_draft_id = ${draft.id}
-        where season_id = ${draft.season_id} and mlb_player_id = ${drop}`;
+        where season_id = ${draft.season_id} and mlb_player_id = ${drop} and dropped_by_draft_id is null`;
     }
     await tx`
       insert into roster_spells (season_id, fantasy_team_id, mlb_player_id, from_at, added_by_draft_id)
@@ -540,11 +545,16 @@ serve(async (req) => {
           },
         });
         if (last.type === 'pick') {
-          await tx`delete from roster_spells where season_id = ${ctx.draft.season_id} and mlb_player_id = ${last.add_player_id}`;
+          // A player can have earlier spells (dropped by a manager since eliminated): only this pick's.
+          await tx`
+            delete from roster_spells
+            where season_id = ${ctx.draft.season_id} and mlb_player_id = ${last.add_player_id}
+              and added_by_draft_id = ${ctx.draft.id} and dropped_by_draft_id is null`;
           if (last.drop_player_id !== null) {
             await tx`
               update roster_spells set to_at = null, dropped_by_draft_id = null
-              where season_id = ${ctx.draft.season_id} and mlb_player_id = ${last.drop_player_id}`;
+              where season_id = ${ctx.draft.season_id} and mlb_player_id = ${last.drop_player_id}
+                and dropped_by_draft_id = ${ctx.draft.id}`;
           }
         }
         await tx`update drafts set status = 'live' where id = ${ctx.draft.id}`;

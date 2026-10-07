@@ -35,6 +35,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { ownership, releasingTeams } from '@/lib/board';
 import { headshotUrl, shortDate } from '@/lib/format';
 import type { DraftAction } from '@/lib/player';
 import { matchupsByTeam, playerPlatoon, usePlatoons } from '@/lib/platoon';
@@ -283,13 +284,13 @@ function Header({
 
 /** Whose team he's on (or was, before they dropped him), or whether he can be drafted. */
 function leagueStatus(data: SeasonData, playerId: number): { label: string; available: boolean } | null {
-  // One roster at most per season: a dropped player can't be drafted again.
-  const spell = data.spells.find((s) => s.mlb_player_id === playerId);
-  const team = spell && data.teams.find((t) => t.id === spell.fantasy_team_id);
+  // A dropped player is burned, unless an eliminated manager dropped him: then he's back in the pool.
+  const owner = ownership(data.spells, Infinity, releasingTeams(data.teams)).get(playerId);
+  const team = owner && data.teams.find((t) => t.id === owner.teamId);
   if (team) {
-    const owner = ownerName(data, team);
-    const label = `${teamName(team)}${owner ? ` · ${owner}` : ''}`;
-    return { label: spell.dropped_by_draft_id === null ? label : `Dropped by ${label}`, available: false };
+    const manager = ownerName(data, team);
+    const label = `${teamName(team)}${manager ? ` · ${manager}` : ''}`;
+    return { label: owner.dropped ? `Dropped by ${label}` : label, available: false };
   }
   const entry = data.poolByPlayer.get(playerId);
   if (!entry) return null;
@@ -551,8 +552,8 @@ function BaggerySection({
   }
   const allCounted = stints.every((st) => st.teamId !== null && !st.out);
 
-  const spell = data.spells.find((s) => s.mlb_player_id === playerId);
-  const team = spell && data.teams.find((t) => t.id === spell.fantasy_team_id);
+  const latest = ownership(data.spells).get(playerId);
+  const team = latest && data.teams.find((t) => t.id === latest.teamId);
   const owner = team && ownerName(data, team);
   const openTeam = (teamId: string) => {
     onClose?.();

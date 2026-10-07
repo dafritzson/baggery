@@ -14,6 +14,7 @@ import { TeamTile } from '@/components/team-tile';
 import { Toggle } from '@/components/toggle';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { ownership, releasingTeams } from '@/lib/board';
 import { shortDate } from '@/lib/format';
 import { inningLabel, ownerOf, statusLine } from '@/lib/game-labels';
 import { PlayerProvider } from '@/lib/player';
@@ -323,10 +324,10 @@ function usePostseasonTb(playerIds: number[], gamePks: number[]): Map<number, nu
   return result && result.key === key ? result.tb : null;
 }
 
-/** Hitters nobody has drafted (a dropped one can't be drafted again): most bags so far first. */
+/** Hitters who can be drafted (not on a roster or burned): most bags so far first. */
 function AvailableTab({ data, mlbTeamId, gamePks }: { data: SeasonData; mlbTeamId: number; gamePks: number[] }) {
   const entries = useMemo(() => {
-    const takenOrDropped = new Set(data.spells.map((s) => s.mlb_player_id));
+    const takenOrDropped = new Set(ownership(data.spells, Infinity, releasingTeams(data.teams)).keys());
     const canTakeInjured = injuredDraftable(data);
     return data.pool.filter(
       (e: PoolEntry) =>

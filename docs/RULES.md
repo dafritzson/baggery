@@ -70,9 +70,12 @@ xSLG, xwOBA, WAR and age were dropped as tiebreakers. They may come back later, 
   pick yield and keep whoever they have, eliminated hitters included (they score 0 from then on).
   Burned players stay burned, and pitchers and hitters off the postseason roster stay out of the
   pool. A postseason roster change (an injury replacement) adds hitters once the pool is synced.
-- **A player can be on one roster, ever, per season.** Once drafted he is off the board
-  for good, including after being dropped, after his fantasy team is eliminated, and for
-  the team that dropped him.
+- **Burned players**: once drafted, a player is off the board for good, including after being
+  dropped (he's **burned**), after his fantasy team is eliminated, and for the team that dropped
+  him. The exception: a player dropped by a manager who's since been eliminated goes back in the
+  pool once they're out, and anyone can draft him (the ghost too). The players still on an
+  eliminated manager's roster stay off the board. A player is on one roster at a time; once
+  someone redrafts a released player, the same rules apply to him again.
 - **Stats stay with the team that earned them.** A player's stats count for a fantasy
   team only for games that start while he is on its roster. Stats already earned stay
   after he's dropped (e.g. Wild Card TB still count in round 1 after a DS redraft).
@@ -81,8 +84,8 @@ xSLG, xwOBA, WAR and age were dropped as tiebreakers. They may come back later, 
     set yet), plus hitters on a playoff team's injured list (7, 10, 15 or 60-day) who could
     come off it before the postseason ends. They're marked as injured. A drafted player left
     off the postseason roster scores 0 and can be replaced in the next redraft.
-  - Redrafts: players on the postseason roster of an MLB team still alive, never
-    previously drafted.
+  - Redrafts: players on the postseason roster of an MLB team still alive, not on a roster and
+    not burned.
 - **Pick lock**: picks lock at the first pitch of the first game of the next series.
   Unmade redraft picks become yields, except the ones that must replace a player whose MLB team
   is eliminated, which are autodrafted. Unmade initial-draft picks are autodrafted.
