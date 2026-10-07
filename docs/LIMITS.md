@@ -19,7 +19,7 @@ and both run the poller.
 | Egress | 5 GB / month | Low after the scores broadcast (see below). This is the one to watch | ⚠️ |
 | Cached egress (CDN) | 5 GB / month | Photos only, ~5 MB / month | ✅ |
 | Edge Function invocations | 500k / month | ~15k per project for a whole postseason (measured: ~345 calls per live hour per project at the old 10 s cadence, one poll a call) | ✅ |
-| Log ingestion | 1 GB / month (Supabase says enforcement isn't live yet) | ~30 MB a game day for both projects, ~0.9 GB in a month of games; was ~65 MB a day before the poll schedules below | ⚠️ |
+| Log ingestion | 1 GB / month (Supabase says enforcement isn't live yet) | Measured 13.9 MB on October 6 (two games) for both projects, ~0.42 GB in a month of games; about half is Supabase's own pooler health checks. Was ~65 MB a day before October 5 | ✅ |
 | Realtime concurrent connections | 200 | One per open app | ✅ |
 | Realtime messages per second | 100 | One broadcast per poll, per open app | ✅ |
 | Realtime messages per month | ~2M (from memory, not checked) | Far below since the broadcast change | ✅ |
@@ -35,7 +35,7 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   check inside the database (`private.poll_due()`), which isn't an invocation, and calls
   `poll-games` only when there's work:
   - live games: every 15 s on production, 8 polls per call, so ~30 calls per hour of live
-    baseball (~240 with more than two games live at once), and every minute on staging (~60).
+    baseball (~240 with more than two games live at once), the same on staging;
     Overlapping games share each poll;
   - the schedule: every minute around game time, every 10 minutes otherwise;
   - finished games: every 10 minutes for 6 hours (official scoring changes).
@@ -46,9 +46,10 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   so there's one call per 8 polls: same freshness, an eighth of the calls and their logs (see
   Logs). A call's polls share one warmed-up function: 4 polls used 234 ms of CPU at the median and
   422 ms at most with two live games (October 5), so 8 fit well in a call's 2 s. With more than
-  two games live at once, the job instead runs every 15 s with one poll a call. Staging is set by hand to
-  `live_every = 60` (one poll a minute), so a new staging project needs
-  `update private.poller set live_every = 60`.
+  two games live at once, the job instead runs every 15 s with one poll a call. Staging polls
+  like production (`live_every = 15`, the default). `live_every` can differ per project, but a
+  call writes the same logs however many polls it holds, so a slower staging saves next to
+  nothing.
   `player-stats` (the player popup) caches its results in memory, and `draft` runs only on draft
   actions; both are small next to the poller. `almanac` runs when the Almanac tab is first opened
   in an open app (the tab stays open after that), and when a manager's page opens more than 5
