@@ -122,3 +122,31 @@ export function recordBefore(games: ScheduleGame[], game: ScheduleGame): Map<num
     [game.awayTeamId, [away, home]],
   ]);
 }
+
+/** A game's series. */
+export function seriesOf<G extends ScheduleGame>(games: G[], game: ScheduleGame): Series<G> | undefined {
+  return postseasonSeries(games).find((s) => s.key === seriesKey(game));
+}
+
+/**
+ * The series as it stands, for a game's card and box score: "TOR leads 2–1", "Series tied 1–1",
+ * "TOR won 3–1", or "Best of 5" before any game is decided. `abbr` names a team.
+ */
+export function seriesSummary(series: Series, abbr: (teamId: number) => string): string {
+  const [a, b] = series.wins;
+  if (series.winner !== null) return `${abbr(series.winner)} won ${Math.max(a, b)}–${Math.min(a, b)}`;
+  if (a === 0 && b === 0) return `Best of ${series.bestOf}`;
+  if (a === b) return `Series tied ${a}–${b}`;
+  return `${abbr(a > b ? series.teams[0] : series.teams[1])} leads ${Math.max(a, b)}–${Math.min(a, b)}`;
+}
+
+/**
+ * What the series' next win decides: both teams one win away ("decider"), or one team ("clinch",
+ * with its id). Nothing while neither is one win away, or once the series is over.
+ */
+export function seriesStakes(series: Series): { kind: 'decider' } | { kind: 'clinch'; teamId: number } | null {
+  if (series.winner !== null) return null;
+  const close = series.teams.filter((_, i) => series.wins[i] === series.needed - 1);
+  if (close.length === 2) return { kind: 'decider' };
+  return close.length === 1 ? { kind: 'clinch', teamId: close[0] } : null;
+}

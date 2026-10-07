@@ -10,6 +10,12 @@ export function seriesLabel(game: GameInfo): string {
   return `${series?.name ?? ''} · Game ${game.seriesGameNumber}`;
 }
 
+/** "DS Game 3": for a card's header when it also says who leads the series. */
+export function shortSeriesLabel(game: GameInfo): string {
+  const series = SERIES.find((s) => s.gameType === game.gameType);
+  return `${series?.label ?? ''} Game ${game.seriesGameNumber}`;
+}
+
 export function statusLine(game: GameInfo): string {
   if (game.status === 'Preview' && game.detailedState !== 'Postponed') {
     if (game.startTimeTbd) return 'Time TBD';
