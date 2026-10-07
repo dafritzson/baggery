@@ -365,6 +365,8 @@ function Final({ view, score, before, onReplay }: {
     record && `Record ${record.score} (${record.name})`,
     `Your best ${Math.max(before.mine, score)}`,
   ].filter(Boolean).join(' · ');
+  // Counting this game, which may not have finished saving yet.
+  const games = before && before.games + 1;
   const fontSize = Math.min(56, view.width / 7);
   // The button sits on the pitcher's mound, clear of the scoreboard.
   const mound = view.project(0, MOUND_Z);
@@ -376,6 +378,11 @@ function Final({ view, score, before, onReplay }: {
         </Text>
         {note && <Text style={[styles.gameText, styles.outline, styles.note, { color: '#FFD84D' }]}>{note}</Text>}
         {details && <Text style={[styles.gameText, styles.outline, styles.details]}>{details}</Text>}
+        {games && (
+          <Text style={[styles.gameText, styles.outline, styles.details]}>
+            You’ve played {games} {games === 1 ? 'time' : 'times'}
+          </Text>
+        )}
       </Animated.View>
       <Animated.View style={[styles.onField, { top: mound.y }, style]}>
         <Button label="Play again" onPress={onReplay} />
