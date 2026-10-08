@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   type ScoreGame,
   currentRound,
+  dropKind,
   eliminatedTeams,
   playerSeries,
+  playerTotals,
   redraftLock,
   type ScheduledGame,
   roundColumns,
@@ -85,6 +87,27 @@ describe('scoreboard', () => {
     // Series not scheduled yet list the current roster.
     expect(cs.players.map((p) => p.playerId)).toEqual([GUERRERO]);
     expect(roundTotals(blocks)).toEqual({ 1: 14, 2: 0, 3: 0 });
+  });
+
+  it("totals each player's TB by round and in all, dropped players included", () => {
+    const blocks = teamSeriesBlocks('B', games, stats, spells, (id) => mlbTeam[id]);
+    expect(playerTotals(blocks)).toEqual([
+      { playerId: DEVERS, rounds: { 1: 6, 2: 0, 3: 0 }, total: 6 },
+      { playerId: GUERRERO, rounds: { 1: 8, 2: 0, 3: 0 }, total: 8 },
+    ]);
+  });
+
+  it('tells a burned drop from a replaced one', () => {
+    const dropped = '2026-10-04T22:00:00Z';
+    const live = { eliminated: false, onPostseasonRoster: true };
+    // NYY plays the DS after the drop: burned, even once it's out.
+    expect(dropKind(dropped, 147, games, { ...live, eliminated: true })).toBe('burned');
+    // BOS was out after the Wild Card: replaced.
+    expect(dropKind(dropped, 111, games, { ...live, eliminated: true })).toBe('replaced');
+    // Still alive with no game yet: burned.
+    expect(dropKind(dropped, 111, games, live)).toBe('burned');
+    // Off his team's postseason roster: replaced.
+    expect(dropKind(dropped, 147, games, { ...live, onPostseasonRoster: false })).toBe('replaced');
   });
 
   it("leaves a game blank when the player's team didn't play it", () => {

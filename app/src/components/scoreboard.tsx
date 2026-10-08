@@ -2,7 +2,11 @@ import { SymbolView } from '@/components/symbol';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { Image } from 'expo-image';
+
 import {
+  dropKind,
+  playerTotals,
   type SeriesBlock,
   roundColumns,
   roundSeries,
@@ -11,18 +15,20 @@ import {
   teamSeriesBlocks,
 } from '@core/scoreboard.ts';
 import { eliminations, facesCut, inRound } from '@core/scoring.ts';
-import type { FantasyRound } from '@core/types.ts';
+import { type FantasyRound, ROUND_FOR_GAME_TYPE } from '@core/types.ts';
 
 import { OwnerBadge, YouTag } from '@/components/owner-badge';
 import { PlayerName } from '@/components/player-name';
 import { RoundRulesButton, RoundRulesSheet } from '@/components/round-rules-sheet';
 import { type GridRow, ScoreGrid } from '@/components/score-grid';
+import { HeadshotStack } from '@/components/team-roster';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { TiebreakSheet } from '@/components/tiebreak-sheet';
 import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
+import { headshotUrl, mlbTeamAbbr } from '@/lib/format';
 import { outNameStyle } from '@/lib/out-name';
 import { type Scores, coreSpells } from '@/lib/scores';
 import type { SeasonData } from '@/lib/season';
@@ -265,6 +271,8 @@ function TeamLabel({ name, owner, mine }: { name: string; owner: string | null; 
 export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; scores: Scores; teamId: string }) {
   const theme = useTheme();
   const compact = useLayout() === 'compact';
+  // Sections folded or opened by hand, by key; the rest keep their defaults.
+  const [folds, setFolds] = useState<Record<string, boolean>>({});
   const team = data.teams.find((t) => t.id === teamId);
   if (!team) return null;
   const blocks = teamSeriesBlocks(teamId, scores.games, scores.stats, coreSpells(data), (id) => data.poolByPlayer.get(id)?.mlb_team_id);
@@ -272,16 +280,21 @@ export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; sco
   const out = team.eliminated_after_round;
   const started = (round: FantasyRound) =>
     roundSeries(round).some((s) => scores.games.some((g) => g.gameType === s.gameType && (g.status === 'Live' || g.status === 'Final')));
+  const roundOf = (b: SeriesBlock) => ROUND_FOR_GAME_TYPE[b.gameType];
   // Series with games on the schedule (the Wild Card before it's set), up to the team's elimination.
   const shown = blocks.filter((b, i) => {
-    const round = ROUNDS.find((r) => roundSeries(r.round).some((s) => s.gameType === b.gameType))!.round;
-    if (out !== null && round > out) return false;
+    if (out !== null && roundOf(b) > out) return false;
     // The ghost team starts in round 2.
-    if (team.is_ghost && round === 1) return false;
+    if (team.is_ghost && roundOf(b) === 1) return false;
     return i === 0 || scores.games.some((g) => g.gameType === b.gameType);
   });
   const mine = team.id === data.myTeam?.id;
   const owner = [ownerLine(data, team), mine ? 'You' : null].filter(Boolean).join(' · ');
+  const status = (playerId: number) => playerStatus(data, teamId, playerId, scores.games);
+  // The series being played (the latest one under way) starts open; the others start folded.
+  const playing = shown.findLast((b) => b.columns.some((c) => c.started)) ?? shown[0];
+  const isOpen = (key: string, byDefault: boolean) => folds[key] ?? byDefault;
+  const toggle = (key: string, byDefault: boolean) => setFolds({ ...folds, [key]: !isOpen(key, byDefault) });
 
   const photo = team.user_id ? data.photos.get(team.user_id) : null;
   const label = (
@@ -290,20 +303,29 @@ export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; sco
       {owner !== '' && <ThemedText numberOfLines={1} themeColor="textSecondary" style={styles.owner}>{owner}</ThemedText>}
     </View>
   );
+  const roundTotal = (round: FantasyRound) =>
+    out !== null && round > out ? 'Out' : team.is_ghost && round === 1 ? '—' : started(round) ? String(totals[round]) : '—';
+  const seasonTotal = totals[1] + totals[2] + totals[3];
   const totalsStrip = (
     <ThemedView type="backgroundElement" style={[styles.totals, compact && styles.totalsFull]}>
-      {ROUNDS.map((r, i) => (
+      {[...ROUNDS.map((r) => ({ key: `RD ${r.round}`, value: roundTotal(r.round) })), { key: 'TOTAL', value: String(seasonTotal) }].map((c, i) => (
         <View
-          key={r.round}
+          key={c.key}
           style={[styles.totalCell, compact && styles.totalCellFull, i > 0 && { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: theme.border }]}>
-          <ThemedText themeColor="textSecondary" style={styles.totalLabel}>RD {r.round}</ThemedText>
-          <ThemedText style={styles.totalNumber}>
-            {out !== null && r.round > out ? 'Out' : team.is_ghost && r.round === 1 ? '—' : started(r.round) ? totals[r.round] : '—'}
-          </ThemedText>
+          <ThemedText themeColor="textSecondary" style={styles.totalLabel}>{c.key}</ThemedText>
+          <ThemedText style={styles.totalNumber}>{c.value}</ThemedText>
         </View>
       ))}
     </ThemedView>
   );
+
+  // Everyone who's played for the team, most bags first: its live hitters, then those whose MLB
+  // team is out, then the ones it dropped.
+  const ledger = playerTotals(shown);
+  const order = (id: number) => (status(id).dropped ? 2 : status(id).out ? 1 : 0);
+  ledger.sort((a, b) => order(a.playerId) - order(b.playerId) || b.total - a.total);
+  const roundsPlayed = ROUNDS.filter((r) => roundTotal(r.round) !== 'Out');
+  const ledgerOpen = isOpen('players', true);
 
   return (
     <View style={styles.team}>
@@ -325,45 +347,171 @@ export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; sco
         </View>
       )}
       <View style={styles.blocks}>
-        {shown.map((b) => (
-          <SeriesTable key={b.gameType} data={data} block={b} games={scores.games} />
-        ))}
+        {ledger.length > 0 && (
+          <View style={styles.section}>
+            <FoldHead
+              title="Bags by player"
+              total={seasonTotal}
+              open={ledgerOpen}
+              onToggle={() => toggle('players', true)}
+              playerIds={ledger.map((p) => p.playerId)}
+            />
+            {ledgerOpen && (
+              <ScoreGrid
+                columns={roundsPlayed.map((r) => ({ label: `RD${r.round}` }))}
+                rows={[
+                  ...ledger.map((p) => ({
+                    key: String(p.playerId),
+                    label: <PlayerLabel data={data} playerId={p.playerId} status={status(p.playerId)} />,
+                    cells: roundsPlayed.map((r) => (roundTotal(r.round) === '—' ? '' : String(p.rounds[r.round]))),
+                    total: String(p.total),
+                  })),
+                  {
+                    key: 'team',
+                    label: <ThemedText type="smallBold">Team</ThemedText>,
+                    cells: roundsPlayed.map((r) => (roundTotal(r.round) === '—' ? '' : String(totals[r.round]))),
+                    total: String(seasonTotal),
+                    strong: true,
+                  },
+                ]}
+                labelHeader="Player"
+                totalHeader="Total"
+                labelWidth={compact ? 170 : 200}
+                labelMaxWidth={300}
+                rowHeight={PLAYER_ROW}
+              />
+            )}
+          </View>
+        )}
+        {shown.map((b) => {
+          const byDefault = b === playing;
+          return (
+            <SeriesTable
+              key={b.gameType}
+              data={data}
+              block={b}
+              status={status}
+              open={isOpen(b.gameType, byDefault)}
+              onToggle={() => toggle(b.gameType, byDefault)}
+            />
+          );
+        })}
       </View>
     </View>
   );
 }
 
-function SeriesTable({ data, block, games }: { data: SeasonData; block: SeriesBlock; games: Scores['games'] }) {
-  const compact = useLayout() === 'compact';
+/** Rows with a headshot: a little taller than the grid's default. */
+const PLAYER_ROW = 44;
+
+interface PlayerStatus {
+  /** His MLB team is out (he's still on the roster, or was when he was dropped). */
+  out: boolean;
+  /** Dropped by the team: burned if his MLB team was still playing, replaced if not. */
+  dropped: 'burned' | 'replaced' | null;
+}
+
+/** Whether a hitter is still on a team, and if not, how he left it. */
+function playerStatus(data: SeasonData, teamId: string, playerId: number, games: Scores['games']): PlayerStatus {
+  const pool = data.poolByPlayer.get(playerId);
+  const eliminated = !!pool && !!data.mlbTeams.get(pool.mlb_team_id)?.eliminated;
+  const spells = data.spells.filter((s) => s.fantasy_team_id === teamId && s.mlb_player_id === playerId);
+  if (!spells.length || spells.some((s) => s.to_at === null)) return { out: eliminated, dropped: null };
+  if (!pool) return { out: true, dropped: 'replaced' };
+  const droppedAt = spells.map((s) => s.to_at!).sort().at(-1)!;
+  const dropped = dropKind(droppedAt, pool.mlb_team_id, games, { eliminated, onPostseasonRoster: pool.on_postseason_roster });
+  return { out: dropped === 'replaced', dropped };
+}
+
+/** A hitter in the team's tables: headshot, name (struck through once he's out or dropped), and what became of him. */
+function PlayerLabel({ data, playerId, status }: { data: SeasonData; playerId: number; status: PlayerStatus }) {
   const theme = useTheme();
-  // Hitters whose MLB team is out and has no games in this series: they'll need replacing.
-  const inSeries = new Set(games.filter((g) => g.gameType === block.gameType).flatMap((g) => [g.homeTeamId, g.awayTeamId]));
-  const gone = (mlbTeamId: number | undefined) =>
-    mlbTeamId !== undefined && !!data.mlbTeams.get(mlbTeamId)?.eliminated && !inSeries.has(mlbTeamId);
+  const name = data.players.get(playerId)?.full_name ?? `Player ${playerId}`;
+  const position = data.players.get(playerId)?.primary_position;
+  const mlb = mlbTeamAbbr(data, playerId);
+  const burned = status.dropped === 'burned';
+  const struck = burned ? [outNameStyle(theme), { textDecorationColor: theme.burn }] : status.out ? outNameStyle(theme) : null;
+  const note = burned ? '🔥 Burned' : status.dropped === 'replaced' ? 'Replaced' : status.out ? 'Out' : null;
+  return (
+    <View style={styles.player}>
+      <Image
+        source={headshotUrl(playerId, 96)}
+        style={[styles.headshot, { backgroundColor: theme.backgroundSelected }, (status.out || status.dropped) && styles.headshotGone]}
+        contentFit="cover"
+        accessibilityIgnoresInvertColors
+      />
+      <View style={styles.playerText}>
+        <PlayerName playerId={playerId} type="smallBold" numberOfLines={1} style={struck}>{name}</PlayerName>
+        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.playerMeta}>
+          {[position, mlb].filter(Boolean).join(' · ')}
+          {note && (
+            <ThemedText type="smallBold" style={[styles.playerMeta, { color: burned ? theme.burn : theme.danger }]}>
+              {' · '}
+              {note}
+            </ThemedText>
+          )}
+        </ThemedText>
+      </View>
+    </View>
+  );
+}
+
+/** A section's title and TB, which folds it; folded, it shows the players' headshots. */
+function FoldHead({
+  title,
+  total,
+  open,
+  onToggle,
+  playerIds,
+}: {
+  title: string;
+  total: number;
+  open: boolean;
+  onToggle: () => void;
+  playerIds: number[];
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={onToggle}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: open }}
+      accessibilityLabel={`${title}, ${total} TB`}
+      style={[styles.sectionHead, styles.foldHead]}>
+      <ThemedText type="smallBold" themeColor="textSecondary" numberOfLines={1} style={[styles.sectionTitle, styles.sectionTitleFill]}>{title}</ThemedText>
+      {!open && <HeadshotStack roster={playerIds} surface={theme.background} />}
+      <ThemedText type="small" themeColor="textSecondary">{total} TB</ThemedText>
+      <SymbolView
+        name={open ? { ios: 'chevron.up', android: 'expand_less', web: 'expand_less' } : { ios: 'chevron.down', android: 'expand_more', web: 'expand_more' }}
+        size={18}
+        tintColor={theme.textSecondary}
+      />
+    </Pressable>
+  );
+}
+
+function SeriesTable({
+  data,
+  block,
+  status,
+  open,
+  onToggle,
+}: {
+  data: SeasonData;
+  block: SeriesBlock;
+  status: (playerId: number) => PlayerStatus;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const compact = useLayout() === 'compact';
   const cell = (value: number | null, started: boolean) => (value !== null ? String(value) : started ? '·' : '');
   const rows: GridRow[] = [
-    ...block.players.map((p) => {
-      const name = data.players.get(p.playerId)?.full_name ?? `Player ${p.playerId}`;
-      const mlbTeamId = data.poolByPlayer.get(p.playerId)?.mlb_team_id;
-      const mlb = data.mlbTeams.get(mlbTeamId ?? 0)?.abbreviation;
-      const out = gone(mlbTeamId);
-      return {
-        key: String(p.playerId),
-        label: (
-          <>
-            <PlayerName playerId={p.playerId} type="smallBold" numberOfLines={1} style={out && outNameStyle(theme)}>{name}</PlayerName>
-            {mlb && (
-              <ThemedText type="small" themeColor="textSecondary">
-                {mlb}
-                {out && <ThemedText type="smallBold" themeColor="danger"> · Out</ThemedText>}
-              </ThemedText>
-            )}
-          </>
-        ),
-        cells: p.games.map((v, i) => cell(v, block.columns[i].started)),
-        total: String(p.total),
-      };
-    }),
+    ...block.players.map((p) => ({
+      key: String(p.playerId),
+      label: <PlayerLabel data={data} playerId={p.playerId} status={status(p.playerId)} />,
+      cells: p.games.map((v, i) => cell(v, block.columns[i].started)),
+      total: String(p.total),
+    })),
     {
       key: 'team',
       label: <ThemedText type="smallBold">Team</ThemedText>,
@@ -374,19 +522,19 @@ function SeriesTable({ data, block, games }: { data: SeasonData; block: SeriesBl
   ];
   return (
     <View style={styles.section}>
-      <View style={styles.sectionHead}>
-        <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionTitle}>{block.name}</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">{block.total} TB</ThemedText>
-      </View>
-      <ScoreGrid
-        columns={block.columns.map((c) => ({ label: c.label, live: c.live }))}
-        rows={rows}
-        labelHeader="Player"
-        totalHeader="Total"
-        labelWidth={compact ? 150 : 184}
-        labelMaxWidth={280}
-        keepColumns={4}
-      />
+      <FoldHead title={block.name} total={block.total} open={open} onToggle={onToggle} playerIds={block.players.map((p) => p.playerId)} />
+      {open && (
+        <ScoreGrid
+          columns={block.columns.map((c) => ({ label: c.label, live: c.live }))}
+          rows={rows}
+          labelHeader="Player"
+          totalHeader="Total"
+          labelWidth={compact ? 170 : 200}
+          labelMaxWidth={300}
+          keepColumns={4}
+          rowHeight={PLAYER_ROW}
+        />
+      )}
     </View>
   );
 }
@@ -402,6 +550,9 @@ const styles = StyleSheet.create({
   // Section heads are one line of fixed height, so tables side by side start level.
   section: { gap: Spacing.three },
   sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: Spacing.two, height: 16 },
+  // Centered for the chevron and headshots, which stand a little taller than the line.
+  foldHead: { alignItems: 'center' },
+  sectionTitleFill: { flex: 1, minWidth: 0 },
   cutNote: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   sectionTitle: { textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 12, lineHeight: 16 },
   rank: { width: 20, textAlign: 'center', fontSize: 13, fontVariant: ['tabular-nums'] },
@@ -423,4 +574,9 @@ const styles = StyleSheet.create({
   totalLabel: { fontSize: 10, lineHeight: 12, fontWeight: 700, letterSpacing: 0.5 },
   totalNumber: { fontSize: 16, lineHeight: 20, fontWeight: 700, fontVariant: ['tabular-nums'] },
   blocks: { gap: Spacing.four },
+  player: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  headshot: { width: 28, height: 28, borderRadius: 14 },
+  headshotGone: { opacity: 0.55 },
+  playerText: { flex: 1, minWidth: 0 },
+  playerMeta: { fontSize: 12, lineHeight: 15 },
 });

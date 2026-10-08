@@ -280,6 +280,44 @@ export function roundTotals(blocks: SeriesBlock[]): Record<FantasyRound, number>
   return totals;
 }
 
+export interface PlayerTotals {
+  playerId: PlayerId;
+  /** TB he earned for the team in each fantasy round. */
+  rounds: Record<FantasyRound, number>;
+  total: number;
+}
+
+/** Each player's TB for the team by round and in all, from its series blocks, in the order they first appear. */
+export function playerTotals(blocks: SeriesBlock[]): PlayerTotals[] {
+  const byPlayer = new Map<PlayerId, PlayerTotals>();
+  for (const b of blocks) {
+    for (const p of b.players) {
+      let row = byPlayer.get(p.playerId);
+      if (!row) byPlayer.set(p.playerId, (row = { playerId: p.playerId, rounds: { 1: 0, 2: 0, 3: 0 }, total: 0 }));
+      row.rounds[ROUND_FOR_GAME_TYPE[b.gameType]] += p.total;
+      row.total += p.total;
+    }
+  }
+  return [...byPlayer.values()];
+}
+
+/**
+ * How a player left a team: burned when his MLB team was still playing (it has a game after he
+ * was dropped, or isn't out yet), replaced when it was out or he was off its postseason roster.
+ */
+export function dropKind(
+  droppedAt: string,
+  mlbTeamId: number,
+  games: ScoreGame[],
+  { eliminated, onPostseasonRoster }: { eliminated: boolean; onPostseasonRoster: boolean },
+): 'burned' | 'replaced' {
+  if (!onPostseasonRoster) return 'replaced';
+  const playedAfter = games.some(
+    (g) => (g.homeTeamId === mlbTeamId || g.awayTeamId === mlbTeamId) && Date.parse(g.start) >= Date.parse(droppedAt),
+  );
+  return playedAfter || !eliminated ? 'burned' : 'replaced';
+}
+
 /** The round being played: the latest one with a game that has started (round 1 before any). */
 export function currentRound(games: ScoreGame[]): FantasyRound {
   let round: FantasyRound = 1;
