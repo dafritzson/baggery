@@ -1,6 +1,6 @@
 import { createContext, createElement, type ReactNode, use, useCallback, useEffect, useRef, useState } from 'react';
 
-import { type Row, type ScoreChanges, type Scores, applyChanges, toGame, toHit, toLine, toStat } from '@core/score-feed.ts';
+import { type Row, type ScoreChanges, type Scores, applyChanges, checkBroadcast, checkLoad, toGame, toHit, toLine, toStat } from '@core/score-feed.ts';
 import type { ScoreGame, ScoreStat } from '@core/scoreboard.ts';
 import type { RosterSpell } from '@core/scoring.ts';
 import type { PlayLine } from '@core/timeline.ts';
@@ -89,9 +89,40 @@ export function useScoreChanges(listener: ChangeListener) {
 }
 
 /**
+ * One scores load (the scores_load function): the games, the rostered players' TB and hits (so the
+ * Games tab can draw bags hit by hit), and live games' lines, with the number of the last broadcast
+ * they include. A failed one (offline for a moment, a phone waking up) is tried again, backing off
+ * over about a minute as the season's load does, while `wanted`. Null if it never worked.
+ */
+async function loadScores(year: number, playerIds: number[], wanted: () => boolean): Promise<{ scores: Scores; seq: number | null } | null> {
+  for (let tries = 0; tries < 7; tries++) {
+    const { data, error } = await supabase.rpc('scores_load', { p_year: year, p_players: playerIds });
+    if (!error && data) {
+      const { games, stats, hits, lines, seq } = data as { games?: Row[]; stats?: Row[]; hits?: Row[]; lines?: Row[]; seq?: number };
+      return {
+        scores: {
+          games: (games ?? []).filter((g) => g.series_game_number !== null).map(toGame),
+          stats: (stats ?? []).map(toStat),
+          lines: (lines ?? []).map(toLine),
+          hits: (hits ?? []).map(toHit),
+        },
+        seq: seq ?? null,
+      };
+    }
+    if (tries === 6 || !wanted()) return null;
+    const wait = 1000 * 2 ** tries;
+    await new Promise((resolve) => setTimeout(resolve, wait));
+    if (!wanted()) return null;
+  }
+  return null;
+}
+
+/**
  * The season's postseason games and the rostered players' TB in them, kept live. The whole
  * season loads once (and again after a reconnect, or when the rostered players change); after
  * that, poll-games broadcasts each poll's changed rows in one message, which is applied as is.
+ * Broadcasts are numbered, so one that never arrived (Realtime drops some while it starts up)
+ * shows as a gap at the next, which reloads.
  */
 function useLiveScores(data: SeasonData | null): ScoresState {
   const year = data?.season.year;
@@ -99,6 +130,8 @@ function useLiveScores(data: SeasonData | null): ScoresState {
   const playerKey = data ? [...new Set(data.spells.map((s) => s.mlb_player_id))].sort().join(',') : '';
   const [scores, setScores] = useState<Scores | null>(null);
   const latest = useRef(0);
+  // The number of the last broadcast the scores include (checkBroadcast).
+  const seq = useRef<number | null>(null);
   // For the broadcast listener, which outlives renders.
   const current = useRef<Scores | null>(null);
   useEffect(() => {
@@ -108,18 +141,19 @@ function useLiveScores(data: SeasonData | null): ScoresState {
   const refetch = useCallback(async () => {
     if (!year) return;
     const fetchId = ++latest.current;
-    // One request (the scores_load function) for what used to be four: the games, the rostered
-    // players' TB and hits (so the Games tab can draw bags hit by hit), and live games' lines.
+    const wanted = () => fetchId === latest.current;
     const playerIds = playerKey ? playerKey.split(',').map(Number) : [];
-    const { data: loaded } = await supabase.rpc('scores_load', { p_year: year, p_players: playerIds });
-    const { games, stats, hits, lines } = (loaded ?? {}) as { games?: Row[]; stats?: Row[]; hits?: Row[]; lines?: Row[] };
-    if (fetchId !== latest.current) return;
-    setScores({
-      games: (games ?? []).filter((g) => g.series_game_number !== null).map(toGame),
-      stats: (stats ?? []).map(toStat),
-      lines: (lines ?? []).map(toLine),
-      hits: (hits ?? []).map(toHit),
-    });
+    // Twice at most: again when a broadcast heard meanwhile is newer than what loaded.
+    for (let tries = 0; tries < 2; tries++) {
+      const loaded = await loadScores(year, playerIds, wanted);
+      // Still failing after a minute: keep what's shown (and its number, so the next broadcast
+      // can still show a gap); a reconnect loads again.
+      if (!loaded || !wanted()) return;
+      const check = checkLoad(seq.current, loaded.seq);
+      seq.current = check.last;
+      setScores(loaded.scores);
+      if (!check.missed) return;
+    }
   }, [year, playerKey]);
 
   useEffect(() => {
@@ -132,6 +166,9 @@ function useLiveScores(data: SeasonData | null): ScoresState {
     };
     refetch();
     const stop = listenForScores((changes) => {
+      const check = checkBroadcast(seq.current, changes.seq);
+      seq.current = check.last;
+      if (!check.apply) return;
       if (changes.reload) return scheduleReload();
       // A game that just started: reload once for the lines of anyone who batted before this app heard.
       const started = (changes.games ?? []).some(
@@ -140,7 +177,7 @@ function useLiveScores(data: SeasonData | null): ScoresState {
       const before = current.current;
       if (before) for (const l of changeListeners) l(before, changes);
       setScores((s) => (s ? applyChanges(s, changes, year, rostered) : s));
-      if (started) scheduleReload();
+      if (started || check.missed) scheduleReload();
     });
     return () => {
       if (reload) clearTimeout(reload);

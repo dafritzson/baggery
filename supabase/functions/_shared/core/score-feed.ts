@@ -123,6 +123,34 @@ export interface ScoreChanges {
   hits?: Row[];
   /** Too much changed (or a row was deleted) to send; reload everything. */
   reload?: boolean;
+  /** The broadcast's number, one more than the last (see checkBroadcast). */
+  seq?: number;
+}
+
+/**
+ * Whether to apply broadcast number `seq`, given `last`: the number of the last broadcast the
+ * scores include (scores_load returns it, and each broadcast applied moves it on), null when not
+ * known. A number past last + 1 means one was missed, as happens while Realtime starts up: apply
+ * this one and reload. One the scores already include is skipped. Without a number to compare
+ * (from a server before the numbers), it's applied as before.
+ */
+export function checkBroadcast(last: number | null, seq: number | undefined): { apply: boolean; missed: boolean; last: number | null } {
+  if (seq === undefined) return { apply: true, missed: false, last };
+  if (last === null) return { apply: true, missed: false, last: seq };
+  // Far behind isn't one the load already had (those are at most a broadcast or two still on their
+  // way): the numbers started over, after a database reset or restore. Take it and reload.
+  if (seq < last - 10) return { apply: true, missed: true, last: seq };
+  if (seq <= last) return { apply: false, missed: false, last };
+  return { apply: true, missed: seq > last + 1, last: seq };
+}
+
+/**
+ * After a load that includes broadcasts up to `loaded`, which replaces the scores: `missed` when a
+ * broadcast heard while it loaded (`last`) is newer, so its changes were just overwritten and the
+ * scores should load again.
+ */
+export function checkLoad(last: number | null, loaded: number | null): { missed: boolean; last: number | null } {
+  return { missed: last !== null && loaded !== null && last > loaded, last: loaded };
 }
 
 /** A player_game_stats row as the standings keep it: TB plus the line for the tiebreakers. */
