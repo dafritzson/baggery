@@ -89,6 +89,35 @@ export function useScoreChanges(listener: ChangeListener) {
 }
 
 /**
+ * One scores load (the scores_load function): the games, the rostered players' TB and hits (so the
+ * Games tab can draw bags hit by hit), and live games' lines, with the number of the last broadcast
+ * they include. A failed one (offline for a moment, a phone waking up) is tried again, backing off
+ * over about a minute as the season's load does, while `wanted`. Null if it never worked.
+ */
+async function loadScores(year: number, playerIds: number[], wanted: () => boolean): Promise<{ scores: Scores; seq: number | null } | null> {
+  for (let tries = 0; tries < 7; tries++) {
+    const { data, error } = await supabase.rpc('scores_load', { p_year: year, p_players: playerIds });
+    if (!error && data) {
+      const { games, stats, hits, lines, seq } = data as { games?: Row[]; stats?: Row[]; hits?: Row[]; lines?: Row[]; seq?: number };
+      return {
+        scores: {
+          games: (games ?? []).filter((g) => g.series_game_number !== null).map(toGame),
+          stats: (stats ?? []).map(toStat),
+          lines: (lines ?? []).map(toLine),
+          hits: (hits ?? []).map(toHit),
+        },
+        seq: seq ?? null,
+      };
+    }
+    if (tries === 6 || !wanted()) return null;
+    const wait = 1000 * 2 ** tries;
+    await new Promise((resolve) => setTimeout(resolve, wait));
+    if (!wanted()) return null;
+  }
+  return null;
+}
+
+/**
  * The season's postseason games and the rostered players' TB in them, kept live. The whole
  * season loads once (and again after a reconnect, or when the rostered players change); after
  * that, poll-games broadcasts each poll's changed rows in one message, which is applied as is.
@@ -112,28 +141,17 @@ function useLiveScores(data: SeasonData | null): ScoresState {
   const refetch = useCallback(async () => {
     if (!year) return;
     const fetchId = ++latest.current;
-    // One request (the scores_load function) for what used to be four: the games, the rostered
-    // players' TB and hits (so the Games tab can draw bags hit by hit), and live games' lines.
+    const wanted = () => fetchId === latest.current;
     const playerIds = playerKey ? playerKey.split(',').map(Number) : [];
     // Twice at most: again when a broadcast heard meanwhile is newer than what loaded.
     for (let tries = 0; tries < 2; tries++) {
-      const { data: loaded } = await supabase.rpc('scores_load', { p_year: year, p_players: playerIds });
-      const { games, stats, hits, lines, seq: loadedSeq } = (loaded ?? {}) as {
-        games?: Row[];
-        stats?: Row[];
-        hits?: Row[];
-        lines?: Row[];
-        seq?: number;
-      };
-      if (fetchId !== latest.current) return;
-      const check = checkLoad(seq.current, loadedSeq ?? null);
+      const loaded = await loadScores(year, playerIds, wanted);
+      // Still failing after a minute: keep what's shown (and its number, so the next broadcast
+      // can still show a gap); a reconnect loads again.
+      if (!loaded || !wanted()) return;
+      const check = checkLoad(seq.current, loaded.seq);
       seq.current = check.last;
-      setScores({
-        games: (games ?? []).filter((g) => g.series_game_number !== null).map(toGame),
-        stats: (stats ?? []).map(toStat),
-        lines: (lines ?? []).map(toLine),
-        hits: (hits ?? []).map(toHit),
-      });
+      setScores(loaded.scores);
       if (!check.missed) return;
     }
   }, [year, playerKey]);

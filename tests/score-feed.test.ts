@@ -183,6 +183,13 @@ describe('broadcast numbers', () => {
     expect(checkBroadcast(42, 40)).toEqual({ apply: false, missed: false, last: 42 });
   });
 
+  it('starts over when the numbers go far back (a database reset or restore)', () => {
+    expect(checkBroadcast(5000, 3)).toEqual({ apply: true, missed: true, last: 3 });
+    // A few behind is still a broadcast the load already had.
+    expect(checkBroadcast(42, 32)).toEqual({ apply: false, missed: false, last: 42 });
+    expect(checkBroadcast(42, 31)).toEqual({ apply: true, missed: true, last: 31 });
+  });
+
   it('takes the first number heard when none is known yet', () => {
     expect(checkBroadcast(null, 42)).toEqual({ apply: true, missed: false, last: 42 });
   });

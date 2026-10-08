@@ -82,15 +82,18 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   the server asks, or when a broadcast was missed. Before this, every change refetched the whole
   season (50–150 KB), which could have reached 10–25 GB in a postseason.
   Broadcasts are numbered (`seq`, a few bytes each), and the app reloads when one skips a number
-  (one was lost, as happens while Realtime starts up) or when one heard during a load is newer than
-  the load. That second case needs a broadcast to land inside a load (under a second, against one
-  every 15 s while games are live): at most ~3% of the ~200 reconnect reloads a day, ~6 more loads,
-  under 30 MB a month. Lost broadcasts should be rarer than that since poll-games answers the cron
-  job at once.
+  (one was lost, as happens while Realtime starts up), when one heard during a load is newer than
+  the load, or when the numbers start over (a database reset or restore). The second case needs a
+  broadcast to land inside a load (under a second, against one every 15 s while games are live):
+  up to ~7% of the reloads made during games. Even if all ~200 reconnect reloads a day were, that's
+  ~14 more loads a day, under 65 MB a month. Lost broadcasts are rare as long as poll-games answers
+  the cron job at once (Edge Function invocations, above): before that, Realtime starting up during
+  a ~110 s call lost the scores sent while it waited.
   If the season load fails (or finds no seasons while signed in, as when the app opens before its
   sign-in is renewed), `lib/season.ts` retries up to 6 times over about a minute, then stops. A good
   start costs nothing extra; a bad one at most 6 more loads (~1 MB), and a lasting server error
-  can't turn into endless reloads.
+  can't turn into endless reloads. A failed scores load does the same (`lib/scores.ts`), keeping the
+  scores already shown: at most 6 more loads.
   Both big loads are one request each: the season (`season_load`, nine tables) and the scores
   (`scores_load`: games, the rostered players' TB and hits, live games' lines), Postgres functions
   with the same row level security as the tables. The app reloads both after every reconnect

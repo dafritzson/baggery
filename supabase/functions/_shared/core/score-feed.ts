@@ -137,6 +137,9 @@ export interface ScoreChanges {
 export function checkBroadcast(last: number | null, seq: number | undefined): { apply: boolean; missed: boolean; last: number | null } {
   if (seq === undefined) return { apply: true, missed: false, last };
   if (last === null) return { apply: true, missed: false, last: seq };
+  // Far behind isn't one the load already had (those are at most a broadcast or two still on their
+  // way): the numbers started over, after a database reset or restore. Take it and reload.
+  if (seq < last - 10) return { apply: true, missed: true, last: seq };
   if (seq <= last) return { apply: false, missed: false, last };
   return { apply: true, missed: seq > last + 1, last: seq };
 }

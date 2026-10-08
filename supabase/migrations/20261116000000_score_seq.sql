@@ -58,6 +58,10 @@ as $$
   select score_seq from private.poller;
 $$;
 
+-- Signed-in users only, like the scores themselves: scores_load calls it as the signed-in user.
+revoke execute on function public.scores_seq from anon, public;
+grant execute on function public.scores_seq to authenticated;
+
 create or replace function public.scores_load(p_year int, p_players int[]) returns json
 language sql stable security invoker set search_path = ''
 as $$
