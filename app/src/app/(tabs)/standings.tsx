@@ -104,9 +104,10 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
       });
       return () => {
         sub.remove();
-        // Leaving: a tap on the tab comes back to the standings, not a team (a link to a team still
-        // opens it).
+        // Leaving: a tap on the tab comes back to the standings, and the team side to my team (a
+        // link to a team still opens it).
         setView('standings');
+        setPicked(null);
       };
     }, []),
   );
