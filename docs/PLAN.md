@@ -10,7 +10,7 @@ Game rules: [RULES.md](RULES.md).
 | Backend | Supabase (Free plan; limits in [LIMITS.md](LIMITS.md)): Postgres, Auth (email code + Google), Realtime, Edge Functions (Deno), cron, Storage (profile photos, public `avatars` bucket, 5 MB) |
 | Game logic | Pure TypeScript in `supabase/functions/_shared/core/`, shared by the Edge Functions and the app, with unit tests in `tests/` |
 | Web hosting | Vercel, deployed from GitHub Actions |
-| Stats | MLB Stats API (`statsapi.mlb.com`), polled every 15 s while games are live (staging every minute) |
+| Stats | MLB Stats API (`statsapi.mlb.com`), polled every 15 s while games are live |
 
 ## Environments and deploy flow
 

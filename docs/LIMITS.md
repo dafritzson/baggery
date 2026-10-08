@@ -44,12 +44,14 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   minutes, or alerts are waiting: each of those calls polls every `private.poller.live_every`
   seconds itself (8 polls at the default 15 s, ~110 s a call, inside the 150 s wall clock limit),
   so there's one call per 8 polls: same freshness, an eighth of the calls and their logs (see
-  Logs). A call's polls share one warmed-up function: 4 polls used 234 ms of CPU at the median and
-  422 ms at most with two live games (October 5), so 8 fit well in a call's 2 s. With more than
-  two games live at once, the job instead runs every 15 s with one poll a call. Staging polls
-  like production (`live_every = 15`, the default). `live_every` can differ per project, but a
-  call writes the same logs however many polls it holds, so a slower staging saves next to
-  nothing.
+  Logs). A call answers the cron job at once and polls in the background (`EdgeRuntime.waitUntil`),
+  which changes no counts: waiting for the answer kept a database transaction open that made
+  Realtime drop the scores broadcasts sent while it started up. A call's polls share one
+  warmed-up function: 4 polls used 234 ms of CPU at the median and 422 ms at most with two live
+  games (October 5), so 8 fit well in a call's 2 s. With more than two games live at once, the
+  job instead runs every 15 s with one poll a call. Staging polls like production
+  (`live_every = 15`, the default). `live_every` can differ per project, but a call writes the
+  same logs however many polls it holds, so a slower staging saves next to nothing.
   `player-stats` (the player popup) caches its results in memory, and `draft` runs only on draft
   actions; both are small next to the poller. `almanac` runs when the Almanac tab is first opened
   in an open app (the tab stays open after that), and when a manager's page opens more than 5

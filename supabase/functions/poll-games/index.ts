@@ -11,6 +11,10 @@
 //                            Then queues the cut alerts of games just finished and the stat
 //                            correction alerts, and sends the alerts that are due (bag, sub, cut,
 //                            lineup and stat correction alerts: alerts.ts).
+//                            Answers at once and polls after the response. pg_net keeps a database
+//                            transaction open until a call answers, and Realtime, starting up when
+//                            an app connects after none were, waits for open transactions before
+//                            it streams broadcasts: scores sent while a ~110 s call ran were lost.
 // POST { setup: true }       from the deploy: records this function's URL for the cron job.
 // POST { seasonId }          commissioner: reloads every game of that season's postseason.
 // POST { seasonId, videos: true, after? }
@@ -23,7 +27,7 @@ import { autoCloseRounds } from '../_shared/close-round.ts';
 import type { LiveState } from '../_shared/core/live.ts';
 import { type ScheduledGame, eliminatedTeams, redraftLock } from '../_shared/core/scoreboard.ts';
 import { sql } from '../_shared/db.ts';
-import { UserError, json, serve } from '../_shared/http.ts';
+import { UserError, afterResponse, json, serve } from '../_shared/http.ts';
 import { logCommissioner } from '../_shared/league-log.ts';
 import { queueCorrectionAlerts, queueCutAlerts, queueLineupAlerts, queueSubAlerts, sendBagAlerts, sendQueuedAlerts } from './alerts.ts';
 import {
@@ -616,7 +620,9 @@ serve(async (req) => {
     const polls = Math.min(Math.max(body.polls ?? 1, 1), 8);
     const every = Math.min(Math.max(body.every ?? 15, 5), 30);
     // Held for the whole call, but expiring before the next one if this call dies (CPU limit).
-    return json(await withLease(Math.max(polls * every - 5, 30), () => pollRepeatedly(latest.year, polls, every)));
+    const polling = withLease(Math.max(polls * every - 5, 30), () => pollRepeatedly(latest.year, polls, every));
+    await afterResponse(polling.catch((e) => console.error('poll', e)));
+    return json({ started: true }, 202);
   }
 
   const userId = await requireUser(req);
