@@ -97,17 +97,17 @@ describe('scoreboard', () => {
     ]);
   });
 
-  it('tells a burned drop from a replaced one', () => {
+  it('tells a burned drop from one whose MLB team was out', () => {
     const dropped = '2026-10-04T22:00:00Z';
     const live = { eliminated: false, onPostseasonRoster: true };
     // NYY plays the DS after the drop: burned, even once it's out.
     expect(dropKind(dropped, 147, games, { ...live, eliminated: true })).toBe('burned');
-    // BOS was out after the Wild Card: replaced.
-    expect(dropKind(dropped, 111, games, { ...live, eliminated: true })).toBe('replaced');
+    // BOS was out after the Wild Card: out.
+    expect(dropKind(dropped, 111, games, { ...live, eliminated: true })).toBe('out');
     // Still alive with no game yet: burned.
     expect(dropKind(dropped, 111, games, live)).toBe('burned');
-    // Off his team's postseason roster: replaced.
-    expect(dropKind(dropped, 147, games, { ...live, onPostseasonRoster: false })).toBe('replaced');
+    // Off his team's postseason roster: out.
+    expect(dropKind(dropped, 147, games, { ...live, onPostseasonRoster: false })).toBe('out');
   });
 
   it("leaves a game blank when the player's team didn't play it", () => {

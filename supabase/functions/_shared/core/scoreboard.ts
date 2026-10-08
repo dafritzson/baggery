@@ -303,19 +303,19 @@ export function playerTotals(blocks: SeriesBlock[]): PlayerTotals[] {
 
 /**
  * How a player left a team: burned when his MLB team was still playing (it has a game after he
- * was dropped, or isn't out yet), replaced when it was out or he was off its postseason roster.
+ * was dropped, or isn't out yet), out when it was out or he was off its postseason roster.
  */
 export function dropKind(
   droppedAt: string,
   mlbTeamId: number,
   games: ScoreGame[],
   { eliminated, onPostseasonRoster }: { eliminated: boolean; onPostseasonRoster: boolean },
-): 'burned' | 'replaced' {
-  if (!onPostseasonRoster) return 'replaced';
+): 'burned' | 'out' {
+  if (!onPostseasonRoster) return 'out';
   const playedAfter = games.some(
     (g) => (g.homeTeamId === mlbTeamId || g.awayTeamId === mlbTeamId) && Date.parse(g.start) >= Date.parse(droppedAt),
   );
-  return playedAfter || !eliminated ? 'burned' : 'replaced';
+  return playedAfter || !eliminated ? 'burned' : 'out';
 }
 
 /** The round being played: the latest one with a game that has started (round 1 before any). */

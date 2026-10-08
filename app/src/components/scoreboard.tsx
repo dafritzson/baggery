@@ -407,8 +407,10 @@ const PLAYER_ROW = 44;
 interface PlayerStatus {
   /** His MLB team is out (he's still on the roster, or was when he was dropped). */
   out: boolean;
-  /** Dropped by the team: burned if his MLB team was still playing, replaced if not. */
-  dropped: 'burned' | 'replaced' | null;
+  /** Dropped by the team while his MLB team was still playing. */
+  burned: boolean;
+  /** No longer on the team. */
+  dropped: boolean;
 }
 
 /** Whether a hitter is still on a team, and if not, how he left it. */
@@ -416,11 +418,11 @@ function playerStatus(data: SeasonData, teamId: string, playerId: number, games:
   const pool = data.poolByPlayer.get(playerId);
   const eliminated = !!pool && !!data.mlbTeams.get(pool.mlb_team_id)?.eliminated;
   const spells = data.spells.filter((s) => s.fantasy_team_id === teamId && s.mlb_player_id === playerId);
-  if (!spells.length || spells.some((s) => s.to_at === null)) return { out: eliminated, dropped: null };
-  if (!pool) return { out: true, dropped: 'replaced' };
+  if (!spells.length || spells.some((s) => s.to_at === null)) return { out: eliminated, burned: false, dropped: false };
+  if (!pool) return { out: true, burned: false, dropped: true };
   const droppedAt = spells.map((s) => s.to_at!).sort().at(-1)!;
-  const dropped = dropKind(droppedAt, pool.mlb_team_id, games, { eliminated, onPostseasonRoster: pool.on_postseason_roster });
-  return { out: dropped === 'replaced', dropped };
+  const kind = dropKind(droppedAt, pool.mlb_team_id, games, { eliminated, onPostseasonRoster: pool.on_postseason_roster });
+  return { out: kind === 'out', burned: kind === 'burned', dropped: true };
 }
 
 /** A hitter in the team's tables: headshot, name (struck through once he's out or dropped), and what became of him. */
@@ -429,9 +431,9 @@ function PlayerLabel({ data, playerId, status }: { data: SeasonData; playerId: n
   const name = data.players.get(playerId)?.full_name ?? `Player ${playerId}`;
   const position = data.players.get(playerId)?.primary_position;
   const mlb = mlbTeamAbbr(data, playerId);
-  const burned = status.dropped === 'burned';
+  const burned = status.burned;
   const struck = burned ? [outNameStyle(theme), { textDecorationColor: theme.burn }] : status.out ? outNameStyle(theme) : null;
-  const note = burned ? '🔥 Burned' : status.dropped === 'replaced' ? 'Replaced' : status.out ? 'Out' : null;
+  const note = burned ? '🔥 Burned' : status.out ? 'Out' : null;
   return (
     <View style={styles.player}>
       <Image
