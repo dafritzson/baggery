@@ -20,7 +20,7 @@ import { usePlayerColumns } from '@/lib/player-columns';
 import { type PlatoonData, availableGames, matchupsByTeam, playerPlatoon, usePlatoons } from '@/lib/platoon';
 import { projection, teamOdds } from '@/lib/projections';
 import { useScores } from '@/lib/scores';
-import { type Ownership, draftablePlayers, ownership } from '@/lib/board';
+import { type Ownership, draftablePlayers, ownership, releasingTeams } from '@/lib/board';
 import { type Draft, type SeasonData, injuredDraftable } from '@/lib/season';
 import { teamName } from '@/lib/teams';
 import { supabase } from '@/lib/supabase';
@@ -77,7 +77,7 @@ export function startFilters(board: Board): ColumnFilters {
  * filtered to who can be drafted. Once the season is over it's the whole player pool, unfiltered.
  */
 export function currentBoard(data: SeasonData): Board {
-  const owners = ownership(data.spells);
+  const owners = ownership(data.spells, Infinity, releasingTeams(data.teams));
   const alive = new Set([...data.mlbTeams.values()].filter((t) => !t.eliminated).map((t) => t.id));
   if (data.season.status === 'complete') return { owners, alive, draftFilters: false, rosterOnly: false, injured: true };
   return { owners, alive, draftFilters: true, rosterOnly: true, injured: injuredDraftable(data) };
@@ -85,7 +85,7 @@ export function currentBoard(data: SeasonData): Board {
 
 /** Who can be drafted now, whatever the board shows: for the Draft button and the queue. */
 export function draftableNow(data: SeasonData): Set<number> {
-  return draftablePlayers(data.pool, data.mlbTeams, data.spells, injuredDraftable(data));
+  return draftablePlayers(data.pool, data.mlbTeams, data.spells, injuredDraftable(data), releasingTeams(data.teams));
 }
 
 /**
@@ -118,7 +118,7 @@ export function useDraftBoard(data: SeasonData, draft: Draft): Board {
     if (draft.status !== 'complete') return currentBoard(data);
     const locks = draft.locks_at ? Date.parse(draft.locks_at) : Infinity;
     return {
-      owners: ownership(data.spells, locks),
+      owners: ownership(data.spells, locks, releasingTeams(data.teams, draft.number)),
       alive: (done && seriesTeams) || new Set(data.mlbTeams.keys()),
       draftFilters: true,
       rosterOnly: true,

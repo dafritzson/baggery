@@ -117,7 +117,10 @@ export default function RulesScreen() {
           If the undrafted hitters run out, whoever still has picks yields and plays with what they have: an eliminated hitter
           scores 0.
         </Bullet>
-        <Bullet>A hitter can be on one roster a season, ever. Once he&apos;s dropped, nobody can take him again.</Bullet>
+        <Bullet>
+          A hitter you drop is burned: nobody can take him again. The exception is a hitter dropped by a manager who&apos;s
+          since been knocked out. He goes back in the pool, so anyone can draft him.
+        </Bullet>
         <Bullet>Draft 1&apos;s pool is every playoff team&apos;s active roster, plus hitters on their injured lists who could be back in time. Redrafts use the postseason rosters of MLB teams still alive.</Bullet>
       </Section>
 
