@@ -18,6 +18,17 @@ export class UserError extends Error {
   }
 }
 
+/**
+ * Lets `task` finish after the response is sent: the runtime keeps the function alive until it
+ * settles, within the wall clock limit. Awaited instead where there's no EdgeRuntime. `task` must
+ * catch its own errors.
+ */
+export async function afterResponse(task: Promise<unknown>): Promise<void> {
+  const runtime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime;
+  if (runtime) runtime.waitUntil(task);
+  else await task;
+}
+
 /** Wraps a handler with CORS preflight and error-to-JSON handling. */
 export function serve(handler: (req: Request) => Promise<Response>) {
   Deno.serve(async (req) => {

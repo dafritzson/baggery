@@ -23,7 +23,7 @@ import {
 } from '../_shared/core/draft.ts';
 import type { FantasyRound } from '../_shared/core/types.ts';
 import { type Tx, sql } from '../_shared/db.ts';
-import { UserError, json, serve } from '../_shared/http.ts';
+import { UserError, afterResponse, json, serve } from '../_shared/http.ts';
 import { logCommissioner, playerName, teamLabel } from '../_shared/league-log.ts';
 import { roundRanking } from '../_shared/round-ranking.ts';
 import { type DraftNotice, sendDraftAlerts } from './alerts.ts';
@@ -250,10 +250,7 @@ function notices(ctx: Ctx, before: Turn | null, userId: string, action: Body['ac
 /** Sends alerts after the response, so the action doesn't wait on push services. */
 async function alert(notices: DraftNotice[]) {
   if (!notices.length) return;
-  const sending = sendDraftAlerts(notices).catch((e) => console.error('draft alerts failed', e));
-  const runtime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime;
-  if (runtime) runtime.waitUntil(sending);
-  else await sending;
+  await afterResponse(sendDraftAlerts(notices).catch((e) => console.error('draft alerts failed', e)));
 }
 
 /** Logs a pick the commissioner made for someone else's team. */

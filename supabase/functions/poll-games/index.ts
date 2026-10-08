@@ -11,6 +11,11 @@
 //                            Then queues the cut alerts of games just finished and the stat
 //                            correction alerts, and sends the alerts that are due (bag, sub, cut,
 //                            lineup and stat correction alerts: alerts.ts).
+//                            Answers at once and polls after the response. pg_net keeps a database
+//                            transaction open until a call answers, and Realtime, starting up when
+//                            an app connects after none were, waits for open transactions before
+//                            it streams broadcasts: the scores sent while it waited (up to a whole
+//                            ~110 s call) were lost.
 // POST { setup: true }       from the deploy: records this function's URL for the cron job.
 // POST { seasonId }          commissioner: reloads every game of that season's postseason.
 // POST { seasonId, videos: true, after? }
@@ -23,7 +28,7 @@ import { autoCloseRounds } from '../_shared/close-round.ts';
 import type { LiveState } from '../_shared/core/live.ts';
 import { type ScheduledGame, eliminatedTeams, redraftLock } from '../_shared/core/scoreboard.ts';
 import { sql } from '../_shared/db.ts';
-import { UserError, json, serve } from '../_shared/http.ts';
+import { UserError, afterResponse, json, serve } from '../_shared/http.ts';
 import { logCommissioner } from '../_shared/league-log.ts';
 import { queueCorrectionAlerts, queueCutAlerts, queueLineupAlerts, queueSubAlerts, sendBagAlerts, sendQueuedAlerts } from './alerts.ts';
 import {
@@ -49,11 +54,13 @@ import {
 } from './feed.ts';
 
 const MLB = 'https://statsapi.mlb.com/api/v1';
+// A request that hangs fails instead, so a poll can't outlast the call's lease.
+const FETCH_TIMEOUT_MS = 10_000;
 const LEAGUES: Record<number, 'AL' | 'NL'> = { 103: 'AL', 104: 'NL' };
 
 // deno-lint-ignore no-explicit-any
 async function mlb(path: string): Promise<any> {
-  const res = await fetch(`${MLB}${path}`);
+  const res = await fetch(`${MLB}${path}`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`MLB API ${res.status} for ${path}`);
   return res.json();
 }
@@ -257,7 +264,9 @@ async function checkSavant(gamePk: number, force: boolean): Promise<boolean> {
     order by h.ended_at
     limit 1`;
   if (!hit) return false;
-  const res = await fetch(`https://baseballsavant.mlb.com/sporty-videos?playId=${hit.play_id}`);
+  const res = await fetch(`https://baseballsavant.mlb.com/sporty-videos?playId=${hit.play_id}`, {
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
   const ready = res.ok && savantHasVideo(await res.text());
   await sql.begin(async (tx) => {
     if (ready) await tx`update mlb_hits set savant_ready = true where game_pk = ${gamePk} and not savant_ready`;
@@ -508,17 +517,21 @@ async function syncSchedule(year: number, all: boolean): Promise<number> {
   return games.length;
 }
 
-/** Holds a short lease so overlapping cron calls don't poll at the same time. */
+/**
+ * Holds a short lease so overlapping cron calls don't poll at the same time. Only this call's
+ * lease is released: one that ran past it mustn't clear the lease of the call that took over.
+ */
 async function withLease<T>(seconds: number, run: () => Promise<T>): Promise<T | { skipped: true }> {
+  // In whole milliseconds, so it comes back intact as a JS Date (which has no microseconds).
   const [lease] = await sql`
-    update private.poller set running_until = now() + ${seconds} * interval '1 second'
+    update private.poller set running_until = date_trunc('milliseconds', now() + ${seconds} * interval '1 second')
     where running_until is null or running_until < now()
-    returning 1`;
+    returning running_until`;
   if (!lease) return { skipped: true };
   try {
     return await run();
   } finally {
-    await sql`update private.poller set running_until = null`;
+    await sql`update private.poller set running_until = null where running_until = ${lease.running_until}`;
   }
 }
 
@@ -585,7 +598,12 @@ async function pollRepeatedly(year: number, polls: number, every: number) {
       const [{ due }] = await sql`select private.poll_due() as due`;
       if (!due) continue;
     }
-    results.push(await pollOnce(year));
+    // A failed poll (the MLB API down for a moment, say) mustn't stop the call's later ones.
+    try {
+      results.push(await pollOnce(year));
+    } catch (e) {
+      console.error('poll', e);
+    }
   }
   return { polls: results.length, ...results.at(-1) };
 }
@@ -616,7 +634,14 @@ serve(async (req) => {
     const polls = Math.min(Math.max(body.polls ?? 1, 1), 8);
     const every = Math.min(Math.max(body.every ?? 15, 5), 30);
     // Held for the whole call, but expiring before the next one if this call dies (CPU limit).
-    return json(await withLease(Math.max(polls * every - 5, 30), () => pollRepeatedly(latest.year, polls, every)));
+    const polling = withLease(Math.max(polls * every - 5, 30), () => pollRepeatedly(latest.year, polls, every))
+      // The answer can't say so any more, and it only happens when calls overlap.
+      .then((result) => {
+        if ('skipped' in result) console.log('poll skipped: another call holds the lease');
+      })
+      .catch((e) => console.error('poll', e));
+    await afterResponse(polling);
+    return json({ started: true }, 202);
   }
 
   const userId = await requireUser(req);
