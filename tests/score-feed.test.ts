@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { type Row, type Scores, applyChanges, battingSpot, toGame } from '../supabase/functions/_shared/core/score-feed.ts';
+import { type Row, type Scores, applyChanges, battingSpot, checkBroadcast, checkLoad, toGame } from '../supabase/functions/_shared/core/score-feed.ts';
 
 // Rows as poll-games' broadcast sends them: whole table rows, extra columns and all.
 const gameRow = (gamePk: number, over: Row = {}): Row => ({
@@ -164,5 +164,52 @@ describe('battingSpot', () => {
     expect(battingSpot(null)).toBeNull();
     expect(battingSpot(undefined)).toBeNull();
     expect(battingSpot(7)).toBeNull();
+  });
+});
+
+describe('broadcast numbers', () => {
+  it('applies the next broadcast and moves on', () => {
+    expect(checkBroadcast(41, 42)).toEqual({ apply: true, missed: false, last: 42 });
+  });
+
+  it('applies a broadcast after a gap and asks for a reload', () => {
+    // 42 was lost (Realtime starting up): 43 arrives after 41.
+    expect(checkBroadcast(41, 43)).toEqual({ apply: true, missed: true, last: 43 });
+  });
+
+  it('skips a broadcast the scores already include', () => {
+    // The load returned 42, then broadcast 42 itself arrived.
+    expect(checkBroadcast(42, 42)).toEqual({ apply: false, missed: false, last: 42 });
+    expect(checkBroadcast(42, 40)).toEqual({ apply: false, missed: false, last: 42 });
+  });
+
+  it('takes the first number heard when none is known yet', () => {
+    expect(checkBroadcast(null, 42)).toEqual({ apply: true, missed: false, last: 42 });
+  });
+
+  it('applies broadcasts without a number as before', () => {
+    expect(checkBroadcast(41, undefined)).toEqual({ apply: true, missed: false, last: 41 });
+    expect(checkBroadcast(null, undefined)).toEqual({ apply: true, missed: false, last: null });
+  });
+
+  it('loads again when a broadcast heard while loading is newer than the load', () => {
+    // Broadcast 43 arrived while a load was on its way, but the load only includes up to 42.
+    expect(checkLoad(43, 42)).toEqual({ missed: true, last: 42 });
+  });
+
+  it('takes the load as is when it includes everything heard', () => {
+    expect(checkLoad(42, 42)).toEqual({ missed: false, last: 42 });
+    expect(checkLoad(40, 42)).toEqual({ missed: false, last: 42 });
+    expect(checkLoad(null, 42)).toEqual({ missed: false, last: 42 });
+  });
+
+  it('forgets the number when the load has none', () => {
+    expect(checkLoad(42, null)).toEqual({ missed: false, last: null });
+  });
+
+  it('still catches a broadcast the second load also misses, on the next broadcast', () => {
+    // 43 was overwritten by a load up to 42, and loading again stopped at 42 too: 44 shows the gap.
+    const { last } = checkLoad(43, 42);
+    expect(checkBroadcast(last, 44)).toEqual({ apply: true, missed: true, last: 44 });
   });
 });

@@ -78,9 +78,15 @@ Supabase billing and usage pages; the dashboard shows actual usage.
 - **Egress.** The Games and Standings tabs load the season once. After that, each poll sends one
   small broadcast on the private `scores` channel with only the changed rows
   (`flush_score_changes`), and the app applies it (`applyChanges` in
-  `_shared/core/score-feed.ts`). Full reloads happen only on reconnect, when a game starts, or when
-  the server asks. Before this, every change refetched the whole season (50–150 KB), which could
-  have reached 10–25 GB in a postseason.
+  `_shared/core/score-feed.ts`). Full reloads happen only on reconnect, when a game starts, when
+  the server asks, or when a broadcast was missed. Before this, every change refetched the whole
+  season (50–150 KB), which could have reached 10–25 GB in a postseason.
+  Broadcasts are numbered (`seq`, a few bytes each), and the app reloads when one skips a number
+  (one was lost, as happens while Realtime starts up) or when one heard during a load is newer than
+  the load. That second case needs a broadcast to land inside a load (under a second, against one
+  every 15 s while games are live): at most ~3% of the ~200 reconnect reloads a day, ~6 more loads,
+  under 30 MB a month. Lost broadcasts should be rarer than that since poll-games answers the cron
+  job at once.
   If the season load fails (or finds no seasons while signed in, as when the app opens before its
   sign-in is renewed), `lib/season.ts` retries up to 6 times over about a minute, then stops. A good
   start costs nothing extra; a bad one at most 6 more loads (~1 MB), and a lasting server error
