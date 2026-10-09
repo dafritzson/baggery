@@ -119,7 +119,8 @@ export default function RulesScreen() {
         </Bullet>
         <Bullet>
           A hitter you drop is burned: nobody can take him again. The exception is a hitter dropped by a manager who&apos;s
-          since been knocked out. He goes back in the pool, so anyone can draft him.
+          since been knocked out. He goes back in the pool, so anyone can draft him, the Ghost included. The hitters still
+          on a knocked-out manager&apos;s roster stay off the board.
         </Bullet>
         <Bullet>Draft 1&apos;s pool is every playoff team&apos;s active roster, plus hitters on their injured lists who could be back in time. Redrafts use the postseason rosters of MLB teams still alive.</Bullet>
       </Section>
@@ -138,6 +139,10 @@ export default function RulesScreen() {
           finished higher in the round they went out picks first.
         </Bullet>
         <Bullet><B>Round 3:</B> it&apos;s ranked with the finalists. If it finishes first, its 4 managers share the title.</Bullet>
+        <Bullet>
+          The hitters its managers dropped before they were knocked out go back in the pool, so the Ghost (or anyone) can
+          draft them.
+        </Bullet>
         <Bullet>Passing a ghost turn skips only that turn. A ghost pick nobody makes is autodrafted.</Bullet>
       </Section>
 
