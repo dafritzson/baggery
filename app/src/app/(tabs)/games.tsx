@@ -217,8 +217,14 @@ function MenuChip<T extends string>({
 }) {
   const theme = useTheme();
   const chipRef = useRef<View>(null);
+  // Where the chip is, kept after the calendar closes so it fades out in place.
   const [anchor, setAnchor] = useState<{ x: number; y: number; height: number } | null>(null);
-  const openCalendar = () => chipRef.current?.measureInWindow((x, y, _w, height) => setAnchor({ x, y, height }));
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const openCalendar = () =>
+    chipRef.current?.measureInWindow((x, y, _w, height) => {
+      setAnchor({ x, y, height });
+      setCalendarOpen(true);
+    });
   // By the World Series the list of days is long.
   const scrollToChecked = (open: boolean) => {
     if (!open || Platform.OS !== 'web') return;
@@ -276,14 +282,14 @@ function MenuChip<T extends string>({
         {chipBody}
       </Pressable>
       <DayCalendar
-        open={anchor !== null}
+        open={calendarOpen}
         anchor={anchor}
         days={options.map((o) => o.value)}
         counts={calendar.counts}
         value={value}
         today={calendar.today}
         onPick={(d) => onChange(d as T)}
-        onClose={() => setAnchor(null)}
+        onClose={() => setCalendarOpen(false)}
       />
     </>
   ) : (
