@@ -9,15 +9,14 @@
 // - longest task: the longest stretch the main thread was blocked, when taps and scrolling wait.
 // - requests the switch made, and DOM nodes the page holds afterwards. Nodes growing round after
 //   round means old screens stay mounted behind the new ones.
+// - renders: components React rendered for the switch (through the React DevTools hook, which
+//   production builds call too). Coming back to a tab was ~180 on 2026-10-04 (React Navigation's
+//   own, mostly); thousands means the tabs not on show are re-rendering.
 //
-// Run the app against local Supabase first (see CLAUDE.md), seeded with `scripts/seed-local.ts`.
-// A production build (`npx expo export -p web`, served as a single-page app) gives numbers closer
-// to what phones get than the dev server does.
-//   npm i -g playwright && npx playwright install chromium
-//   NODE_PATH=$(npm root -g) node scripts/bench-tabs.mjs [url] [rounds] [year] [chromium|webkit]
-// Playwright isn't one of the repo's dependencies, so it's loaded from NODE_PATH. The year picks
-// a season (a finished one has the most to draw). WebKit can't slow the CPU down or report long
-// tasks, but it's the engine iPhones use.
+// How to run it (a production build against local Supabase), and the numbers so far:
+// .claude/skills/measure-speed/SKILL.md.
+//   NODE_PATH=<dir with playwright> node scripts/bench-tabs.mjs [url] [rounds] [year] [chromium|webkit]
+// WebKit can't slow the CPU down or report long tasks, but it's the engine iPhones use.
 import { createRequire } from 'node:module';
 
 const playwright = createRequire(import.meta.url)('playwright');
@@ -60,6 +59,32 @@ await page.addInitScript(() => {
     // WebKit has no long tasks.
   }
   addEventListener('click', (e) => (window.__bench.tapAt = e.timeStamp), true);
+  // Counts the components each commit rendered, the way React DevTools does: only into subtrees
+  // whose children changed, since React leaves a skipped subtree's fibers (and stale flags) as is.
+  window.__bench.renders = 0;
+  const PERFORMED_WORK = 1;
+  const count = (fiber) => {
+    for (let c = fiber.child; c; c = c.sibling) {
+      const prev = c.alternate;
+      if (typeof c.type !== 'string' && c.type && (!prev || c.flags & PERFORMED_WORK)) window.__bench.renders++;
+      if (!prev || c.child !== prev.child) count(c);
+    }
+  };
+  window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
+    supportsFiber: true,
+    renderers: new Map(),
+    inject(renderer) {
+      this.renderers.set(this.renderers.size + 1, renderer);
+      return this.renderers.size;
+    },
+    checkDCE() {},
+    onScheduleFiberRoot() {},
+    onCommitFiberUnmount() {},
+    onPostCommitFiberRoot() {},
+    onCommitFiberRoot(_, root) {
+      count(root.current);
+    },
+  };
   const watch = () =>
     new MutationObserver((records) => {
       if (records.some((r) => !r.target.closest?.('[data-tab-bar]') && !r.target.parentElement?.closest('[data-tab-bar]')))
@@ -132,17 +157,21 @@ const results = [];
 for (let round = 1; round <= ROUNDS; round++) {
   for (const tab of TABS) {
     requests = 0;
-    const start = await page.evaluate(() => performance.now());
+    const start = await page.evaluate(() => {
+      window.__bench.renders = 0;
+      return performance.now();
+    });
     const drawnAt = await watchFirstFrame(tab.path);
     await page.getByRole('tab', { name: tab.label }).click({ delay: TAP_MS });
     const drawn = await drawnAt();
     const settled = await settle(start);
-    const { tapAt, longest, nodes } = await page.evaluate((from) => {
+    const { tapAt, longest, nodes, renders } = await page.evaluate((from) => {
       const tasks = window.__bench.longTasks.filter((t) => t.start >= from);
       return {
         tapAt: window.__bench.tapAt,
         longest: Math.max(0, ...tasks.map((t) => t.duration)),
         nodes: document.getElementsByTagName('*').length,
+        renders: window.__bench.renders,
       };
     }, start);
     const tap = tapAt > start ? tapAt : start;
@@ -154,6 +183,7 @@ for (let round = 1; round <= ROUNDS; round++) {
       longestTaskMs: Math.round(longest),
       requests,
       domNodes: nodes,
+      renders,
     });
   }
 }
@@ -171,6 +201,8 @@ console.table(
       firstSettledMs: rows[0].settledMs,
       againMedianFrameMs: again.length ? median(again.map((r) => r.frameMs)) : null,
       againWorstFrameMs: again.length ? Math.max(...again.map((r) => r.frameMs)) : null,
+      againMedianRenders: again.length ? median(again.map((r) => r.renders)) : null,
+      domNodes: rows.at(-1).domNodes,
     };
   }),
 );
