@@ -1,10 +1,10 @@
 -- Games MLB schedules "if necessary" and then doesn't need (a Wild Card game 3 after a 2-0 sweep,
 -- say) drop out of its schedule but stay in mlb_games as Preview, since the poller only upserts
 -- the games the schedule lists. games_on() counted them as about to start for 12 hours after their
--- start time, which kept the cron job at the live cadence (a call every 2 minutes, the schedule
--- read every minute) all night with no game on: on October 9, two Division Series game 5s that
--- were never played did that from 5 PM to 5 AM Pacific on both projects. A game whose series one
--- team has already won isn't coming, so it no longer counts.
+-- start time, which kept the cron job at the game-time cadence (with nothing live, a call about
+-- every 4 minutes, ~15 an hour against ~6 idle) all night with no game on: on October 9, two
+-- Division Series game 5s that were never played did that from 5 PM to 5 AM Pacific on both
+-- projects. A game whose series one team has already won isn't coming, so it no longer counts.
 
 /** A game is on, or about to start (its start time is set and within 10 minutes, and its series isn't over). */
 create or replace function private.games_on() returns boolean

@@ -40,8 +40,9 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   - the schedule: every minute around game time, every 10 minutes otherwise. "If necessary"
     games that weren't needed stay in `mlb_games` as Preview after MLB drops them, and don't
     count as game time once their series is decided (`private.games_on()`); before that, each
-    one kept both projects at the live cadence (~30 calls an hour) for 12 hours after its start
-    time, ~360 calls a project per unplayed game, around ten a postseason;
+    one kept both projects at the game-time cadence (with nothing live, a call about every 4
+    minutes, ~15 an hour against ~6 idle) for 12 hours after its start time: ~110 extra calls a
+    project per unplayed game (measured October 10), around ten a postseason;
   - finished games: every 10 minutes for 6 hours (official scoring changes).
 
   The cron job runs once a minute, and every 2 minutes while a game is live or starts within 10
