@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { type LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
@@ -12,6 +12,7 @@ import type { GameType } from '@core/types.ts';
 import { type Bagger, HitterRow, UpTag } from '@/components/at-bat';
 import { BoxScoreSheet } from '@/components/box-score';
 import { Card } from '@/components/card';
+import { DayCalendar } from '@/components/day-calendar';
 import { HitVideosSheet } from '@/components/hit-videos';
 import { LiveStatus } from '@/components/live-status';
 import { Loader } from '@/components/loader';
@@ -133,6 +134,7 @@ export default function GamesScreen() {
                 value={day}
                 onChange={showDay}
                 stepper={days.map((d) => dayLabel(d, today))}
+                calendar={{ counts: new Map(days.map((d) => [d, listed.filter((g) => gameDay(g) === d).length])), today }}
               />
             )}
             {/* The chip says "Championship", not "Championship Series", to fit beside the toggle on phones. */}
@@ -191,7 +193,7 @@ export default function GamesScreen() {
  * The current choice as a chip, opening a menu of them all (on web, scrolled to the current one).
  * `stepper` adds arrows inside the chip to step to the previous or next choice. The chip is as wide
  * as the longest label it can show, so the arrows never move; at either end an arrow is hidden but
- * keeps its place.
+ * keeps its place. `calendar` (the day chip) opens a calendar of the days instead of the menu.
  */
 function MenuChip<T extends string>({
   label,
@@ -200,6 +202,7 @@ function MenuChip<T extends string>({
   value,
   onChange,
   stepper,
+  calendar,
 }: {
   label: string;
   /** What's being picked, for screen readers: "day". */
@@ -209,8 +212,13 @@ function MenuChip<T extends string>({
   onChange: (value: T) => void;
   /** Every label the chip can show, to size it to the longest. */
   stepper?: string[];
+  /** Games on each day, and today, for a calendar in place of the menu. */
+  calendar?: { counts: Map<string, number>; today: string };
 }) {
   const theme = useTheme();
+  const chipRef = useRef<View>(null);
+  const [anchor, setAnchor] = useState<{ x: number; y: number; height: number } | null>(null);
+  const openCalendar = () => chipRef.current?.measureInWindow((x, y, _w, height) => setAnchor({ x, y, height }));
   // By the World Series the list of days is long.
   const scrollToChecked = (open: boolean) => {
     if (!open || Platform.OS !== 'web') return;
@@ -251,12 +259,42 @@ function MenuChip<T extends string>({
       </DropdownMenu.Content>
     </DropdownMenu.Root>
   );
+  const chipBody = (
+    <View style={[styles.chip, styles.chipInStepper]}>
+      <ThemedText type="smallBold">{label}</ThemedText>
+      {stepper &&
+        [...new Set(stepper)].map((l) => (
+          <ThemedText key={l} type="smallBold" aria-hidden style={styles.sizer}>
+            {l}
+          </ThemedText>
+        ))}
+    </View>
+  );
+  const picker = calendar ? (
+    <>
+      <Pressable ref={chipRef} onPress={openCalendar} accessibilityRole="button" aria-label={`Showing ${label}, change ${title}`}>
+        {chipBody}
+      </Pressable>
+      <DayCalendar
+        open={anchor !== null}
+        anchor={anchor}
+        days={options.map((o) => o.value)}
+        counts={calendar.counts}
+        value={value}
+        today={calendar.today}
+        onPick={(d) => onChange(d as T)}
+        onClose={() => setAnchor(null)}
+      />
+    </>
+  ) : (
+    menu
+  );
   if (!stepper) return menu;
   return (
     <View style={[styles.stepper, surface]}>
       {/* A missing arrow leaves its space empty, so the date doesn't slide over. */}
       {prev ? arrow(prev.value, '‹', 'Previous', styles.stepPrev) : <View style={styles.step} />}
-      {menu}
+      {picker}
       {next ? arrow(next.value, '›', 'Next', styles.stepNext) : <View style={styles.step} />}
     </View>
   );
