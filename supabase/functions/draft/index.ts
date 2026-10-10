@@ -154,8 +154,15 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
   };
 }
 
-/** When roster changes take effect. Initial-draft players count from the start of the year. */
+/**
+ * When roster changes take effect. Initial-draft players count from the start of the year, redraft
+ * players from the lock (the series' first pitch). A pick made after the lock, by a straggler or in
+ * a draft that couldn't start before it, counts only from when it's made: it can't collect the bags
+ * of games already played, and the hitter it drops keeps his for the team that had him.
+ */
 function effectiveAt(draft: DraftRow): Date {
+  const now = new Date();
+  if (draft.locks_at && now > draft.locks_at) return now;
   if (draft.kind === 'initial') return new Date(Date.UTC(draft.year, 0, 1));
   if (!draft.locks_at) throw new UserError('Set the lock time before running a redraft.');
   return draft.locks_at;
