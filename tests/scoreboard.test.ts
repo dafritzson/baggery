@@ -168,7 +168,7 @@ describe('roundDecided', () => {
     expect(roundDecided(3, series('W', [1, 2], 'WWWLL', 7, 2))).toBe(false);
     expect(roundDecided(3, series('W', [1, 2], 'WWWLLW', 7, 1))).toBe(true);
   });
-  it('redraftLock: the series’ first pitch, once the round before is decided and the time is set', () => {
+  it('redraftLock: the series’ first pitch, once the round before is decided, every series is scheduled and the time is set', () => {
     const at = (start: string, tbd = false) => (g: SeriesGame): ScheduledGame => ({ ...g, start, startTimeTbd: tbd });
     const wildCard = [
       ...series('F', [1, 9], 'WW', 3),
@@ -179,15 +179,33 @@ describe('roundDecided', () => {
     const ds = [
       at('2026-10-04T22:08:00Z')(series('D', [1, 5], '', 5, 1)[0]),
       at('2026-10-04T18:08:00Z')(series('D', [2, 6], '', 5, 1)[0]),
+      at('2026-10-05T18:08:00Z')(series('D', [3, 11], '', 5, 1)[0]),
     ];
+    const lastDs = at('2026-10-05T22:08:00Z')(series('D', [4, 12], '', 5, 1)[0]);
     // A Wild Card still going: a Division Series could still be missing from the schedule.
-    expect(redraftLock('D', [...wildCard, ...lastWildCard('WL'), ...ds])).toBeNull();
-    expect(redraftLock('D', [...wildCard, ...lastWildCard('WLW'), ...ds])).toBe('2026-10-04T18:08:00Z');
+    expect(redraftLock('D', [...wildCard, ...lastWildCard('WL'), ...ds, lastDs])).toBeNull();
+    // Every Wild Card won, but MLB still lists the last one's Division Series with a placeholder
+    // team, so it isn't saved yet: it could be the first to start.
+    expect(redraftLock('D', [...wildCard, ...lastWildCard('WLW'), ...ds])).toBeNull();
+    expect(redraftLock('D', [...wildCard, ...lastWildCard('WLW'), ...ds, lastDs])).toBe('2026-10-04T18:08:00Z');
     // The earliest game's time not set yet: wait.
-    const tbd = at('2026-10-04T07:33:00Z', true)(series('D', [3, 7], '', 5, 1)[0]);
-    expect(redraftLock('D', [...wildCard, ...lastWildCard('WLW'), ...ds, tbd])).toBeNull();
+    const tbd = at('2026-10-04T07:33:00Z', true)(series('D', [3, 11], '', 5, 1)[0]);
+    expect(redraftLock('D', [...wildCard, ...lastWildCard('WLW'), ...ds, lastDs, tbd])).toBeNull();
     // Draft 1 isn't a redraft (sync-pool sets its lock).
     expect(redraftLock('F', wildCard)).toBeNull();
+
+    // The last Division Series to end is the ALDS, yet the ALCS starts a day before the NLCS: when
+    // the ALDS ends, only the NLCS is saved.
+    const divisionSeries = [
+      ...series('D', [1, 2], 'WWW', 5),
+      ...series('D', [3, 4], 'WLWW', 5),
+      ...series('D', [5, 6], 'LLL', 5),
+      ...series('D', [7, 8], 'WLWLW', 5),
+    ].map(at('2026-10-08T18:00:00Z'));
+    const nlcs = series('L', [1, 3], '', 7, 7).map(at('2026-10-13T23:08:00Z'));
+    const alcs = series('L', [6, 7], '', 7, 7).map(at('2026-10-12T20:03:00Z'));
+    expect(redraftLock('L', [...divisionSeries, ...nlcs])).toBeNull();
+    expect(redraftLock('L', [...divisionSeries, ...nlcs, ...alcs])).toBe('2026-10-12T20:03:00Z');
   });
 
   it('eliminatedTeams: each decided series’ loser, as soon as it’s clinched', () => {

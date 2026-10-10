@@ -398,17 +398,25 @@ const PREVIOUS_ROUND: Partial<Record<GameType, { gameType: GameType; count: numb
   W: { gameType: 'L', count: 2 },
 };
 
+/** How many series each redraft's MLB round has. */
+const SERIES_IN_ROUND: Partial<Record<GameType, number>> = { D: 4, L: 2, W: 1 };
+
 /**
  * When a redraft before `gameType`'s series locks: that series' first pitch. Null until it's
- * certain: every series of the round before has a winner (so every matchup, and its games, is on
- * the schedule) and the earliest game's time is set, not "TBD".
+ * certain: every series of the round before has a winner, every series of this round is on the
+ * schedule, and the earliest game's time is set, not "TBD". A winner isn't enough on its own: MLB
+ * lists a series' games with a placeholder team until both teams are known (those aren't saved),
+ * so when the last Division Series ends, the other league's LCS can be the only one saved, though
+ * it may start after this one.
  */
 export function redraftLock(gameType: GameType, games: ScheduledGame[]): string | null {
   const previous = PREVIOUS_ROUND[gameType];
   if (!previous) return null;
   const before = seriesResults(games.filter((g) => g.gameType === previous.gameType));
   if (before.length < previous.count || before.some((s) => s.winner === null)) return null;
-  const first = games.filter((g) => g.gameType === gameType).sort((a, b) => Date.parse(a.start) - Date.parse(b.start))[0];
+  const these = games.filter((g) => g.gameType === gameType);
+  if (seriesResults(these).length < (SERIES_IN_ROUND[gameType] ?? 1)) return null;
+  const first = these.sort((a, b) => Date.parse(a.start) - Date.parse(b.start))[0];
   return first && !first.startTimeTbd ? first.start : null;
 }
 
