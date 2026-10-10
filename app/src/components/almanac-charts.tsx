@@ -4,6 +4,7 @@ import Svg, { Line, Rect, Text as SvgText } from 'react-native-svg';
 
 import type { ManagerScouting, TeamSeason } from '@core/almanac.ts';
 
+import { ordinal } from '@/components/manager-link';
 import { ThemedText } from '@/components/themed-text';
 import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -169,7 +170,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'transparent',
   },
-  lbRank: { width: 22, alignItems: 'center' },
+  lbRank: { width: 26, alignItems: 'center' },
   lbNumber: { fontSize: 12, lineHeight: 20, fontWeight: '700' },
   lbBody: { flex: 1, gap: 3 },
   lbLine: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.two },
@@ -268,22 +269,30 @@ const LEADERBOARD_HEIGHT = 500;
 
 /**
  * A ranked list: medals for the top three, each row in its manager's color. The leader's row is
- * larger. A long list scrolls inside its own box, so the page doesn't get longer.
+ * larger. Rows showing the same value share a place ("T4", or three bronze medals for a tie for
+ * 3rd), and the next row skips ahead. A long list scrolls inside its own box, so the page doesn't
+ * get longer.
  */
 export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
   const theme = useTheme();
+  // Rows come sorted, so a tie is a run of rows with the same label: each takes the run's first place.
+  const places = rows.map((r, i) => rows.findIndex((o) => o.label === r.label) + 1);
   return (
     <ScrollView style={{ maxHeight: LEADERBOARD_HEIGHT }} contentContainerStyle={{ gap: Spacing.one }} nestedScrollEnabled>
       {rows.map((r, i) => {
         const color = r.manager?.color ?? theme.accent;
-        const first = i === 0;
+        const place = places[i];
+        const first = place === 1;
+        const tied = rows.some((o, j) => j !== i && places[j] === place);
         return (
           <Pressable key={r.key} onPress={r.onPress} disabled={!r.onPress} style={[styles.lbRow, first && { backgroundColor: `${color}22`, borderColor: color }]}>
             <View style={styles.lbRank}>
-              {i < 3 ? (
-                <ThemedText style={{ fontSize: first ? 18 : 16, lineHeight: first ? 22 : 20 }}>{MEDALS[i]}</ThemedText>
+              {place <= 3 ? (
+                <ThemedText style={{ fontSize: first ? 18 : 16, lineHeight: first ? 22 : 20 }} aria-label={`${tied ? 'Tied for ' : ''}${ordinal(place)}`}>
+                  {MEDALS[place - 1]}
+                </ThemedText>
               ) : (
-                <ThemedText themeColor="textSecondary" style={styles.lbNumber}>{i + 1}</ThemedText>
+                <ThemedText themeColor="textSecondary" style={styles.lbNumber}>{`${tied ? 'T' : ''}${place}`}</ThemedText>
               )}
             </View>
             <View style={styles.lbBody}>
