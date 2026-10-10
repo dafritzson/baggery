@@ -778,9 +778,10 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: Spacing.two + 4, paddingVertical: Spacing.one + 2, borderRadius: Radius.md },
   // The day chip with its arrows: one raised surface, split by hairlines.
   stepper: { flexDirection: 'row', alignItems: 'stretch', borderRadius: Radius.md },
-  chipInStepper: { paddingHorizontal: Spacing.two + 2, alignItems: 'center' },
+  // Kept tight so "Today · 10/10" still fits beside the toggle on a phone.
+  chipInStepper: { paddingHorizontal: Spacing.two, alignItems: 'center' },
   sizer: { height: 0, overflow: 'hidden' },
-  step: { width: 26, alignItems: 'center', justifyContent: 'center' },
+  step: { width: 22, alignItems: 'center', justifyContent: 'center' },
   stepPrev: { borderRightWidth: StyleSheet.hairlineWidth },
   stepNext: { borderLeftWidth: StyleSheet.hairlineWidth },
   stepGlyph: { fontSize: 20, lineHeight: 20 },
