@@ -59,6 +59,14 @@ export default function StandingsScreen() {
   return <SeasonStandings key={data.season.id} data={data} scores={scores} refetch={refetch} />;
 }
 
+/** The round after the last closed one, while none of its games has started (null otherwise). */
+function upcomingRound(data: SeasonData, scores: Scores): FantasyRound | null {
+  const closed = Math.max(0, ...data.teams.map((t) => t.eliminated_after_round ?? 0));
+  if (closed < 1 || closed >= 3) return null;
+  const next = (closed + 1) as FantasyRound;
+  return currentRound(scores.games) < next ? next : null;
+}
+
 function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: Scores; refetch: () => void }) {
   const wide = useLayout() === 'wide';
   const theme = useTheme();
@@ -66,7 +74,13 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
   const [view, setView] = useState<'standings' | 'team'>('standings');
   const { team: linkedTeam } = useLocalSearchParams<{ team?: string }>();
   // A round picked that hasn't started (the scrubber only goes where games have been played).
-  const [futureRound, setFutureRound] = useState<FantasyRound | null>(null);
+  // Between rounds, the latest standings are the next round's, once the last one is closed.
+  const nextRound = upcomingRound(data, scores);
+  const [futureRound, setFutureRound] = useState<FantasyRound | null>(nextRound);
+  const nextRoundRef = useRef(nextRound);
+  useEffect(() => {
+    nextRoundRef.current = nextRound;
+  }, [nextRound]);
   // Where the scrubber is; null for the latest moment, which keeps up with live games.
   const [stop, setStop] = useState<Stop | null>(null);
   const [zoom, setZoom] = useState<Zoom>('season');
@@ -96,7 +110,7 @@ function SeasonStandings({ data, scores, refetch }: { data: SeasonData; scores: 
       const toLatest = () => {
         setPlaying(false);
         setStop(null);
-        setFutureRound(null);
+        setFutureRound(nextRoundRef.current);
       };
       toLatest();
       const sub = AppState.addEventListener('change', (state) => {
