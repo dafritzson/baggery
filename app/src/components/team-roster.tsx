@@ -13,7 +13,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { headshotUrl, mlbTeamAbbr } from '@/lib/format';
 import { outNameStyle } from '@/lib/out-name';
 import { useOpenPlayer } from '@/lib/player';
-import type { SeasonData, Team } from '@/lib/season';
+import { type SeasonData, type Team, ghostManagers } from '@/lib/season';
 import { ownerLine, ownerName, teamName } from '@/lib/teams';
 
 /**
@@ -55,13 +55,19 @@ export function TeamTile({
   const commish = !!team.user_id && data.commissionerIds.has(team.user_id);
   // Past seasons' teams are named after their manager: no need to say it twice.
   const line = ownerLine(data, team);
-  const owner = line === teamName(team) ? null : line;
+  // Knocked out, while the season's on: the owner line says when, and the tile fades.
+  const outAfter = data.season.status === 'complete' ? null : team.eliminated_after_round;
+  const onGhost = outAfter !== null && ghostManagers(data).some((t) => t.id === team.id);
+  const owner =
+    outAfter === null
+      ? line === teamName(team) ? null : line
+      : [line, `out after round ${outAfter}`, onGhost && 'on the 👻'].filter(Boolean).join(' · ');
   const openSpot = !team.user_id && !team.is_ghost && data.season.status !== 'complete';
   // Past seasons' unclaimed teams are named after their manager, so their badge takes the name's initial.
   const badgeOwner = openSpot ? null : (ownerName(data, team) ?? teamName(team));
   const surface = mine ? theme.mine : theme.background;
   return (
-    <View style={[styles.tile, { backgroundColor: surface }, style]}>
+    <View style={[styles.tile, { backgroundColor: surface }, outAfter !== null && styles.outTile, style]}>
       <Pressable
         onPress={onToggle ?? (() => setOpen(!open))}
         accessibilityRole="button"
@@ -236,6 +242,7 @@ function RosterRow({
 
 const styles = StyleSheet.create({
   tile: { borderRadius: Radius.md, paddingHorizontal: Spacing.two + 4, paddingVertical: Spacing.two + 2, gap: Spacing.two },
+  outTile: { opacity: 0.7 },
   tileHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two + 2 },
   tileTitle: { flex: 1, minWidth: 0, gap: 1 },
   teamName: { fontSize: 15, lineHeight: 19, fontWeight: 700 },
