@@ -10,16 +10,20 @@ export function roundGameTypes(round: FantasyRound): GameType[] {
   return (Object.keys(ROUND_FOR_GAME_TYPE) as GameType[]).filter((t) => ROUND_FOR_GAME_TYPE[t] === round);
 }
 
-/** `teamIds` ranked on the round's stats (TB, then SLG, OBP, HR, R, RBI; full ties share a rank). */
+/**
+ * `teamIds` ranked on the round's stats (TB, then SLG, OBP, HR, R, RBI; full ties share a rank).
+ * `gameTypes` narrows it to part of the round (Draft 2's order by the Wild Card games).
+ */
 export async function roundRanking(
   tx: Tx,
   season: { id: string; year: number },
   round: FantasyRound,
   teamIds: string[],
+  gameTypes: GameType[] = roundGameTypes(round),
 ): Promise<RankedTeam[]> {
   const games = await tx`
     select game_pk, game_type, start_time from mlb_games
-    where season_year = ${season.year} and game_type in ${tx(roundGameTypes(round))}`;
+    where season_year = ${season.year} and game_type in ${tx(gameTypes)}`;
   const spells = await tx`select fantasy_team_id, mlb_player_id, from_at, to_at from roster_spells where season_id = ${season.id}`;
   const lines = games.length
     ? await tx`

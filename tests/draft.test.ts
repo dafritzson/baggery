@@ -3,12 +3,18 @@ import {
   type DraftAction,
   type DraftConfig,
   type DraftState,
+  actionsFit,
   applyAction,
+  circularSlots,
+  defaultOrderBy,
   autodraftAction,
   draftable,
   mustReplace,
   ghostTurns,
   nextTurn,
+  orderByOptions,
+  raffleDraw,
+  raffleTickets,
   randomOrder,
   redraftOrder,
   snakeSlots,
@@ -408,5 +414,119 @@ describe('takenPlayers', () => {
     const taken = takenPlayers([stint(2, 'E', true)], new Set(['E']));
     const s = state(redraft, { rosters: new Map([['A', [10, 11, 12, 13]], ['B', []], ['C', []]]), taken });
     expect(validateAction(s, pick('A', 2, 10))).toBeNull();
+  });
+});
+
+describe('circular drafts', () => {
+  const circular: DraftConfig = { kind: 'redraft', order, rounds: 4, pattern: 'circular' };
+
+  it('runs the same order every round', () => {
+    expect(circularSlots(order, 3).join('')).toBe('ABCABCABC');
+  });
+
+  it('starts round 2 with the first team again', () => {
+    const actions = [pick('A', 1, 10), pick('B', 2, 20), pick('C', 3, 30)];
+    expect(nextTurn(circular, actions)).toEqual({ teamId: 'A', round: 2, slot: 3 });
+  });
+
+  it('puts the ghost on its own slots', () => {
+    const config: DraftConfig = {
+      kind: 'redraft',
+      order: ['A', 'G'],
+      rounds: 4,
+      pattern: 'circular',
+      ghost: { teamId: 'G', turns: ghostTurns(4, ['X', 'Y'], ['P', 'Q']) },
+    };
+    expect(nextTurn(config, [pick('A', 1, 10)])).toMatchObject({ teamId: 'G', slot: 1, ghost: { by: 'P', kind: 'add' } });
+  });
+});
+
+describe('actionsFit', () => {
+  const round1 = [pick('A', 1, 10), pick('B', 2, 20)];
+
+  it('takes a pattern change in round 1', () => {
+    expect(actionsFit({ ...redraft, pattern: 'circular' }, round1)).toBe(true);
+  });
+
+  it('turns down a change that moves a pick already made', () => {
+    expect(actionsFit({ ...redraft, order: ['B', 'A', 'C'] }, round1)).toBe(false);
+    const intoRound2 = [...round1, pick('C', 3, 30), pick('C', 4, 31)];
+    expect(actionsFit(redraft, intoRound2)).toBe(true);
+    expect(actionsFit({ ...redraft, pattern: 'circular' }, intoRound2)).toBe(false);
+  });
+
+  it('takes any order before the first pick', () => {
+    expect(actionsFit({ ...redraft, order: ['C', 'B', 'A'] }, [])).toBe(true);
+  });
+});
+
+describe('draft settings', () => {
+  it('limits each draft’s order sources', () => {
+    expect(orderByOptions(1)).toEqual(['random']);
+    expect(orderByOptions(2)).toEqual(['random', 'rank']);
+    expect(orderByOptions(3)).toEqual(['random', 'rank', 'raffle']);
+    expect(orderByOptions(4)).toEqual(['random', 'rank', 'raffle']);
+  });
+
+  it('defaults to random, then the previous round’s rank', () => {
+    expect([1, 2, 3, 4].map(defaultOrderBy)).toEqual(['random', 'random', 'rank', 'rank']);
+  });
+});
+
+describe('raffle', () => {
+  // Round 2: A 30 bags, B 25, C 20 (advanced on a tiebreaker over D, also 20). The ghost has 10.
+  const cut = { rank: 3, tb: 20 };
+
+  it('gives bags above the cut line plus 1', () => {
+    const ranked = [
+      { teamId: 'A', rank: 1, tb: 30 },
+      { teamId: 'B', rank: 2, tb: 25 },
+      { teamId: 'C', rank: 3, tb: 20 },
+    ];
+    expect(raffleTickets(ranked, { rank: 4, tb: 20 })).toEqual([
+      { teamId: 'A', tickets: 11 },
+      { teamId: 'B', tickets: 6 },
+      { teamId: 'C', tickets: 1 },
+    ]);
+  });
+
+  it('gives a survivor of a full tie at the cut (a drink-off) 1 ticket', () => {
+    expect(raffleTickets([{ teamId: 'C', rank: 3, tb: 20 }], cut)).toEqual([{ teamId: 'C', tickets: 1 }]);
+  });
+
+  it('gives the ghost tickets only at or above the best manager knocked out', () => {
+    expect(raffleTickets([{ teamId: 'G', rank: 6, tb: 10 }], { rank: 4, tb: 20 })).toEqual([{ teamId: 'G', tickets: 0 }]);
+    expect(raffleTickets([{ teamId: 'G', rank: 2, tb: 26 }], { rank: 4, tb: 20 })).toEqual([{ teamId: 'G', tickets: 7 }]);
+    // Same bags as that manager, but ahead of him on a tiebreaker.
+    expect(raffleTickets([{ teamId: 'G', rank: 4, tb: 20 }], { rank: 5, tb: 20 })).toEqual([{ teamId: 'G', tickets: 1 }]);
+  });
+
+  const entries = [
+    { teamId: 'A', tickets: 11 },
+    { teamId: 'B', tickets: 6 },
+    { teamId: 'C', tickets: 1 },
+    { teamId: 'G', tickets: 0 },
+  ];
+
+  it('draws a ticket per pick and takes the winner’s tickets out of the pot', () => {
+    // Ticket 0 is A's; then of B's 6 and C's 1, the last (C's) ticket; B is left.
+    const draws = [0, 0.99];
+    expect(raffleDraw(entries, () => draws.shift() ?? 0)).toEqual(['A', 'C', 'B', 'G']);
+    // Ticket 17 of 18 is C's; then ticket 11 of A's 11 and B's 6 is B's.
+    const later = [17 / 18, 11 / 17];
+    expect(raffleDraw(entries, () => later.shift() ?? 0)).toEqual(['C', 'B', 'A', 'G']);
+  });
+
+  it('puts teams without tickets last', () => {
+    for (const r of [0, 0.5, 0.999]) expect(raffleDraw(entries, () => r).at(-1)).toBe('G');
+  });
+
+  it('draws in proportion to tickets', () => {
+    let seed = 1;
+    const random = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+    const firsts = Array.from({ length: 18000 }, () => raffleDraw(entries, random)[0]);
+    const share = (t: string) => firsts.filter((f) => f === t).length / firsts.length;
+    expect(share('A')).toBeCloseTo(11 / 18, 1);
+    expect(share('C')).toBeCloseTo(1 / 18, 1);
   });
 });

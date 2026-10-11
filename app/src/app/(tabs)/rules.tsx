@@ -100,7 +100,12 @@ export default function RulesScreen() {
             ['Draft 4', 'Before the World Series', 'Round 2 standings, the Ghost included'],
           ]}
         />
-        <Bullet>Every draft is a snake, up to 4 rounds. Picks aren&apos;t timed.</Bullet>
+        <Bullet>Every draft is up to 4 rounds, a snake unless the commissioner makes it circular. Picks aren&apos;t timed.</Bullet>
+        <Bullet>
+          The orders above are the defaults: the commissioner can set any draft to a random order, by rank, or (Drafts 3
+          and 4) by raffle. In a raffle you get a ticket for each bag above the cut line (the best manager knocked out that
+          round), plus 1. The first ticket drawn picks first, and that team&apos;s tickets leave the pot.
+        </Bullet>
         <Bullet>
           Drafts 2 to 4 are redrafts. A hitter whose MLB team has been eliminated, or who was left off its postseason roster,
           leaves an empty spot on your roster.
@@ -128,12 +133,12 @@ export default function RulesScreen() {
       <Section title="The Ghost 👻" {...fold('ghost')}>
         <ThemedText type="small">Knocked out? You join the Ghost, a team shared by the eliminated managers that can still win it all.</ThemedText>
         <Bullet>
-          <B>Draft 3:</B> after the survivors&apos; snake, the 2 managers eliminated in round 1 each add an undrafted hitter
+          <B>Draft 3:</B> after the survivors&apos; picks, the 2 managers eliminated in round 1 each add an undrafted hitter
           to the Ghost. Of those 2 managers, the one who finished higher in round 1 picks first.
         </Bullet>
         <Bullet><B>Round 2:</B> it plays the Championship Series with those 2 hitters. It&apos;s never cut and takes nobody&apos;s spot: the bottom {survivors[0] - survivors[1]} managers are out wherever the Ghost finishes.</Bullet>
         <Bullet>
-          <B>Draft 4:</B> the Ghost joins the finalists&apos; snake, placed by its round 2 bags like everyone else. Its first 2
+          <B>Draft 4:</B> the Ghost drafts with the finalists, placed by its round 2 bags like everyone else (in a raffle, no tickets if it finished below the best manager knocked out). Its first 2
           turns fill its 2 empty spots, with no drop and no pass (unless nobody undrafted is left), and go to the 2 managers eliminated in round 2. Its last
           2 turns are regular redraft picks and go to the 2 managers eliminated in round 1. In each pair, the manager who
           finished higher in the round they went out picks first.

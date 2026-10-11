@@ -4,7 +4,17 @@ import { type ReactNode, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
-import { type DraftConfig, ROSTER_SIZE, type Turn, draftTurns, nextTurn } from '@core/draft.ts';
+import {
+  type DraftConfig,
+  type DraftOrderBy,
+  type DraftPattern,
+  ROSTER_SIZE,
+  type Turn,
+  defaultOrderBy,
+  draftTurns,
+  nextTurn,
+  orderByOptions,
+} from '@core/draft.ts';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
@@ -19,6 +29,7 @@ import { Sheet } from '@/components/sheet';
 import { FoldChevron, HeadshotStack, RosterRows, TeamTile, emptySlots } from '@/components/team-roster';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Toggle } from '@/components/toggle';
 import { Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
@@ -188,7 +199,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
         <>
           {errorText}
           {commissioner?.canStart && (
-            <Button label={commissioner.startLabel} onPress={() => commissioner.confirm('start')} />
+            <Button label="Start the draft" onPress={() => commissioner.confirm('start')} />
           )}
           {ghostHelp}
           {yieldButton}
@@ -397,80 +408,116 @@ function Board({ data, draft, config }: { data: SeasonData; draft: Draft; config
   const current = draft.status === 'live' ? nextTurn(config, actions) : null;
   const n = draft.pick_order.length;
 
-  if (n === 0) return <ThemedText themeColor="textSecondary">The order is set when the draft starts.</ThemedText>;
+  if (n === 0) {
+    return <ThemedText themeColor="textSecondary">The order is set when the draft starts: {orderText(draft)}.</ThemedText>;
+  }
 
   return (
-    <ScrollView horizontal>
-      <View>
-        <View style={styles.boardRow}>
-          {draft.pick_order.map((teamId) => {
-            const team = data.teams.find((t) => t.id === teamId);
-            const owner = team && (team.is_ghost ? ownerLine(data, team) : ownerName(data, team));
-            return (
-              <View key={teamId} style={styles.boardCell}>
-                <ThemedText type="smallBold" numberOfLines={1}>{team ? teamName(team) : '—'}</ThemedText>
-                {owner && <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>{owner}</ThemedText>}
-              </View>
-            );
-          })}
-        </View>
-        {Array.from({ length: draft.rounds }, (_, round) => (
-          <View key={round} style={styles.boardRow}>
-            {draft.pick_order.map((teamId, col) => {
-              // Snake: odd rounds run right to left.
-              const slot = round * n + (round % 2 === 0 ? col : n - 1 - col);
-              const action = bySlot.get(slot);
-              const isCurrent = current?.slot === slot;
-              return (
-                <ThemedView
-                  key={teamId}
-                  type="backgroundElement"
-                  style={[styles.boardCell, styles.boardPick, isCurrent && { borderColor: theme.danger, borderWidth: 2 }]}>
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {pickLabel(slot, n)}
-                    {teamId === config.ghost?.teamId && <GhostBy data={data} config={config} slot={slot} />}
-                  </ThemedText>
-                  {action?.type === 'pick' ? (
-                    <PlayerName playerId={action.addPlayerId} numberOfLines={2}>{playerName(data, action.addPlayerId)}</PlayerName>
-                  ) : (
-                    <ThemedText type="small" numberOfLines={2}>
-                      {action?.type === 'yield' ? 'Yielded' : isCurrent ? 'On the clock' : ''}
-                    </ThemedText>
-                  )}
-                </ThemedView>
-              );
-            })}
-          </View>
-        ))}
-        {ghostAfter && (
-          // Draft 3: the ghost's picks, by the managers out after round 1, come after the snake.
+    <View style={styles.boardWrap}>
+      <ThemedText type="small" themeColor="textSecondary">{capitalize(orderText(draft))}.</ThemedText>
+      {draft.raffle && <RaffleDraw data={data} raffle={draft.raffle} />}
+      <ScrollView horizontal>
+        <View>
           <View style={styles.boardRow}>
-            {ghostAfter.turns.map((g, i) => {
-              const slot = draft.rounds * n + i;
-              const action = bySlot.get(slot);
-              const isCurrent = current?.slot === slot;
+            {draft.pick_order.map((teamId) => {
+              const team = data.teams.find((t) => t.id === teamId);
+              const owner = team && (team.is_ghost ? ownerLine(data, team) : ownerName(data, team));
               return (
-                <ThemedView
-                  key={slot}
-                  type="backgroundElement"
-                  style={[styles.boardCell, styles.boardPick, isCurrent && { borderColor: theme.danger, borderWidth: 2 }]}>
-                  <ThemedText type="small" themeColor="textSecondary">
-                    👻 {pickLabel(slot, n, draft.rounds)}
-                    <GhostBy data={data} config={config} slot={slot} />
-                  </ThemedText>
-                  {action?.type === 'pick' ? (
-                    <PlayerName playerId={action.addPlayerId} numberOfLines={2}>{playerName(data, action.addPlayerId)}</PlayerName>
-                  ) : (
-                    <ThemedText type="small" numberOfLines={2}>{isCurrent ? 'On the clock' : ''}</ThemedText>
-                  )}
-                </ThemedView>
+                <View key={teamId} style={styles.boardCell}>
+                  <ThemedText type="smallBold" numberOfLines={1}>{team ? teamName(team) : '—'}</ThemedText>
+                  {owner && <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>{owner}</ThemedText>}
+                </View>
               );
             })}
           </View>
-        )}
-      </View>
-    </ScrollView>
+          {Array.from({ length: draft.rounds }, (_, round) => (
+            <View key={round} style={styles.boardRow}>
+              {draft.pick_order.map((teamId, col) => {
+                // Snake: odd rounds run right to left. Circular: every round left to right.
+                const slot = round * n + (draft.pattern === 'circular' || round % 2 === 0 ? col : n - 1 - col);
+                const action = bySlot.get(slot);
+                const isCurrent = current?.slot === slot;
+                return (
+                  <ThemedView
+                    key={teamId}
+                    type="backgroundElement"
+                    style={[styles.boardCell, styles.boardPick, isCurrent && { borderColor: theme.danger, borderWidth: 2 }]}>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {pickLabel(slot, n)}
+                      {teamId === config.ghost?.teamId && <GhostBy data={data} config={config} slot={slot} />}
+                    </ThemedText>
+                    {action?.type === 'pick' ? (
+                      <PlayerName playerId={action.addPlayerId} numberOfLines={2}>{playerName(data, action.addPlayerId)}</PlayerName>
+                    ) : (
+                      <ThemedText type="small" numberOfLines={2}>
+                        {action?.type === 'yield' ? 'Yielded' : isCurrent ? 'On the clock' : ''}
+                      </ThemedText>
+                    )}
+                  </ThemedView>
+                );
+              })}
+            </View>
+          ))}
+          {ghostAfter && (
+            // Draft 3: the ghost's picks, by the managers out after round 1, come after the snake.
+            <View style={styles.boardRow}>
+              {ghostAfter.turns.map((g, i) => {
+                const slot = draft.rounds * n + i;
+                const action = bySlot.get(slot);
+                const isCurrent = current?.slot === slot;
+                return (
+                  <ThemedView
+                    key={slot}
+                    type="backgroundElement"
+                    style={[styles.boardCell, styles.boardPick, isCurrent && { borderColor: theme.danger, borderWidth: 2 }]}>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      👻 {pickLabel(slot, n, draft.rounds)}
+                      <GhostBy data={data} config={config} slot={slot} />
+                    </ThemedText>
+                    {action?.type === 'pick' ? (
+                      <PlayerName playerId={action.addPlayerId} numberOfLines={2}>{playerName(data, action.addPlayerId)}</PlayerName>
+                    ) : (
+                      <ThemedText type="small" numberOfLines={2}>{isCurrent ? 'On the clock' : ''}</ThemedText>
+                    )}
+                  </ThemedView>
+                );
+              })}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </View>
   );
+}
+
+/** A raffle draft's draw: each team's tickets, in the order drawn, and its odds at the first pick. */
+function RaffleDraw({ data, raffle }: { data: SeasonData; raffle: NonNullable<Draft['raffle']> }) {
+  const total = raffle.reduce((sum, e) => sum + e.tickets, 0);
+  return (
+    <View>
+      {raffle.map((e, i) => {
+        const team = data.teams.find((t) => t.id === e.teamId);
+        const tickets = e.tickets === 0 ? 'no tickets' : `${e.tickets} ticket${e.tickets === 1 ? '' : 's'} · ${Math.round((100 * e.tickets) / total)}% for 1st`;
+        return (
+          <ThemedText key={e.teamId} type="small">
+            {i + 1}. {team ? teamName(team) : '—'} <ThemedText type="small" themeColor="textSecondary">({tickets})</ThemedText>
+          </ThemedText>
+        );
+      })}
+    </View>
+  );
+}
+
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** The round the order follows: "the Wild Card" (Draft 2) or "round 2" (Draft 4). */
+const sourceRound = (draftNumber: number) => (draftNumber <= 2 ? 'the Wild Card' : `round ${draftNumber - 2}`);
+
+/** "snake, by the round 2 ranking": how this draft's pick order is set. */
+function orderText(draft: Draft): string {
+  const orderBy = draft.order_by ?? defaultOrderBy(draft.number);
+  const by = { random: 'random order', rank: `by the ${sourceRound(draft.number)} ranking`, raffle: `by a ${sourceRound(draft.number)} raffle` }[orderBy];
+  return `${draft.pattern}, ${by}`;
 }
 
 /** " · Kyle": who makes the ghost's pick in a slot. */
@@ -770,8 +817,6 @@ function outReason(data: SeasonData, playerId: number): string {
 
 interface CommissionerActions {
   canStart: boolean;
-  /** Start button label, saying how the pick order is set. */
-  startLabel: string;
   /** Manager on the clock, when autopick is available. */
   autopickFor: string | null;
   canUndo: boolean;
@@ -782,11 +827,15 @@ interface CommissionerActions {
   confirmSheet: ReactNode;
 }
 
-/** How starting the draft sets the pick order (it's a snake either way). */
-function startOrderText(draftNumber: number): string {
-  if (draftNumber <= 2) return 'This randomizes the pick order';
-  const round = draftNumber - 2;
-  return `This sets the pick order by the round ${round} ranking (best first${draftNumber === 4 ? ', the Ghost included' : ''})`;
+/** How starting the draft sets the pick order, by its settings. */
+function startOrderText(draft: Draft): string {
+  const ghost = draft.number === 4 ? ', the Ghost included' : '';
+  const order = {
+    random: 'randomizes the pick order',
+    rank: `sets the pick order by the ${sourceRound(draft.number)} ranking (best first${ghost})`,
+    raffle: `draws the pick order by raffle: 1 ticket for each bag above ${sourceRound(draft.number)}'s cut line, plus 1${ghost}`,
+  }[draft.order_by ?? defaultOrderBy(draft.number)];
+  return `This ${order}, runs a ${draft.pattern} draft`;
 }
 
 /** Commissioner actions for this draft, or null for everyone else. Shared by the card and the phone menu. */
@@ -810,7 +859,6 @@ function useCommissionerActions(
 
   return {
     canStart: draft.status === 'scheduled',
-    startLabel: `Start the draft (${draft.number <= 2 ? 'randomizes the order' : `order by round ${draft.number - 2} ranking`})`,
     autopickFor: onClock ? `${teamName(onClock)}${turn?.ghost ? ' (👻 Ghost pick)' : ''}` : null,
     // A finished season's drafts are history.
     canUndo: data.season.status !== 'complete' && data.actions.some((a) => a.draft_id === draft.id),
@@ -824,7 +872,7 @@ function useCommissionerActions(
         onClose={() => setConfirming(null)}>
         <ThemedText themeColor="textSecondary">
           {confirming === 'start'
-            ? `${startOrderText(draft.number)} and puts the first manager on the clock. Make sure the player pool is synced.`
+            ? `${startOrderText(draft)} and puts the first manager on the clock. Make sure the player pool is synced.`
             : 'The player goes back into the pool and the previous manager is on the clock again.'}
         </ThemedText>
         <Button
@@ -856,6 +904,39 @@ function AutodraftSettings({ data, run }: { data: SeasonData; run: (body: object
   );
 }
 
+const ORDER_OPTIONS: Record<DraftOrderBy, string> = { random: 'Random', rank: 'Rank', raffle: 'Raffle' };
+const PATTERN_OPTIONS: { value: DraftPattern; label: string }[] = [
+  { value: 'snake', label: 'Snake' },
+  { value: 'circular', label: 'Circular' },
+];
+
+/**
+ * The draft's settings (commissioner, RULES.md Drafts): where the order comes from and whether it
+ * snakes. Open until the draft is complete; mid-draft, the server takes a change only while the
+ * picks made still fit it.
+ */
+function DraftSettings({ draft, run }: { draft: Draft; run: (body: object) => Promise<string | null> }) {
+  const orderBy = draft.order_by ?? defaultOrderBy(draft.number);
+  const options = orderByOptions(draft.number).map((value) => ({ value, label: ORDER_OPTIONS[value] }));
+  return (
+    <View style={styles.settings}>
+      <View style={styles.settingRow}>
+        <ThemedText type="small" style={{ flex: 1 }}>Order</ThemedText>
+        <Toggle options={options} value={orderBy} onChange={(v) => v !== orderBy && run({ action: 'set-order', orderBy: v })} />
+      </View>
+      <View style={styles.settingRow}>
+        <ThemedText type="small" style={{ flex: 1 }}>Pattern</ThemedText>
+        <Toggle options={PATTERN_OPTIONS} value={draft.pattern} onChange={(v) => v !== draft.pattern && run({ action: 'set-order', pattern: v })} />
+      </View>
+      {draft.status === 'live' && (
+        <ThemedText type="small" themeColor="textSecondary">
+          A new order is drawn right away. It has to fit the picks already made, so undo them first if it doesn&apos;t.
+        </ThemedText>
+      )}
+    </View>
+  );
+}
+
 /** Desktop sidebar: commissioner tools. */
 function CommissionerCard({
   data,
@@ -872,7 +953,7 @@ function CommissionerCard({
   return (
     <Card title="Commissioner">
       {actions.canStart && (
-        <Button label={actions.startLabel} onPress={() => actions.confirm('start')} />
+        <Button label="Start the draft" onPress={() => actions.confirm('start')} />
       )}
       <View style={styles.buttonRow}>
         {actions.autopickFor && (
@@ -886,6 +967,7 @@ function CommissionerCard({
           </View>
         )}
       </View>
+      {draft.status !== 'complete' && <DraftSettings draft={draft} run={run} />}
       {draft.status !== 'complete' && (
         <Pressable onPress={() => setShowAutodraft(!showAutodraft)} hitSlop={8}>
           <ThemedText type="small" themeColor="textSecondary">
@@ -911,7 +993,7 @@ function DraftMenu({
   commissioner: CommissionerActions | null;
 }) {
   const theme = useTheme();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState<'autodraft' | 'draft' | null>(null);
   const myTeam = data.myTeam;
   const open = draft.status !== 'complete';
   const showAutodraft = !!myTeam && open;
@@ -960,7 +1042,12 @@ function DraftMenu({
                 </DropdownMenu.Item>
               )}
               {open && (
-                <DropdownMenu.Item key="settings" className="menu-item" onSelect={() => setSettingsOpen(true)}>
+                <DropdownMenu.Item key="draft-settings" className="menu-item" onSelect={() => setSettingsOpen('draft')}>
+                  <DropdownMenu.ItemTitle>Draft settings…</DropdownMenu.ItemTitle>
+                </DropdownMenu.Item>
+              )}
+              {open && (
+                <DropdownMenu.Item key="settings" className="menu-item" onSelect={() => setSettingsOpen('autodraft')}>
                   <DropdownMenu.ItemTitle>Autodraft settings…</DropdownMenu.ItemTitle>
                 </DropdownMenu.Item>
               )}
@@ -968,9 +1055,13 @@ function DraftMenu({
           )}
         </DropdownMenu.Content>
       </DropdownMenu.Root>
-      <Sheet visible={settingsOpen} title="Autodraft settings" onClose={() => setSettingsOpen(false)}>
+      <Sheet visible={settingsOpen === 'autodraft'} title="Autodraft settings" onClose={() => setSettingsOpen(null)}>
         <AutodraftSettings data={data} run={run} />
-        <Button label="Done" variant="secondary" onPress={() => setSettingsOpen(false)} />
+        <Button label="Done" variant="secondary" onPress={() => setSettingsOpen(null)} />
+      </Sheet>
+      <Sheet visible={settingsOpen === 'draft'} title={`Draft ${draft.number} settings`} onClose={() => setSettingsOpen(null)}>
+        <DraftSettings draft={draft} run={run} />
+        <Button label="Done" variant="secondary" onPress={() => setSettingsOpen(null)} />
       </Sheet>
     </>
   );
@@ -998,6 +1089,9 @@ const styles = StyleSheet.create({
   boardPick: { minHeight: 64, borderRadius: Radius.md, padding: Spacing.two, borderWidth: 2, borderColor: 'transparent' },
   dropRow: { borderWidth: 2, borderRadius: Radius.md, padding: Spacing.two },
   buttonRow: { flexDirection: 'row', gap: Spacing.two },
+  boardWrap: { gap: Spacing.two },
+  settings: { gap: Spacing.one },
+  settingRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 40 },
   foldHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two + 2 },
   // Card's title look (see Card), in a header that also folds.
   foldTitle: { flex: 1, textTransform: 'uppercase', letterSpacing: 0.5 },

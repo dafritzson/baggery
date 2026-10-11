@@ -615,13 +615,13 @@ describe('ghost team', () => {
 
   /** Who's on the clock in a draft, replayed with the core's rules (ghost turns included). */
   async function turnIn(id: string): Promise<Turn | null> {
-    const { data: d } = await admin.from('drafts').select('kind, pick_order, rounds, ghost_turns').eq('id', id).single();
+    const { data: d } = await admin.from('drafts').select('kind, pick_order, rounds, pattern, ghost_turns').eq('id', id).single();
     const { data: rows } = await admin.from('draft_actions').select('type, fantasy_team_id').eq('draft_id', id).order('action_number');
     const actions = rows!.map(
       (a): DraftAction => (a.type === 'yield' ? { type: 'yield', teamId: a.fantasy_team_id } : { type: 'pick', teamId: a.fantasy_team_id, addPlayerId: 0 }),
     );
     const ghost = d!.ghost_turns.length ? { teamId: ghostId, turns: d!.ghost_turns } : undefined;
-    return nextTurn({ kind: d!.kind, order: d!.pick_order, rounds: d!.rounds, ghost }, actions);
+    return nextTurn({ kind: d!.kind, order: d!.pick_order, rounds: d!.rounds, pattern: d!.pattern, ghost }, actions);
   }
   const ghostRoster = async () =>
     (await admin.from('roster_spells').select('mlb_player_id').eq('fantasy_team_id', ghostId).is('dropped_by_draft_id', null)).data!.map((s) => s.mlb_player_id);
@@ -688,12 +688,27 @@ describe('ghost team', () => {
     expect(await status()).toBe('complete');
   });
 
-  it('drafts in the Draft 4 snake with the finalists: 2 adds, then 2 ordinary redraft turns', async () => {
+  it('takes draft settings from the commissioner only, and only the order sources each draft allows', async () => {
+    const { data: draft2 } = await admin.from('drafts').select('id').eq('season_id', SEASON_ID).eq('number', 2).single();
+    expect((await call('Daniel', 'draft', { draftId: draft2!.id, action: 'set-order', orderBy: 'raffle' })).error).toMatch(/can’t be ordered by raffle/);
+    expect((await call('Kyle', 'draft', { draftId: draft4, action: 'set-order', orderBy: 'raffle' })).error).toMatch(/Only the commissioner/);
+    expect((await call('Daniel', 'draft', { draftId: draft3, action: 'set-order', pattern: 'circular' })).error).toMatch(/settings are locked/);
+    expect((await call('Daniel', 'draft', { draftId: draft4, action: 'set-order', orderBy: 'raffle', pattern: 'circular' })).ok).toBe(true);
+    const { data: d } = await admin.from('drafts').select('order_by, pattern').eq('id', draft4).single();
+    expect(d).toEqual({ order_by: 'raffle', pattern: 'circular' });
+  });
+
+  it('drafts in Draft 4 with the finalists, by raffle in a circle: 2 adds, then 2 ordinary redraft turns', async () => {
     await admin.from('fantasy_teams').update({ eliminated_after_round: 2 }).in('id', teamIds(OUT_2));
     expect((await call('Daniel', 'draft', { draftId: draft4, action: 'start' })).ok).toBe(true);
-    const { data: d } = await admin.from('drafts').select('pick_order, ghost_turns').eq('id', draft4).single();
+    const { data: d } = await admin.from('drafts').select('pick_order, ghost_turns, raffle').eq('id', draft4).single();
     expect(d!.pick_order).toHaveLength(4);
     expect(d!.pick_order).toContain(ghostId);
+    // No round 2 games here, so everyone is level with the cut line on 0 bags: 1 ticket each, the ghost included.
+    expect(d!.raffle).toEqual(d!.pick_order.map((teamId: string) => ({ teamId, tickets: 1 })));
+    // Before any pick, switching back to a snake (and back) is fine.
+    expect((await call('Daniel', 'draft', { draftId: draft4, action: 'set-order', pattern: 'snake' })).ok).toBe(true);
+    expect((await call('Daniel', 'draft', { draftId: draft4, action: 'set-order', pattern: 'circular' })).ok).toBe(true);
     const turns: { by: string; kind: string }[] = d!.ghost_turns;
     expect(turns.map((g) => g.kind)).toEqual(['add', 'add', 'redraft', 'redraft']);
     expect(turns.slice(0, 2).map((g) => managerByTeamId.get(g.by)).sort()).toEqual([...OUT_2].sort());
