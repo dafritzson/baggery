@@ -2,6 +2,12 @@ import type { PlayerId, TeamId } from './types.ts';
 
 export type DraftKind = 'initial' | 'redraft';
 
+/** How the order goes round to round: a snake (1..n, n..1, ...) or circular (1..n every round). */
+export type DraftPattern = 'snake' | 'circular';
+
+/** Where the first-round order comes from: a shuffle, the previous round's ranking, or a raffle. */
+export type DraftOrderBy = 'random' | 'rank' | 'raffle';
+
 /**
  * A turn the ghost team takes, made by one of the eliminated managers (`by`, their team). An add
  * fills an empty spot and can't be yielded (unless nobody undrafted is left); a redraft is an
@@ -16,8 +22,10 @@ export interface DraftConfig {
   kind: DraftKind;
   /** Team ids in first-round pick order. */
   order: TeamId[];
-  /** Number of snake rounds. Always 4 today. */
+  /** Number of rounds. Always 4 today. */
   rounds: number;
+  /** Snake when left out. */
+  pattern?: DraftPattern;
   /**
    * The ghost team's turns (Drafts 3 and 4). When the ghost isn't in `order` (Draft 3) they come
    * after the snake; when it is (Draft 4) they fill its snake slots in order.
@@ -68,13 +76,19 @@ export function snakeSlots(order: TeamId[], rounds: number): TeamId[] {
   return slots;
 }
 
+/** Team for every slot of a circular draft: 1..n every round. */
+export function circularSlots(order: TeamId[], rounds: number): TeamId[] {
+  return Array.from({ length: rounds }, () => order).flat();
+}
+
 /**
- * Every slot of the draft: the snake, with the ghost's turns in its own slots (in order; any
+ * Every slot of the draft: the snake (or circular order), with the ghost's turns in its own slots (in order; any
  * slots past its last turn are left out) or, when it isn't in the snake, in a round after it.
  */
 export function draftTurns(config: DraftConfig): Turn[] {
   const n = config.order.length;
-  const slots: Turn[] = snakeSlots(config.order, config.rounds).map((teamId, slot) => ({ teamId, round: Math.floor(slot / n) + 1, slot }));
+  const teams = config.pattern === 'circular' ? circularSlots(config.order, config.rounds) : snakeSlots(config.order, config.rounds);
+  const slots: Turn[] = teams.map((teamId, slot) => ({ teamId, round: Math.floor(slot / n) + 1, slot }));
   const ghost = config.ghost;
   if (!ghost) return slots;
   if (!config.order.includes(ghost.teamId)) {
@@ -285,4 +299,56 @@ export function redraftOrder(ranked: { teamId: TeamId; rank: number }[], survivo
   const alive = ranked.filter((r) => survivors.includes(r.teamId));
   const ranks = [...new Set(alive.map((r) => r.rank))].sort((a, b) => a - b);
   return ranks.flatMap((rank) => randomOrder(alive.filter((r) => r.rank === rank).map((r) => r.teamId), random));
+}
+
+/**
+ * Whether actions already taken still line up with a draft's turns: every one was made by the team
+ * on the clock. Changing the order or pattern mid-draft is fine only while this holds.
+ */
+export function actionsFit(config: DraftConfig, actions: DraftAction[]): boolean {
+  return actions.every((a, i) => nextTurn(config, actions.slice(0, i))?.teamId === a.teamId);
+}
+
+/**
+ * The order sources a draft can use. Draft 1 is random only; Draft 2 can follow the Wild Card
+ * ranking; Drafts 3 and 4 follow the previous round, and can raffle its cut-line bags.
+ */
+export function orderByOptions(draftNumber: number): DraftOrderBy[] {
+  return draftNumber <= 1 ? ['random'] : draftNumber === 2 ? ['random', 'rank'] : ['random', 'rank', 'raffle'];
+}
+
+/** A draft's order source when the commissioner hasn't set one. */
+export function defaultOrderBy(draftNumber: number): DraftOrderBy {
+  return draftNumber <= 2 ? 'random' : 'rank';
+}
+
+/** A team in a raffle draw and its tickets. */
+export interface RaffleEntry {
+  teamId: TeamId;
+  tickets: number;
+}
+
+/**
+ * Raffle tickets after a round: bags minus the cut line plus 1, for each team ranked at or above
+ * the cut, where the cut line is the bags of the best-ranked eliminated manager. A survivor who
+ * advanced on a tiebreaker still gets 1. A team ranked below that manager (the ghost can be) gets
+ * none. `ranked` holds the teams in the draft, best first; `cut` is that eliminated manager.
+ */
+export function raffleTickets(ranked: { teamId: TeamId; rank: number; tb: number }[], cut: { rank: number; tb: number }): RaffleEntry[] {
+  return ranked.map((t) => ({ teamId: t.teamId, tickets: t.rank <= cut.rank ? Math.max(1, t.tb - cut.tb + 1) : 0 }));
+}
+
+/**
+ * The raffle's pick order: draw a ticket, its team picks next and its tickets leave the pot, until
+ * nobody holding tickets is left. Teams without tickets pick after, in the order given.
+ */
+export function raffleDraw(entries: RaffleEntry[], random: () => number = Math.random): TeamId[] {
+  const pot = entries.filter((e) => e.tickets > 0);
+  const order: TeamId[] = [];
+  while (pot.length) {
+    let ticket = Math.floor(random() * pot.reduce((sum, e) => sum + e.tickets, 0));
+    const i = pot.findIndex((e) => (ticket -= e.tickets) < 0);
+    order.push(pot.splice(i, 1)[0].teamId);
+  }
+  return [...order, ...entries.filter((e) => e.tickets <= 0).map((e) => e.teamId)];
 }

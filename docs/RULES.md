@@ -53,14 +53,29 @@ xSLG, xwOBA, WAR and age were dropped as tiebreakers. They may come back later, 
 
 ## Drafts
 
-| Draft | Before MLB series | Order | Kind |
+| Draft | Before MLB series | Default order | Kind |
 |---|---|---|---|
-| 1 | Wild Card | Random | Initial: 4-round snake |
+| 1 | Wild Card | Random | Initial: 4 rounds |
 | 2 | Division Series | Random (new) | Redraft |
 | 3 | Championship Series | Fantasy round 1 ranking | Redraft (survivors, then the ghost's 2 adds) |
 | 4 | World Series | Fantasy round 2 ranking (the ghost included) | Redraft (finalists and the ghost) |
 
-- All drafts are snake drafts, up to 4 rounds.
+- Every draft is up to 4 rounds, a snake by default.
+- **Draft settings**: the commissioner sets each draft's order and pattern, until the draft is
+  complete. The order is set when the draft starts.
+  - **Order**: random; by rank (best first, full ties shuffled); or by raffle. Draft 1 is
+    random only. Draft 2 by rank follows the Wild Card games (bags and tiebreakers). Drafts 3 and
+    4 by rank or raffle follow the round before them (round 1 or 2).
+  - **Pattern**: snake (1..n, then n..1, ...) or circular (1..n every round).
+  - **Raffle** (Drafts 3 and 4): the cut line is the bags of the best-ranked manager knocked out
+    in that round. Each team ranked at or above that manager gets `bags − cut line + 1` raffle
+    tickets, so a team that advanced on a tiebreaker or drink-off still gets 1. A team ranked
+    below that manager (the ghost can be) gets none. Draw a ticket: its team picks first and its
+    tickets leave the pot. Draw again for the second pick, and so on. Teams without tickets pick
+    last. The server draws when the draft starts, and the draft room shows the tickets.
+  - **Mid-draft changes**: changing the order draws a new one. A change is allowed only while
+    every pick already made still falls on its team's turn (switching snake and circular is
+    always fine in round 1); otherwise undo picks first.
 - **Initial draft**: each pick adds a player. Every team ends with 4.
 - **Redraft**: each pick drops any player on your roster and adds an undrafted player.
   A manager may **yield** instead, which skips them for the rest of that draft, but not while
@@ -95,11 +110,12 @@ xSLG, xwOBA, WAR and age were dropped as tiebreakers. They may come back later, 
 
 The eliminated managers' team, so they keep following along. It's in the Standings from round 2.
 
-- **Draft 3**: after the survivors' snake, the 2 managers out after round 1 each add an undrafted
+- **Draft 3**: after the survivors' rounds, the 2 managers out after round 1 each add an undrafted
   hitter to the ghost, the higher-ranked of them first.
 - **Round 2**: the ghost plays the Championship Series with those 2 hitters. It's never cut and
   doesn't take a spot: the cut counts only the managers' teams.
-- **Draft 4**: the ghost is in the snake with the 3 finalists, placed by round 2 bags like everyone.
+- **Draft 4**: the ghost drafts with the 3 finalists, placed by round 2 bags like everyone (by its
+  rank, or its raffle tickets).
   Its first 2 turns fill its empty spots (no drop, no yield), made by the 2 managers out after
   round 2. Its last 2 are ordinary redraft picks, made by the 2 managers out after round 1. Each
   pair goes higher-ranked first, so each of the 4 managers makes one turn. Unlike a manager's

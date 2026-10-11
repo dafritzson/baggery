@@ -1,7 +1,7 @@
 import { router, useGlobalSearchParams } from 'expo-router';
 import { createContext, createElement, type ReactNode, use, useCallback, useEffect, useRef, useState } from 'react';
 
-import type { DraftAction, DraftConfig, GhostTurn } from '@core/draft.ts';
+import type { DraftAction, DraftConfig, DraftOrderBy, DraftPattern, GhostTurn, RaffleEntry } from '@core/draft.ts';
 import type { Row } from '@core/score-feed.ts';
 
 import { useAuth } from '@/lib/auth';
@@ -34,6 +34,11 @@ export interface Draft {
   locks_at: string | null;
   /** The ghost team's turns in this draft, set when it starts. */
   ghost_turns: GhostTurn[];
+  /** Where the pick order comes from; null is the draft's default (defaultOrderBy). */
+  order_by: DraftOrderBy | null;
+  pattern: DraftPattern;
+  /** A raffle draft's draw, in the order drawn. Set when it starts. */
+  raffle: RaffleEntry[] | null;
 }
 
 export interface DraftActionRow {
@@ -367,6 +372,7 @@ export function draftConfig(data: SeasonData, draft: Draft): DraftConfig {
     kind: draft.kind,
     order: draft.pick_order,
     rounds: draft.rounds,
+    pattern: draft.pattern,
     ghost: ghost && draft.ghost_turns.length ? { teamId: ghost.id, turns: draft.ghost_turns } : undefined,
   };
 }

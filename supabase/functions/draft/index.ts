@@ -1,21 +1,29 @@
 // Draft room actions. Every action runs in one transaction that locks the draft row, so
 // concurrent picks can't interleave. Rules live in the shared core.
 //
-// POST { draftId, action: 'start' | 'pick' | 'yield' | 'autopick' | 'undo' | 'set-autodraft' | 'set-queue', ... }
+// POST { draftId, action: 'start' | 'pick' | 'yield' | 'autopick' | 'undo' | 'set-order' | 'set-autodraft' | 'set-queue', ... }
 
 import { isCommissioner, requireUser } from '../_shared/auth.ts';
 import {
   type AutodraftCandidate,
   type Turn,
   type DraftAction,
+  type DraftOrderBy,
+  type DraftPattern,
   type DraftState,
   type GhostTurn,
   type QueueEntry,
+  type RaffleEntry,
+  actionsFit,
   applyAction,
   autodraftAction,
+  defaultOrderBy,
   draftable,
   ghostTurns,
   nextTurn,
+  orderByOptions,
+  raffleDraw,
+  raffleTickets,
   randomOrder,
   redraftOrder,
   takenPlayers,
@@ -30,11 +38,14 @@ import { type DraftNotice, sendDraftAlerts } from './alerts.ts';
 
 interface Body {
   draftId: string;
-  action: 'start' | 'pick' | 'yield' | 'autopick' | 'undo' | 'set-autodraft' | 'set-queue';
+  action: 'start' | 'pick' | 'yield' | 'autopick' | 'undo' | 'set-order' | 'set-autodraft' | 'set-queue';
   addPlayerId?: number;
   dropPlayerId?: number;
   teamId?: string;
   autodraft?: boolean;
+  /** set-order: where the pick order comes from, and whether it snakes. */
+  orderBy?: DraftOrderBy;
+  pattern?: DraftPattern;
   /** set-queue: your whole queue for this draft, top first. */
   queue?: { playerId: number; dropPlayerId?: number | null }[];
 }
@@ -55,6 +66,10 @@ interface DraftRow {
   rounds: number;
   locks_at: Date | null;
   ghost_turns: GhostTurn[];
+  /** Null: the draft's default (defaultOrderBy). */
+  order_by: DraftOrderBy | null;
+  pattern: DraftPattern;
+  raffle: RaffleEntry[] | null;
 }
 
 interface Ctx {
@@ -78,7 +93,8 @@ const turnOwner = (turn: Turn) => turn.ghost?.by ?? turn.teamId;
 
 async function load(tx: Tx, draftId: string): Promise<Ctx> {
   const [draft] = await tx<DraftRow[]>`
-    select d.id, d.season_id, s.year, s.status as season_status, d.number, d.kind, d.status, d.pick_order, d.rounds, d.locks_at, d.ghost_turns
+    select d.id, d.season_id, s.year, s.status as season_status, d.number, d.kind, d.status, d.pick_order, d.rounds, d.locks_at, d.ghost_turns,
+      d.order_by, d.pattern, d.raffle
     from drafts d join seasons s on s.id = d.season_id
     where d.id = ${draftId}
     for update of d`;
@@ -118,7 +134,7 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
   return {
     draft,
     state: {
-      config: { kind: draft.kind, order: draft.pick_order, rounds: draft.rounds, ghost },
+      config: { kind: draft.kind, order: draft.pick_order, rounds: draft.rounds, pattern: draft.pattern, ghost },
       actions: actions.map(
         (a): DraftAction =>
           a.type === 'yield'
@@ -286,6 +302,48 @@ async function ghostTeam(tx: Tx, seasonId: string): Promise<string> {
   return created.id;
 }
 
+const ORDER_NAMES: Record<DraftOrderBy, string> = { random: 'randomly', rank: 'by ranking', raffle: 'by raffle' };
+
+/**
+ * A draft's first-round pick order by its order source (RULES.md, Drafts), with its ghost turns
+ * (Drafts 3 and 4) and a raffle's draw. Drafts 3 and 4 need the round before them closed.
+ */
+async function drawOrder(
+  tx: Tx,
+  draft: DraftRow,
+  orderBy: DraftOrderBy,
+): Promise<{ order: string[]; ghost?: DraftState['config']['ghost']; raffle: RaffleEntry[] | null }> {
+  const teams = await tx`
+    select id, eliminated_after_round from fantasy_teams where season_id = ${draft.season_id} and not is_ghost`;
+  const alive = teams.filter((t) => t.eliminated_after_round === null).map((t) => t.id as string);
+  const random = () => crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32;
+  const season = { id: draft.season_id, year: draft.year };
+  if (draft.number <= 2) {
+    // Draft 2 by rank follows the Wild Card games, the part of round 1 already played.
+    const order = orderBy === 'rank' ? redraftOrder(await roundRanking(tx, season, 1, alive, ['F']), alive, random) : randomOrder(alive, random);
+    return { order, raffle: null };
+  }
+  const round = (draft.number - 2) as FantasyRound;
+  const out = (r: number) => teams.filter((t) => t.eliminated_after_round === r).map((t) => t.id as string);
+  if (!out(round).length) throw new UserError(`Close round ${round} first (on the Standings page), so the draft order can follow it.`);
+  // The ghost team: created for Draft 3, where the managers out after round 1 give it its first
+  // hitters. In Draft 4 it drafts with the finalists, placed by its round 2 ranking like everyone.
+  const ghostId = await ghostTeam(tx, draft.season_id);
+  const ranked1 = await roundRanking(tx, season, 1, teams.map((t) => t.id as string));
+  const outAfter1 = redraftOrder(ranked1, out(1), random);
+  const ranked = round === 1 ? ranked1 : await roundRanking(tx, season, 2, [...alive, ...out(2), ghostId]);
+  const drafting = round === 1 ? alive : [...alive, ghostId];
+  const ghost = { teamId: ghostId, turns: round === 1 ? ghostTurns(3, outAfter1, []) : ghostTurns(4, outAfter1, redraftOrder(ranked, out(2), random)) };
+  const byRank = redraftOrder(ranked, drafting, random);
+  if (orderBy === 'rank') return { order: byRank, ghost, raffle: null };
+  if (orderBy === 'random') return { order: randomOrder(drafting, random), ghost, raffle: null };
+  // The cut line: the best-ranked manager knocked out in that round (ranked is best first).
+  const cut = ranked.find((t) => out(round).includes(t.teamId))!;
+  const entries = raffleTickets(byRank.map((id) => ranked.find((t) => t.teamId === id)!), cut);
+  const order = raffleDraw(entries, random);
+  return { order, ghost, raffle: order.map((id) => entries.find((e) => e.teamId === id)!) };
+}
+
 async function requireLive(ctx: Ctx) {
   if (ctx.draft.status !== 'live') throw new UserError('The draft is not live.');
 }
@@ -301,7 +359,7 @@ async function setAutodraft(body: Body, userId: string): Promise<DraftNotice[]> 
   const on = !!body.autodraft;
   return await sql.begin(async (tx): Promise<DraftNotice[]> => {
     const [draft] = await tx<DraftRow[]>`
-      select id, season_id, kind, status, pick_order, rounds, ghost_turns from drafts where id = ${body.draftId} for update`;
+      select id, season_id, kind, status, pick_order, rounds, ghost_turns, pattern from drafts where id = ${body.draftId} for update`;
     if (!draft) throw new UserError('Draft not found.', 404);
     const [team] = await tx`select user_id from fantasy_teams where id = ${teamId} and season_id = ${draft.season_id}`;
     if (!team) throw new UserError('Team not found.', 404);
@@ -330,6 +388,7 @@ async function setAutodraft(body: Body, userId: string): Promise<DraftNotice[]> 
         kind: draft.kind,
         order: draft.pick_order,
         rounds: draft.rounds,
+        pattern: draft.pattern,
         ghost: ghostRow ? { teamId: ghostRow.id, turns: draft.ghost_turns } : undefined,
       },
       actions.map((a): DraftAction =>
@@ -424,39 +483,15 @@ serve(async (req) => {
       case 'start': {
         commissionerOnly();
         if (ctx.draft.status !== 'scheduled') throw new UserError('This draft has already started.');
-        const teams = await tx`
-          select id, eliminated_after_round from fantasy_teams where season_id = ${ctx.draft.season_id} and not is_ghost`;
-        const alive = teams.filter((t) => t.eliminated_after_round === null).map((t) => t.id as string);
-        const random = () => crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32;
-        let order: string[];
-        let ghost: DraftState['config']['ghost'];
-        if (ctx.draft.number <= 2) {
-          order = randomOrder(alive, random);
-        } else {
-          // Drafts 3 and 4 go in the previous round's order (the best-ranked team first), once
-          // that round is closed.
-          const round = (ctx.draft.number - 2) as FantasyRound;
-          const season = { id: ctx.draft.season_id, year: ctx.draft.year };
-          const out = (r: number) => teams.filter((t) => t.eliminated_after_round === r).map((t) => t.id as string);
-          if (!out(round).length) throw new UserError(`Close round ${round} first (on the Standings page), so the draft order can follow it.`);
-          // The ghost team: created for Draft 3, where the managers out after round 1 give it its first
-          // hitters. In Draft 4 it drafts in the snake, placed by its round 2 ranking like everyone.
-          const ghostId = await ghostTeam(tx, ctx.draft.season_id);
-          const ranked1 = await roundRanking(tx, season, 1, teams.map((t) => t.id as string));
-          const outAfter1 = redraftOrder(ranked1, out(1), random);
-          if (round === 1) {
-            order = redraftOrder(ranked1, alive, random);
-            ghost = { teamId: ghostId, turns: ghostTurns(3, outAfter1, []) };
-          } else {
-            const ranked2 = await roundRanking(tx, season, 2, [...alive, ...out(2), ghostId]);
-            order = redraftOrder(ranked2, [...alive, ghostId], random);
-            ghost = { teamId: ghostId, turns: ghostTurns(4, outAfter1, redraftOrder(ranked2, out(2), random)) };
-          }
-        }
+        const orderBy = ctx.draft.order_by ?? defaultOrderBy(ctx.draft.number);
+        const { order, ghost, raffle } = await drawOrder(tx, ctx.draft, orderBy);
         const ghostTurnList = ghost?.turns ?? [];
-        await tx`update drafts set status = 'live', pick_order = ${order}, ghost_turns = ${tx.json(JSON.parse(JSON.stringify(ghostTurnList)))} where id = ${ctx.draft.id}`;
+        await tx`
+          update drafts set status = 'live', pick_order = ${order}, ghost_turns = ${tx.json(JSON.parse(JSON.stringify(ghostTurnList)))},
+            raffle = ${raffle ? tx.json(JSON.parse(JSON.stringify(raffle))) : null}
+          where id = ${ctx.draft.id}`;
         await tx`update seasons set status = 'active' where id = ${ctx.draft.season_id} and status = 'setup'`;
-        ctx.draft = { ...ctx.draft, status: 'live', pick_order: order, ghost_turns: ghostTurnList };
+        ctx.draft = { ...ctx.draft, status: 'live', pick_order: order, ghost_turns: ghostTurnList, raffle };
         ctx.state = { ...ctx.state, config: { ...ctx.state.config, order, ghost } };
         for (const id of [...order, ...(ghost ? [ghost.teamId] : [])]) if (!ctx.state.rosters.has(id)) ctx.state.rosters.set(id, []);
         await logCommissioner(tx, {
@@ -464,7 +499,7 @@ serve(async (req) => {
           userId,
           action: 'start',
           summary: `Started Draft ${ctx.draft.number}`,
-          details: { draftId: ctx.draft.id, order },
+          details: { draftId: ctx.draft.id, order, orderBy, pattern: ctx.draft.pattern, raffle },
         });
         await advance(tx, ctx);
         break;
@@ -516,6 +551,39 @@ serve(async (req) => {
           });
         }
         await advance(tx, ctx);
+        break;
+      }
+      case 'set-order': {
+        // The draft's settings, open until it's complete. Mid-draft, a change must keep every
+        // pick already made on its own turn (snake and circular only differ from round 2 on).
+        commissionerOnly();
+        if (ctx.draft.status === 'complete') throw new UserError('This draft is over, so its settings are locked.');
+        const current = ctx.draft.order_by ?? defaultOrderBy(ctx.draft.number);
+        const orderBy = body.orderBy ?? current;
+        const pattern = body.pattern ?? ctx.draft.pattern;
+        if (!orderByOptions(ctx.draft.number).includes(orderBy)) throw new UserError(`Draft ${ctx.draft.number} can’t be ordered ${ORDER_NAMES[orderBy] ?? orderBy}.`);
+        if (pattern !== 'snake' && pattern !== 'circular') throw new UserError('Choose snake or circular.');
+        let { pick_order: order, raffle } = ctx.draft;
+        if (ctx.draft.status === 'live') {
+          // A new order source draws a new order; the ghost keeps the turns it started with.
+          if (orderBy !== current) ({ order, raffle } = await drawOrder(tx, ctx.draft, orderBy));
+          const config = { ...ctx.state.config, order, pattern };
+          if (!actionsFit(config, ctx.state.actions)) throw new UserError('The picks already made don’t fit that order. Undo them first.');
+          ctx.state = { ...ctx.state, config };
+        }
+        await tx`
+          update drafts set order_by = ${orderBy}, pattern = ${pattern}, pick_order = ${order},
+            raffle = ${raffle ? tx.json(JSON.parse(JSON.stringify(raffle))) : null}
+          where id = ${ctx.draft.id}`;
+        ctx.draft = { ...ctx.draft, order_by: orderBy, pattern, pick_order: order, raffle };
+        await logCommissioner(tx, {
+          seasonId: ctx.draft.season_id,
+          userId,
+          action: 'set-order',
+          summary: `Set Draft ${ctx.draft.number} to ${pattern}, ordered ${ORDER_NAMES[orderBy]}${ctx.draft.status === 'live' && orderBy !== current ? ' (new order drawn)' : ''}`,
+          details: { draftId: ctx.draft.id, orderBy, pattern, order, raffle },
+        });
+        if (ctx.draft.status === 'live') await advance(tx, ctx);
         break;
       }
       case 'undo': {
