@@ -7,7 +7,7 @@ import { neededGames, postseasonSeries, recordBefore, seriesOf, seriesSummary } 
 import type { PitcherStats } from '@core/box-score.ts';
 import type { LastPlay } from '@core/live.ts';
 import { SERIES } from '@core/scoreboard.ts';
-import { type GameType, ROUND_FOR_GAME_TYPE } from '@core/types.ts';
+import type { GameType } from '@core/types.ts';
 
 import { type Bagger, HitterRow, UpTag } from '@/components/at-bat';
 import { BoxScoreSheet } from '@/components/box-score';
@@ -29,7 +29,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { dayLabel, gameDay, useToday } from '@/lib/game-day';
-import { lineScore, ownerOf, seriesLabel, shortSeriesLabel, statusLine } from '@/lib/game-labels';
+import { lineScore, playingOwnerOf, seriesLabel, shortSeriesLabel, statusLine } from '@/lib/game-labels';
 import { type Previews, type Probable, usePreviews } from '@/lib/previews';
 import { type BattingLine, type GameInfo, type ScoreHit, type Scores, useScores } from '@/lib/scores';
 import { type SeasonData, ghostManagers, useSeason } from '@/lib/season';
@@ -402,7 +402,7 @@ function BaggerCard({
   /** "World Series · Game 3", for the videos sheet. */
   gameLabel: string;
   bagWidth: number | null;
-  /** "👻 👻" in place of the owner line, for the ghost's hitters and knocked-out managers'. */
+  /** "👻 👻" in place of the owner line, for the ghost's hitters. */
   ghosts?: string;
 }) {
   const theme = useTheme();
@@ -559,7 +559,7 @@ function OpenCard({ data, scores, previews, game, fill, onTeam }: CardProps) {
   const compact = useLayout() === 'compact';
   const live = game.status === 'Live';
   const bagger = (playerId: number): Bagger => {
-    const owner = ownerOf(data, playerId, game);
+    const owner = playingOwnerOf(data, playerId, game);
     return owner ? (owner === data.myTeam?.id ? 'mine' : 'other') : null;
   };
   const lines = new Map(scores.lines.filter((l) => l.gamePk === game.gamePk).map((l) => [l.playerId, l]));
@@ -777,19 +777,15 @@ function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; gam
       .filter((h) => h.gamePk === game.gamePk && h.playerId === playerId)
       .sort((a, b) => (a.endedAt ?? '').localeCompare(b.endedAt ?? ''));
   const playerIds = [...new Set(data.spells.map((s) => s.mlb_player_id))];
-  // The ghost's hitters, and those of managers knocked out before this game's round, show a 👻
-  // per manager behind the ghost instead of a name.
-  const round = ROUND_FOR_GAME_TYPE[game.gameType];
+  // The ghost's hitters show a 👻 per manager behind the ghost instead of a name.
   const ghosts = Array(Math.max(1, ghostManagers(data).length)).fill('👻').join(' ');
-  const ghostly = (t: SeasonData['teams'][number]) =>
-    t.is_ghost || (t.eliminated_after_round !== null && t.eliminated_after_round < round);
   const players = playerIds
     .filter((id) => {
       const mlb = data.poolByPlayer.get(id)?.mlb_team_id;
       return mlb === game.homeTeamId || mlb === game.awayTeamId;
     })
     .flatMap((id) => {
-      const owner = ownerOf(data, id, game);
+      const owner = playingOwnerOf(data, id, game);
       const team = owner ? data.teams.find((t) => t.id === owner) : undefined;
       return team ? [{ id, team, tb: tb.get(id) ?? (game.status === 'Preview' ? null : 0) }] : [];
     })
@@ -820,7 +816,7 @@ function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; gam
           gamePk={game.gamePk}
           gameLabel={seriesLabel(game)}
           bagWidth={bagWidth}
-          ghosts={ghostly(p.team) ? ghosts : undefined}
+          ghosts={p.team.is_ghost ? ghosts : undefined}
         />
       ))}
     </View>

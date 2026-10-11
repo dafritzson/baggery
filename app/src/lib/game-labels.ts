@@ -1,5 +1,7 @@
 import type { LiveState } from '@core/live.ts';
 import { SERIES } from '@core/scoreboard.ts';
+import { inRound } from '@core/scoring.ts';
+import { ROUND_FOR_GAME_TYPE } from '@core/types.ts';
 
 import type { BattingLine, GameInfo } from '@/lib/scores';
 import type { SeasonData } from '@/lib/season';
@@ -49,6 +51,18 @@ export function ownerOf(data: SeasonData, playerId: number, game: GameInfo): str
       s.mlb_player_id === playerId &&
       (started ? Date.parse(s.from_at) <= t && (s.to_at === null || t < Date.parse(s.to_at)) : s.to_at === null),
   )?.fantasy_team_id;
+}
+
+/**
+ * ownerOf, but only a team that plays the game's round: a knocked-out manager keeps their roster
+ * (those hitters stay off the board), but from the next round on those hitters' bags count for
+ * nobody, as in scoring.
+ */
+export function playingOwnerOf(data: SeasonData, playerId: number, game: GameInfo): string | undefined {
+  const teamId = ownerOf(data, playerId, game);
+  const team = teamId ? data.teams.find((t) => t.id === teamId) : undefined;
+  const round = ROUND_FOR_GAME_TYPE[game.gameType];
+  return team && round && inRound({ eliminatedAfterRound: team.eliminated_after_round, isGhost: team.is_ghost }, round) ? teamId : undefined;
 }
 
 /** Two-word club names; every other club's nickname is its last word ("Atlanta Braves" → "Braves"). */
