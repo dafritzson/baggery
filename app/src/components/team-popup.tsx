@@ -16,7 +16,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ownership, releasingTeams } from '@/lib/board';
 import { shortDate } from '@/lib/format';
-import { inningLabel, ownerOf, statusLine } from '@/lib/game-labels';
+import { inningLabel, playingOwnerOf, statusLine } from '@/lib/game-labels';
 import { PlayerProvider } from '@/lib/player';
 import { teamOdds } from '@/lib/projections';
 import { type GameInfo, type Scores } from '@/lib/scores';
@@ -253,7 +253,7 @@ function GamesTab({
         const label = SERIES.find((s) => s.gameType === game.gameType)?.label ?? '';
         // This team's hitters that managers drafted, with their bags in the game.
         const baggers = scores.stats
-          .filter((s) => s.gamePk === game.gamePk && data.poolByPlayer.get(s.playerId)?.mlb_team_id === mlbTeamId && ownerOf(data, s.playerId, game))
+          .filter((s) => s.gamePk === game.gamePk && data.poolByPlayer.get(s.playerId)?.mlb_team_id === mlbTeamId && playingOwnerOf(data, s.playerId, game))
           .sort((a, b) => b.tb - a.tb);
         return (
           <Pressable
@@ -276,7 +276,7 @@ function GamesTab({
               {baggers.length > 0 && (
                 <View style={styles.chips}>
                   {baggers.map((s) => {
-                    const owner = ownerOf(data, s.playerId, game);
+                    const owner = playingOwnerOf(data, s.playerId, game);
                     const fill = owner === data.myTeam?.id ? theme.mineFill : theme.otherFill;
                     return (
                       <View key={s.playerId} style={[styles.chip, { backgroundColor: fill }]}>
