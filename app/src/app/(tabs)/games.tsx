@@ -7,7 +7,7 @@ import { neededGames, postseasonSeries, recordBefore, seriesOf, seriesSummary } 
 import type { PitcherStats } from '@core/box-score.ts';
 import type { LastPlay } from '@core/live.ts';
 import { SERIES } from '@core/scoreboard.ts';
-import type { GameType } from '@core/types.ts';
+import { type GameType, ROUND_FOR_GAME_TYPE } from '@core/types.ts';
 
 import { type Bagger, HitterRow, UpTag } from '@/components/at-bat';
 import { BoxScoreSheet } from '@/components/box-score';
@@ -32,7 +32,7 @@ import { dayLabel, gameDay, useToday } from '@/lib/game-day';
 import { lineScore, ownerOf, seriesLabel, shortSeriesLabel, statusLine } from '@/lib/game-labels';
 import { type Previews, type Probable, usePreviews } from '@/lib/previews';
 import { type BattingLine, type GameInfo, type ScoreHit, type Scores, useScores } from '@/lib/scores';
-import { type SeasonData, useSeason } from '@/lib/season';
+import { type SeasonData, ghostManagers, useSeason } from '@/lib/season';
 import { ownerName, teamName } from '@/lib/teams';
 import { zoom, zoomFixed, zoomKey, zoomView } from '@/lib/zoom';
 
@@ -388,6 +388,7 @@ function BaggerCard({
   gamePk,
   gameLabel,
   bagWidth,
+  ghosts,
 }: {
   data: SeasonData;
   playerId: number;
@@ -401,6 +402,8 @@ function BaggerCard({
   /** "World Series · Game 3", for the videos sheet. */
   gameLabel: string;
   bagWidth: number | null;
+  /** "👻 👻" in place of the owner line, for the ghost's hitters and knocked-out managers'. */
+  ghosts?: string;
 }) {
   const theme = useTheme();
   const [videos, setVideos] = useState(false);
@@ -408,7 +411,7 @@ function BaggerCard({
   const compact = useLayout() === 'compact';
   const [nameRoom, setNameRoom] = useState(0);
   const [ownerRoom, setOwnerRoom] = useState(0);
-  const mine = team.id === data.myTeam?.id;
+  const mine = !ghosts && team.id === data.myTeam?.id;
   const owner = ownerName(data, team);
   const bags = tb ? hitBags(tb, hits.map((h) => h.event), playerId, gamePk, line) : [];
   // ▶ only once there's a video to watch: MLB's clip (most home runs, within minutes) or Savant's.
@@ -442,7 +445,7 @@ function BaggerCard({
               <YouTag />
             ) : (
               <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.owner}>
-                {compact ? (owner ?? teamName(team)) : `${teamName(team)}${owner ? ` · ${owner}` : ''}`}
+                {ghosts ?? (compact ? (owner ?? teamName(team)) : `${teamName(team)}${owner ? ` · ${owner}` : ''}`)}
               </ThemedText>
             )}
           </View>
@@ -774,6 +777,12 @@ function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; gam
       .filter((h) => h.gamePk === game.gamePk && h.playerId === playerId)
       .sort((a, b) => (a.endedAt ?? '').localeCompare(b.endedAt ?? ''));
   const playerIds = [...new Set(data.spells.map((s) => s.mlb_player_id))];
+  // The ghost's hitters, and those of managers knocked out before this game's round, show a 👻
+  // per manager behind the ghost instead of a name.
+  const round = ROUND_FOR_GAME_TYPE[game.gameType];
+  const ghosts = Array(Math.max(1, ghostManagers(data).length)).fill('👻').join(' ');
+  const ghostly = (t: SeasonData['teams'][number]) =>
+    t.is_ghost || (t.eliminated_after_round !== null && t.eliminated_after_round < round);
   const players = playerIds
     .filter((id) => {
       const mlb = data.poolByPlayer.get(id)?.mlb_team_id;
@@ -811,6 +820,7 @@ function Baggers({ data, scores, game }: { data: SeasonData; scores: Scores; gam
           gamePk={game.gamePk}
           gameLabel={seriesLabel(game)}
           bagWidth={bagWidth}
+          ghosts={ghostly(p.team) ? ghosts : undefined}
         />
       ))}
     </View>
