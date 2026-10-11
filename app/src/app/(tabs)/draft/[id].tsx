@@ -188,7 +188,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
         <>
           {errorText}
           {commissioner?.canStart && (
-            <Button label="Start the draft (randomizes the order)" onPress={() => commissioner.confirm('start')} />
+            <Button label={commissioner.startLabel} onPress={() => commissioner.confirm('start')} />
           )}
           {ghostHelp}
           {yieldButton}
@@ -768,6 +768,8 @@ function outReason(data: SeasonData, playerId: number): string {
 
 interface CommissionerActions {
   canStart: boolean;
+  /** Start button label, saying how the pick order is set. */
+  startLabel: string;
   /** Manager on the clock, when autopick is available. */
   autopickFor: string | null;
   canUndo: boolean;
@@ -776,6 +778,13 @@ interface CommissionerActions {
   autopick: () => void;
   /** Confirmation for start and undo; render it once. */
   confirmSheet: ReactNode;
+}
+
+/** How starting the draft sets the pick order (it's a snake either way). */
+function startOrderText(draftNumber: number): string {
+  if (draftNumber <= 2) return 'This randomizes the pick order';
+  const round = draftNumber - 2;
+  return `This sets the pick order by the round ${round} ranking (best first${draftNumber === 4 ? ', the Ghost included' : ''})`;
 }
 
 /** Commissioner actions for this draft, or null for everyone else. Shared by the card and the phone menu. */
@@ -799,6 +808,7 @@ function useCommissionerActions(
 
   return {
     canStart: draft.status === 'scheduled',
+    startLabel: `Start the draft (${draft.number <= 2 ? 'randomizes the order' : `order by round ${draft.number - 2} ranking`})`,
     autopickFor: onClock ? `${teamName(onClock)}${turn?.ghost ? ' (👻 Ghost pick)' : ''}` : null,
     // A finished season's drafts are history.
     canUndo: data.season.status !== 'complete' && data.actions.some((a) => a.draft_id === draft.id),
@@ -812,7 +822,7 @@ function useCommissionerActions(
         onClose={() => setConfirming(null)}>
         <ThemedText themeColor="textSecondary">
           {confirming === 'start'
-            ? 'This randomizes the pick order and puts the first manager on the clock. Make sure the player pool is synced.'
+            ? `${startOrderText(draft.number)} and puts the first manager on the clock. Make sure the player pool is synced.`
             : 'The player goes back into the pool and the previous manager is on the clock again.'}
         </ThemedText>
         <Button
@@ -860,7 +870,7 @@ function CommissionerCard({
   return (
     <Card title="Commissioner">
       {actions.canStart && (
-        <Button label="Start the draft (randomizes the order)" onPress={() => actions.confirm('start')} />
+        <Button label={actions.startLabel} onPress={() => actions.confirm('start')} />
       )}
       <View style={styles.buttonRow}>
         {actions.autopickFor && (
