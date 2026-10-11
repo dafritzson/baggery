@@ -190,7 +190,7 @@ export function AlertsSettings() {
           </View>
         ) : (
           <ThemedText type="small" themeColor="textSecondary">
-            Bags, subs, the cut line, lineups and stat corrections. Choose My Baggers for your hitters, or Everyone for every team still alive.
+            Bags, subs, the cut line, lineups and stat corrections. Choose My Baggers for your hitters (the ghost’s too once you pick for it), or Everyone for every team still alive.
           </ThemedText>
         )}
       </Card>
