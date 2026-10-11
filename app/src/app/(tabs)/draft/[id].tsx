@@ -199,7 +199,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
         <>
           {errorText}
           {commissioner?.canStart && (
-            <Button label={commissioner.startLabel} onPress={() => commissioner.confirm('start')} />
+            <Button label="Start the draft" onPress={() => commissioner.confirm('start')} />
           )}
           {ghostHelp}
           {yieldButton}
@@ -817,8 +817,6 @@ function outReason(data: SeasonData, playerId: number): string {
 
 interface CommissionerActions {
   canStart: boolean;
-  /** Start button label, saying how the pick order is set. */
-  startLabel: string;
   /** Manager on the clock, when autopick is available. */
   autopickFor: string | null;
   canUndo: boolean;
@@ -861,7 +859,6 @@ function useCommissionerActions(
 
   return {
     canStart: draft.status === 'scheduled',
-    startLabel: `Start the draft (${orderText(draft)})`,
     autopickFor: onClock ? `${teamName(onClock)}${turn?.ghost ? ' (👻 Ghost pick)' : ''}` : null,
     // A finished season's drafts are history.
     canUndo: data.season.status !== 'complete' && data.actions.some((a) => a.draft_id === draft.id),
@@ -956,7 +953,7 @@ function CommissionerCard({
   return (
     <Card title="Commissioner">
       {actions.canStart && (
-        <Button label={actions.startLabel} onPress={() => actions.confirm('start')} />
+        <Button label="Start the draft" onPress={() => actions.confirm('start')} />
       )}
       <View style={styles.buttonRow}>
         {actions.autopickFor && (
