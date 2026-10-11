@@ -127,7 +127,8 @@ The eliminated managers' team, so they keep following along. It's in the Standin
   managers drinks).
 - A ghost pick its manager doesn't make is autodrafted (their autodraft switch, or the
   commissioner's autopick).
-- No manager's team can be named "👻 Ghost".
+- The ghost goes by a 👻 for each manager behind it (👻👻 in round 2). No manager's team can be
+  named "👻 Ghost" or only 👻s.
 - The ghost wins about 6% of seasons (`scripts/ghost-sim.ts --ghost-in-cs`): with 2 hitters it
   finishes last in the CS 99% of the time, so it nearly always picks 4th and 5th in Draft 4.
 

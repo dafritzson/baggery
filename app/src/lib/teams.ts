@@ -22,7 +22,8 @@ export function suggestTeamName(data: SeasonData): string {
  * start from this, so they match what the page already shows for the team.
  */
 export function teamName(team: Team): string {
-  if (team.is_ghost) return '👻 Ghost';
+  // Named by the season loader (ghostName).
+  if (team.is_ghost) return team.name ?? '👻';
   if (team.name) return team.name;
   let name = unclaimedNames.get(team.id);
   if (!name) {

@@ -56,7 +56,7 @@ async function members(seasonId: string): Promise<string[]> {
 }
 
 async function teamName(teamId: string): Promise<string> {
-  const [row] = await sql`select coalesce(name, 'Team ' || slot) as name from public.fantasy_teams where id = ${teamId}`;
+  const [row] = await sql`select private.team_label(${teamId}::uuid) as name`;
   return row?.name ?? 'the ghost';
 }
 

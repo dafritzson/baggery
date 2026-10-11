@@ -16,7 +16,7 @@ export interface OnTheClock {
 
 /**
  * "⏰ You're on the clock" / "Draft 2, round 3: pick a hitter or pass". On a ghost turn, the
- * manager picks for the ghost: "Draft 3: pick a hitter for 👻 Ghost".
+ * manager picks for the ghost: "Draft 3: pick a hitter for 👻👻".
  */
 export function onTheClockAlert(turn: OnTheClock): Alert {
   const title = '⏰ You’re on the clock';

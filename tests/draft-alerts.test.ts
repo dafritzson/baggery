@@ -15,10 +15,10 @@ describe('onTheClockAlert', () => {
   });
 
   it('names the ghost on a ghost turn', () => {
-    const ghost = { team: '👻 Ghost', kind: 'add' as const };
-    expect(onTheClockAlert({ draftNumber: 3, kind: 'redraft', round: 1, ghost }).body).toBe('Draft 3: pick a hitter for 👻 Ghost');
+    const ghost = { team: '👻👻', kind: 'add' as const };
+    expect(onTheClockAlert({ draftNumber: 3, kind: 'redraft', round: 1, ghost }).body).toBe('Draft 3: pick a hitter for 👻👻');
     expect(onTheClockAlert({ draftNumber: 4, kind: 'redraft', round: 1, ghost: { ...ghost, kind: 'redraft' } }).body).toBe(
-      'Draft 4: pick a hitter for 👻 Ghost, or pass',
+      'Draft 4: pick a hitter for 👻👻, or pass',
     );
   });
 });
@@ -47,8 +47,8 @@ describe('autopickAlert', () => {
   });
 
   it('names the ghost on a ghost turn', () => {
-    expect(autopickAlert({ ...pick, ghost: '👻 Ghost' }).title).toBe('🤖 Autodraft took Juan Soto for 👻 Ghost');
-    expect(autopickAlert({ ...pick, player: null, ghost: '👻 Ghost' }).title).toBe('🤖 Autodraft passed for 👻 Ghost');
+    expect(autopickAlert({ ...pick, ghost: '👻👻' }).title).toBe('🤖 Autodraft took Juan Soto for 👻👻');
+    expect(autopickAlert({ ...pick, player: null, ghost: '👻👻' }).title).toBe('🤖 Autodraft passed for 👻👻');
   });
 });
 

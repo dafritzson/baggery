@@ -35,7 +35,7 @@ import { useLayout } from '@/hooks/use-layout';
 import { useTheme } from '@/hooks/use-theme';
 import { formatLockTime, mlbTeamAbbr, playerLine, playerName } from '@/lib/format';
 import { type DraftAction, useDraftAction, useOpenPlayer } from '@/lib/player';
-import { type Draft, type DraftActionRow, type SeasonData, coreActions, currentRosters, draftConfig, useSeason } from '@/lib/season';
+import { type Draft, type DraftActionRow, type SeasonData, coreActions, currentRosters, draftConfig, ghostName, useSeason } from '@/lib/season';
 import { ownerLine, ownerName, teamLabel, teamName } from '@/lib/teams';
 import { callFunction } from '@/lib/supabase';
 
@@ -135,7 +135,7 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
       />
     ));
   // On your ghost turn: what kind of turn it is, and a link to how ghost turns work.
-  const ghostHelp = myTurn && turn?.ghost && <GhostTurnHelp filling={filling} nobodyLeft={nobodyLeft} />;
+  const ghostHelp = myTurn && turn?.ghost && <GhostTurnHelp name={ghostName(data)} filling={filling} nobodyLeft={nobodyLeft} />;
   // The Queue tab goes away once you have no turns left to queue for.
   const tab = chosenTab === 'queue' && !target ? 'players' : chosenTab;
   const queued = queue.entries.filter((e) => draftable.has(e.playerId)).length;
@@ -256,7 +256,7 @@ function clockStatus(data: SeasonData, draft: Draft, turn: Turn | null, myTurn: 
   }
   if (draft.status === 'complete' || !turn) return { headline: 'Draft complete', detail: null, last };
   const n = draft.pick_order.length;
-  const forGhost = turn.ghost ? ' for the 👻 Ghost' : '';
+  const forGhost = turn.ghost ? ` for ${ghostName(data)}` : '';
   return {
     headline: myTurn ? `You're on the clock${forGhost}!` : `${teamLabel(data, team)} is on the clock${forGhost}`,
     detail: `${turn.round > draft.rounds ? `Ghost pick ${pickLabel(turn.slot, n, draft.rounds)}` : `Round ${turn.round} · Pick ${(turn.slot % n) + 1}`} · #${actionCount + 1} overall`,
@@ -268,10 +268,10 @@ function clockStatus(data: SeasonData, draft: Draft, turn: Turn | null, myTurn: 
  * On your turn for the ghost team: whether it fills an empty spot (no drop, no pass) or is an
  * ordinary redraft pick, with a link to the ghost's rules.
  */
-function GhostTurnHelp({ filling, nobodyLeft }: { filling: boolean; nobodyLeft: boolean }) {
+function GhostTurnHelp({ name, filling, nobodyLeft }: { name: string; filling: boolean; nobodyLeft: boolean }) {
   const theme = useTheme();
   return (
-    <Card title="Your pick for the 👻 Ghost" style={{ backgroundColor: theme.tint }}>
+    <Card title={`Your pick for ${name}`} style={{ backgroundColor: theme.tint }}>
       <ThemedText type="small">
         {filling && nobodyLeft
           ? 'Nobody undrafted is left to fill its empty spot, so pass this turn.'
@@ -775,7 +775,7 @@ function PickSheet({
         </ThemedText>
       )}
       {onBehalfOf && <ThemedText type="smallBold">Picking for {onBehalfOf} (commissioner)</ThemedText>}
-      {forGhost && <ThemedText type="smallBold">For the 👻 Ghost team</ThemedText>}
+      {forGhost && <ThemedText type="smallBold">For {ghostName(data)}</ThemedText>}
       {needsDrop && (
         <View style={{ gap: Spacing.one }}>
           <ThemedText type="smallBold">{empty.length ? 'He fills' : 'Drop which player?'}</ThemedText>
@@ -859,7 +859,7 @@ function useCommissionerActions(
 
   return {
     canStart: draft.status === 'scheduled',
-    autopickFor: onClock ? `${teamName(onClock)}${turn?.ghost ? ' (👻 Ghost pick)' : ''}` : null,
+    autopickFor: onClock ? `${teamName(onClock)}${turn?.ghost ? ` (${ghostName(data)} pick)` : ''}` : null,
     // A finished season's drafts are history.
     canUndo: data.season.status !== 'complete' && data.actions.some((a) => a.draft_id === draft.id),
     busy,
