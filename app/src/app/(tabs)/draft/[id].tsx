@@ -658,7 +658,9 @@ function Rosters({ data, draft }: { data: SeasonData; draft: Draft }) {
   const wide = useLayout() === 'wide';
   const rosters = currentRosters(data);
   const ghost = data.teams.find((t) => t.is_ghost);
-  const order = draft.pick_order.length ? draft.pick_order : data.teams.filter((t) => !t.is_ghost).map((t) => t.id);
+  // A copy: pushing the ghost onto draft.pick_order itself put it in the snake for the Board and
+  // turn order too, until the next refetch.
+  const order = draft.pick_order.length ? [...draft.pick_order] : data.teams.filter((t) => !t.is_ghost).map((t) => t.id);
   // Draft 3: the ghost picks after the snake without being in it.
   if (ghost && draft.ghost_turns.length && !order.includes(ghost.id)) order.push(ghost.id);
   return (
