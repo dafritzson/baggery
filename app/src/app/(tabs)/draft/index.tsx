@@ -157,8 +157,15 @@ function DraftsCard({ data }: { data: SeasonData }) {
 function TeamsCard({ data }: { data: SeasonData }) {
   const theme = useTheme();
   const rosters = currentRosters(data);
+  // While the season's on: teams still playing, then the ghost, then the knocked-out teams
+  // (latest out first) under an Out heading, folded to start with.
+  const live = data.season.status !== 'complete';
+  const out = live
+    ? data.teams.filter((t) => t.eliminated_after_round !== null).sort((a, b) => b.eliminated_after_round! - a.eliminated_after_round! || a.slot - b.slot)
+    : [];
+  const playing = data.teams.filter((t) => !out.includes(t)).sort((a, b) => Number(a.is_ghost) - Number(b.is_ghost));
   const [renaming, setRenaming] = useState<Team | null>(null);
-  const [folded, setFolded] = useState<Set<string>>(new Set());
+  const [folded, setFolded] = useState<Set<string>>(() => new Set(out.map((t) => t.id)));
   const allFolded = data.teams.length > 0 && data.teams.every((t) => folded.has(t.id));
   function toggle(teamId: string) {
     const next = new Set(folded);
@@ -179,16 +186,23 @@ function TeamsCard({ data }: { data: SeasonData }) {
         )
       }>
       <View style={styles.teams}>
-        {data.teams.map((team) => (
-          <TeamTile
-            key={team.id}
-            data={data}
-            team={team}
-            roster={rosters.get(team.id) ?? []}
-            open={!folded.has(team.id)}
-            onToggle={() => toggle(team.id)}
-            onRename={data.isCommissioner && team.id !== data.myTeam?.id && team.user_id ? () => setRenaming(team) : undefined}
-          />
+        {[...playing, ...out].map((team) => (
+          <View key={team.id} style={styles.teams}>
+            {team === out[0] && (
+              <View style={styles.outHeading}>
+                <ThemedText style={[styles.outLabel, { color: theme.danger }]}>OUT</ThemedText>
+                <View style={[styles.outRule, { backgroundColor: theme.border }]} />
+              </View>
+            )}
+            <TeamTile
+              data={data}
+              team={team}
+              roster={rosters.get(team.id) ?? []}
+              open={!folded.has(team.id)}
+              onToggle={() => toggle(team.id)}
+              onRename={data.isCommissioner && team.id !== data.myTeam?.id && team.user_id ? () => setRenaming(team) : undefined}
+            />
+          </View>
         ))}
       </View>
       {renaming && <RenameTeam data={data} team={renaming} onClose={() => setRenaming(null)} />}
@@ -248,5 +262,8 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   draftRow: { gap: Spacing.two },
   teams: { gap: Spacing.two + 2 },
+  outHeading: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingTop: Spacing.one, paddingHorizontal: Spacing.one },
+  outLabel: { fontSize: 11, lineHeight: 14, fontWeight: 800, letterSpacing: 0.8 },
+  outRule: { flex: 1, height: StyleSheet.hairlineWidth },
   assignRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 36 },
 });
