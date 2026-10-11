@@ -23,7 +23,7 @@ import { type BoxScore, useBoxScore } from '@/lib/box-score';
 import { lineScore, nickname, ownerOf, seriesLabel, statusLine } from '@/lib/game-labels';
 import { PlayerProvider } from '@/lib/player';
 import { type GameInfo, useScores } from '@/lib/scores';
-import { type SeasonData, ghostManagers } from '@/lib/season';
+import { type SeasonData, ghostName } from '@/lib/season';
 import { teamColors } from '@/lib/team-colors';
 import { ownerName, teamName } from '@/lib/teams';
 
@@ -37,7 +37,7 @@ type Owner = { bagger: Bagger; owner: string | null; out?: boolean };
  * each manager behind it.
  */
 function baggersFor(data: SeasonData, game: GameInfo) {
-  const ghosts = '👻'.repeat(Math.max(1, ghostManagers(data).length));
+  const ghosts = ghostName(data);
   return (playerId: number): Owner => {
     const teamId = ownerOf(data, playerId, game);
     if (!teamId) return { bagger: null, owner: null };

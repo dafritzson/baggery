@@ -247,6 +247,9 @@ async function fetchSeason(
     commissionerIds,
     isCommissioner: !!userId && commissionerIds.has(userId),
   };
+  // The ghost goes by a 👻 per manager behind it.
+  const ghost = teamRows.find((t) => t.is_ghost);
+  if (ghost) ghost.name = ghostName(data);
   return { data, years };
 }
 
@@ -381,6 +384,11 @@ export function draftConfig(data: SeasonData, draft: Draft): DraftConfig {
 export function ghostManagers(data: SeasonData): Team[] {
   const ids = [...new Set(data.drafts.flatMap((d) => d.ghost_turns.map((g) => g.by)))];
   return ids.map((id) => data.teams.find((t) => t.id === id)).filter((t): t is Team => !!t);
+}
+
+/** The ghost team's name: a 👻 per manager behind it (👻👻 in round 2). */
+export function ghostName(data: SeasonData): string {
+  return '👻'.repeat(Math.max(1, ghostManagers(data).length));
 }
 
 /** Each team's current players (not dropped). */

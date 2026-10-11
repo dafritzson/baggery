@@ -52,7 +52,7 @@ export async function sendBagAlerts(): Promise<number> {
     )
     select s.endpoint, s.p256dh, s.auth, s.user_id,
            p.full_name as player, e.game_pk, e.mlb_player_id, e.tb, e.bags, e.singles, e.doubles, e.triples, e.hr,
-           coalesce(t.name, 'Team ' || t.slot) as team, t.user_id as team_user_id,
+           private.team_label(t.id) as team, t.user_id as team_user_id,
            nullif(split_part(pr.display_name, ' ', 1), '') as manager
     from taken d
     join private.bag_events e on e.id = d.event_id
@@ -144,7 +144,7 @@ export async function queueSubAlerts(gamePk: number, changes: LineupChange[]): P
       returning mlb_player_id, kind
     )
     select f.mlb_player_id, f.kind, s.endpoint, s.user_id, s.delay_seconds,
-           coalesce(t.name, 'Team ' || t.slot) as team, t.user_id as team_user_id,
+           private.team_label(t.id) as team, t.user_id as team_user_id,
            nullif(split_part(pr.display_name, ' ', 1), '') as manager
     from fresh f
     cross join game g
@@ -215,7 +215,7 @@ export async function queueCutAlerts(): Promise<number> {
     if (!flips.length) return 0;
 
     const rows = await tx`
-      select t.id as team_id, coalesce(t.name, 'Team ' || t.slot) as team, t.user_id as team_user_id,
+      select t.id as team_id, private.team_label(t.id) as team, t.user_id as team_user_id,
              nullif(split_part(pr.display_name, ' ', 1), '') as manager,
              s.endpoint, s.user_id, s.delay_seconds
       from public.fantasy_teams t
@@ -274,7 +274,7 @@ export async function queueLineupAlerts(lineups: LineupRow[]): Promise<number> {
     const rows = await tx`
       select c.game_pk, c.mlb_team_id, mt.name as mlb_team, p.mlb_player_id, pl.full_name as player,
              p.injured_list is not null as injured,
-             coalesce(t.name, 'Team ' || t.slot) as team, t.user_id as team_user_id,
+             private.team_label(t.id) as team, t.user_id as team_user_id,
              nullif(split_part(pr.display_name, ' ', 1), '') as manager,
              s.endpoint, s.user_id, s.delay_seconds
       from unnest(${changed.map((l) => l.game_pk)}::int[], ${changed.map((l) => l.mlb_team_id)}::int[]) as c (game_pk, mlb_team_id)
@@ -340,7 +340,7 @@ export async function queueCorrectionAlerts(): Promise<number> {
         returning id, game_pk, mlb_player_id, old_h, old_doubles, old_triples, old_hr, h, doubles, triples, hr
       )
       select c.*, p.full_name as player,
-             coalesce(t.name, 'Team ' || t.slot) as team, t.user_id as team_user_id,
+             private.team_label(t.id) as team, t.user_id as team_user_id,
              nullif(split_part(pr.display_name, ' ', 1), '') as manager,
              s.endpoint, s.user_id, s.delay_seconds
       from taken c
