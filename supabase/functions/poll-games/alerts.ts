@@ -154,7 +154,7 @@ export async function queueSubAlerts(gamePk: number, changes: LineupChange[]): P
     join public.fantasy_teams t on t.id = r.fantasy_team_id and t.eliminated_after_round is null
     join public.push_subscriptions s
       on s.sub_alerts
-     and ((s.scope = 'mine' and s.user_id = t.user_id)
+     and ((s.scope = 'mine' and private.alerts_mine(s.user_id, t.id))
           or (s.scope = 'league' and exists (
             select 1 from public.league_members m where m.league_id = se.league_id and m.user_id = s.user_id)))
     left join public.profiles pr on pr.id = t.user_id`;
@@ -221,7 +221,7 @@ export async function queueCutAlerts(): Promise<number> {
       from public.fantasy_teams t
       join public.push_subscriptions s
         on s.cut_alerts
-       and ((s.scope = 'mine' and s.user_id = t.user_id)
+       and ((s.scope = 'mine' and private.alerts_mine(s.user_id, t.id))
             or (s.scope = 'league' and exists (
               select 1 from public.league_members m where m.league_id = ${season.league_id} and m.user_id = s.user_id)))
       left join public.profiles pr on pr.id = t.user_id
@@ -289,7 +289,7 @@ export async function queueLineupAlerts(lineups: LineupRow[]): Promise<number> {
       join public.mlb_players pl on pl.id = p.mlb_player_id
       join public.push_subscriptions s
         on s.lineup_alerts
-       and ((s.scope = 'mine' and s.user_id = t.user_id)
+       and ((s.scope = 'mine' and private.alerts_mine(s.user_id, t.id))
             or (s.scope = 'league' and exists (
               select 1 from public.league_members m where m.league_id = se.league_id and m.user_id = s.user_id)))
       left join public.profiles pr on pr.id = t.user_id`;
@@ -355,7 +355,7 @@ export async function queueCorrectionAlerts(): Promise<number> {
             or t.eliminated_after_round >= case g.game_type when 'L' then 2 when 'W' then 3 else 1 end)
       join public.push_subscriptions s
         on s.correction_alerts
-       and ((s.scope = 'mine' and s.user_id = t.user_id)
+       and ((s.scope = 'mine' and private.alerts_mine(s.user_id, t.id))
             or (s.scope = 'league' and exists (
               select 1 from public.league_members m where m.league_id = se.league_id and m.user_id = s.user_id)))
       left join public.profiles pr on pr.id = t.user_id
