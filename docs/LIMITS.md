@@ -131,6 +131,8 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   or playing: an estimated 200–300 KB, kept for the session. Not loading them with the scores
   (every app open) is the point: that would be over 1 GB a month. At ~10 scrubbing sessions a day
   it's ~90 MB a month. During live games the live games' lines reload once a minute while wanted.
+  A game that starts or ends after they're loaded is loaded again on its own the next time they're
+  wanted (one game's lines, ~10–20 KB): a few such loads per long-open session, well under 10 MB a month.
   poll-games saves these lines from the play-by-play it already reads for the hits, plus one more
   read of each game 10 minutes after it ends: ~15 extra MLB requests a postseason day, no extra
   Edge Function calls. The table is ~22,000 rows for 2020–2025 (~3 MB).
