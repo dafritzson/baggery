@@ -97,12 +97,15 @@ export function StandingsTable({
   moveMs?: number;
 }) {
   // Teams eliminated in an earlier round aren't in this one. The ghost team plays round 2 without
-  // facing its cut: it's listed below everyone, outside the ranking.
+  // facing its cut: it's ranked with everyone (its place, tiebreakers included, sets its Draft 4
+  // turn), but the cut counts only the managers' teams.
   const playing = data.teams.filter((t) => inRound({ eliminatedAfterRound: t.eliminated_after_round, isGhost: t.is_ghost }, round));
   const teams = playing.filter((t) => facesCut({ isGhost: t.is_ghost }, round));
-  const aside = playing.filter((t) => !facesCut({ isGhost: t.is_ghost }, round));
-  const standings = roundStandings(round, teams.map((t) => t.id), scores.games, scores.stats, coreSpells(data));
-  const asideStandings = aside.length ? roundStandings(round, aside.map((t) => t.id), scores.games, scores.stats, coreSpells(data)) : [];
+  const all = roundStandings(round, playing.map((t) => t.id), scores.games, scores.stats, coreSpells(data));
+  const standings = all.length === teams.length ? all : roundStandings(round, teams.map((t) => t.id), scores.games, scores.stats, coreSpells(data));
+  const rankOf = new Map(all.map((s) => [s.teamId, s.rank]));
+  const cutIds = new Set(teams.map((t) => t.id));
+  const facing = (teamId: string) => cutIds.has(teamId);
   const columns = roundColumns(round, scores.games);
   const survivors = data.season.survivors_after_round[round - 1] ?? teams.length;
   const byId = new Map(playing.map((t) => [t.id, t]));
@@ -123,21 +126,28 @@ export function StandingsTable({
   // Teams through first, so the cut line sits between them and the rest.
   const order = { safe: 0, tied: 1, out: 2 };
   const ordered = [...standings].sort((a, b) => order[status(a.teamId)] - order[status(b.teamId)] || a.rank - b.rank);
-  const through = ordered.filter((s) => status(s.teamId) !== 'out').length;
-  // Groups of two or more teams level on bags: each gets the tiebreaker icon.
-  const tiedTotals = [...new Set(ordered.map((s) => s.total))].filter((t) => ordered.filter((s) => s.total === t).length > 1);
+  // The ghost in round 2 goes in at its place, ahead of the first manager ranked below it.
+  const listed = [...ordered];
+  for (const g of all.filter((s) => !facing(s.teamId))) {
+    const at = listed.findIndex((s) => facing(s.teamId) && rankOf.get(s.teamId)! > g.rank);
+    listed.splice(at < 0 ? listed.length : at, 0, g);
+  }
+  // The cut line sits above the first team out: everyone above it is through (or plays on, the ghost).
+  const firstOut = listed.findIndex((s) => facing(s.teamId) && status(s.teamId) === 'out');
+  // Groups of two or more teams level on bags (the ghost included): each gets the tiebreaker icon.
+  const tiedTotals = [...new Set(listed.map((s) => s.total))].filter((t) => listed.filter((s) => s.total === t).length > 1);
   const compact = useLayout() === 'compact';
   // Before a round's first pitch there's nothing to rank.
   const started = columns.some((c) => c.started);
 
-  const anyMoved = ordered.some((s) => (moves?.get(s.teamId) ?? 0) !== 0);
-  const rows: GridRow[] = [...ordered, ...asideStandings].map((s, i) => {
+  const anyMoved = listed.some((s) => (moves?.get(s.teamId) ?? 0) !== 0);
+  const rows: GridRow[] = listed.map((s, i) => {
     const team = byId.get(s.teamId)!;
-    const ranked = i < ordered.length;
+    const rank = rankOf.get(s.teamId)!;
     const owner = ownerLine(data, team);
     const mine = team.id === data.myTeam?.id;
-    const tied = ranked && ordered.some((o) => o !== s && o.rank === s.rank);
-    const levelOnBags = ranked && started && tiedTotals.includes(s.total);
+    const tied = all.some((o) => o.teamId !== s.teamId && o.rank === rank);
+    const levelOnBags = started && tiedTotals.includes(s.total);
     const moved = moves?.get(s.teamId) ?? 0;
     return {
       key: s.teamId,
@@ -145,7 +155,7 @@ export function StandingsTable({
         <>
           {/* No rank column before the round starts, so it doesn't eat into long team names. */}
           {started && (
-            <ThemedText type="small" themeColor="textSecondary" style={styles.rank}>{!ranked ? '–' : tied ? `T${s.rank}` : s.rank}</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.rank}>{tied ? `T${rank}` : rank}</ThemedText>
           )}
           {!compact && <View style={styles.badge}><OwnerBadge teamId={team.id} owner={team.is_ghost ? '👻' : owner} photo={team.user_id ? data.photos.get(team.user_id) : null} mine={mine} /></View>}
           <TeamLabel name={teamName(team)} owner={owner} mine={mine} />
@@ -187,8 +197,8 @@ export function StandingsTable({
       highlight: flash?.teamId === s.teamId ? columns.findIndex((c) => `${c.gameType}${c.number}` === flash.column) : undefined,
       selected: team.id === selectedTeamId,
       mine,
-      standing: started && ranked ? status(s.teamId) : undefined,
-      cutAfter: started && i === through - 1 && ordered.length > through,
+      standing: started && facing(s.teamId) ? status(s.teamId) : undefined,
+      cutAfter: started && firstOut > 0 && i === firstOut - 1,
       onPress: () => onSelectTeam(team.id),
     };
   });
@@ -233,12 +243,13 @@ export function StandingsTable({
         teams={
           tieGroup === null
             ? null
-            : ordered
+            : listed
                 .filter((s) => s.total === tieGroup)
                 .map((s) => {
                   const st = status(s.teamId);
-                  // Only a tie across the cut line decides who's through.
-                  const acrossCut = st === 'tied' || ordered.some((o) => o.total === tieGroup && status(o.teamId) !== st);
+                  // Only a tie across the cut line decides who's through. The ghost in round 2 isn't
+                  // cut; its tiebreakers only place it in Draft 4.
+                  const acrossCut = facing(s.teamId) && (st === 'tied' || ordered.some((o) => o.total === tieGroup && status(o.teamId) !== st));
                   return {
                     teamId: s.teamId,
                     name: teamName(byId.get(s.teamId)!),

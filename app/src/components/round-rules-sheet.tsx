@@ -57,7 +57,7 @@ export function RoundRulesSheet({
       ? 'The top team wins it all.'
       : `The top ${survivors} go ${round === 2 ? 'to the World Series' : 'through'}. The bottom ${out} are out.`,
     ...(ghost && round === 2
-      ? [`The Ghost plays too, but it's never cut and takes nobody's spot. If it finishes in the top ${survivors}, still only the bottom ${out} managers go.`]
+      ? [`The Ghost plays too, but it's never cut and takes nobody's spot. If it finishes in the top ${survivors}, still only the bottom ${out} managers go. Its place (tiebreakers included) sets its Draft 4 turn.`]
       : ghost && round === 3
         ? ['The Ghost is ranked with the finalists. If it finishes first, its managers share the title.']
         : []),
