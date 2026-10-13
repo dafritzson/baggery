@@ -113,7 +113,8 @@ The eliminated managers' team, so they keep following along. It's in the Standin
 - **Draft 3**: after the survivors' rounds, the 2 managers out after round 1 each add an undrafted
   hitter to the ghost, the higher-ranked of them first.
 - **Round 2**: the ghost plays the Championship Series with those 2 hitters. It's never cut and
-  doesn't take a spot: the cut counts only the managers' teams.
+  doesn't take a spot: the cut counts only the managers' teams. The Standings still rank it with
+  everyone, tiebreakers included, since its place sets its Draft 4 turn.
 - **Draft 4**: the ghost drafts with the 3 finalists, placed by round 2 bags like everyone (by its
   rank, or its raffle tickets).
   Its first 2 turns fill its empty spots (no drop, no yield), made by the 2 managers out after

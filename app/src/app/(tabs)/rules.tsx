@@ -136,7 +136,7 @@ export default function RulesScreen() {
           <B>Draft 3:</B> after the survivors&apos; picks, the 2 managers eliminated in round 1 each add an undrafted hitter
           to the Ghost. Of those 2 managers, the one who finished higher in round 1 picks first.
         </Bullet>
-        <Bullet><B>Round 2:</B> it plays the Championship Series with those 2 hitters. It&apos;s never cut and takes nobody&apos;s spot: the bottom {survivors[0] - survivors[1]} managers are out wherever the Ghost finishes.</Bullet>
+        <Bullet><B>Round 2:</B> it plays the Championship Series with those 2 hitters. It&apos;s never cut and takes nobody&apos;s spot: the bottom {survivors[0] - survivors[1]} managers are out wherever the Ghost finishes. It&apos;s still ranked, tiebreakers included, since its place sets its Draft 4 turn.</Bullet>
         <Bullet>
           <B>Draft 4:</B> the Ghost drafts with the finalists, placed by its round 2 bags like everyone else (in a raffle, no tickets if it finished below the best manager knocked out). Its first 2
           turns fill its 2 empty spots, with no drop and no pass (unless nobody undrafted is left), and go to the 2 managers eliminated in round 2. Its last
