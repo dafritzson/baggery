@@ -277,15 +277,18 @@ async function loadPlayLines(gamePks: number[], playerIds: number[]): Promise<Pl
   }
 }
 
-// The season's lines once loaded, by season and rostered players.
+// The season's lines once loaded, by season and rostered players, and each game's status when its
+// lines were loaded (a game is loaded again once its status changes, so it ends with its whole line).
 const seasonPlays = new Map<string, PlayLine[]>();
+const loadedAs = new Map<string, Map<number, string>>();
 
 /**
  * The season's play-by-play batting lines (mlb_play_lines) for its rostered players, for the
  * Standings scrubber: with them the middle of a day is rebuilt exactly, tiebreakers included.
  * Loaded only once `wanted` (the scrubber is in the middle of a day, or playing), in one go (an
- * estimated 200–300 KB), and kept for the session. While a game is live, its lines are reloaded
- * once a minute for as long as they're wanted. Empty until loaded; those moments use the hits.
+ * estimated 200–300 KB), and kept for the session. A game that starts or ends after that is loaded
+ * when they're next wanted, and while a game is live its lines are reloaded once a minute for as
+ * long as they're wanted. Empty until loaded; those moments use the hits.
  */
 export function useSeasonPlayLines(wanted: boolean): PlayLine[] {
   const { data } = useSeason();
@@ -294,19 +297,25 @@ export function useSeasonPlayLines(wanted: boolean): PlayLine[] {
   const playerKey = data ? [...new Set(data.spells.map((s) => s.mlb_player_id))].sort().join(',') : '';
   const key = data ? `${data.season.year}:${playerKey}` : '';
   const started = (scores?.games ?? []).filter((g) => g.status !== 'Preview');
-  const gameKey = started.map((g) => g.gamePk).join(',');
+  const gameKey = started.map((g) => `${g.gamePk}:${g.status}`).join(',');
   const liveKey = started.filter((g) => g.status === 'Live').map((g) => g.gamePk).join(',');
   useEffect(() => {
     if (!wanted || !key || !playerKey || !gameKey) return;
     let cancelled = false;
     const players = playerKey.split(',').map(Number);
+    const statuses = new Map(gameKey.split(',').map((g) => g.split(':')).map(([pk, status]) => [Number(pk), status]));
     const load = async (pks: number[]) => {
       const lines = await loadPlayLines(pks, players);
       if (!lines || cancelled) return;
       seasonPlays.set(key, [...(seasonPlays.get(key) ?? []).filter((l) => !pks.includes(l.gamePk)), ...lines]);
+      const loaded = loadedAs.get(key) ?? new Map<number, string>();
+      for (const pk of pks) loaded.set(pk, statuses.get(pk)!);
+      loadedAs.set(key, loaded);
       setVersion((v) => v + 1);
     };
-    if (!seasonPlays.has(key)) load(gameKey.split(',').map(Number));
+    // Games not loaded yet, or whose status has changed since (one that was live when loaded).
+    const due = [...statuses].filter(([pk, status]) => loadedAs.get(key)?.get(pk) !== status).map(([pk]) => pk);
+    if (due.length) load(due);
     const live = liveKey ? liveKey.split(',').map(Number) : [];
     const timer = live.length ? setInterval(() => load(live), 60_000) : null;
     return () => {
