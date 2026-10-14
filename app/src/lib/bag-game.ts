@@ -175,3 +175,29 @@ export function isNight(date: Date): boolean {
   const hour = date.getHours();
   return hour >= 19 || hour < 6;
 }
+
+/**
+ * Misclicks given to games saved before they were counted: any game that ties one of them on bags
+ * wins the tiebreaker.
+ */
+export const UNCOUNTED_MISCLICKS = 1000;
+
+/** A finished game, as the records rank it. */
+export interface Run {
+  score: number;
+  /** Taps that caught nothing: a perfect game has 0. */
+  misclicks: number;
+}
+
+/**
+ * Orders runs best first: more bags, then fewer misclicks. 0 is a full tie, which goes to the
+ * most recent run (bag_game_bests).
+ */
+export function compareRuns(a: Run, b: Run): number {
+  return b.score - a.score || a.misclicks - b.misclicks;
+}
+
+/** Whether `run` takes or keeps a record held by `held`: better, or a full tie (the last to reach it holds it). */
+export function takesRecord(run: Run, held: Run | null | undefined): boolean {
+  return !held || compareRuns(run, held) <= 0;
+}

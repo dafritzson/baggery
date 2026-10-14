@@ -29,6 +29,7 @@ import {
   TOTAL_BAGS,
   TOTAL_DROPS,
   makeSchedule,
+  takesRecord,
 } from '@/lib/bag-game';
 
 export const GAME_FONT = 'LuckiestGuy_400Regular';
@@ -65,10 +66,14 @@ export function BagGame({ view, scores, before, night, onFinish, onReplay }: {
   /** High scores from before this game ended (for the final screen); undefined if not loaded. */
   before: BagGameScores | undefined;
   night: boolean;
-  onFinish: (score: number) => void;
+  onFinish: (score: number, misclicks: number) => void;
   onReplay: () => void;
 }) {
   const [bags] = useState(makeSchedule);
+  // Taps that caught nothing, between the first bag dropping and the last one going. A ref, so
+  // counting doesn't re-render the game.
+  const misclicks = useRef(0);
+  const [playFrom] = useState(() => Date.now() + INTRO_MS);
   const [specials, setSpecials] = useState<SpecialsCaught>({ double: 0, triple: 0, homer: 0 });
   const [score, setScore] = useState(0);
   // Drops finished (caught or vanished), and how many of them were bags rather than decoys.
@@ -88,17 +93,29 @@ export function BagGame({ view, scores, before, night, onFinish, onReplay }: {
     [],
   );
   const popupDone = useCallback((id: number) => setPopups((p) => p.filter((x) => x.id !== id)), []);
+  const doneRef = useRef(false);
+  useEffect(() => {
+    doneRef.current = done;
+  }, [done]);
+  const miss = useCallback(() => {
+    if (Date.now() >= playFrom && !doneRef.current) misclicks.current += 1;
+  }, [playFrom]);
 
   // Report the score once, however often onFinish changes.
   const reported = useRef(false);
+  // The count once the game is over, for the final screen.
+  const [finalMisclicks, setFinalMisclicks] = useState<number | null>(null);
   useEffect(() => {
     if (!done || reported.current) return;
     reported.current = true;
-    onFinish(score);
+    setFinalMisclicks(misclicks.current);
+    onFinish(score, misclicks.current);
   }, [done, score, onFinish]);
 
   return (
     <View style={StyleSheet.absoluteFill}>
+      {/* Under everything: a tap that reaches it missed every bag. Each finger counts. */}
+      <View style={StyleSheet.absoluteFill} onPointerDown={miss} />
       <StadiumBoard
         view={view}
         scores={scores}
@@ -111,13 +128,13 @@ export function BagGame({ view, scores, before, night, onFinish, onReplay }: {
         <Shadow key={bag.id} bag={bag} view={view} />
       ))}
       {bags.map((bag) => (
-        <FallingBag key={bag.id} bag={bag} view={view} onCatch={catchBag} onGone={bagGone} />
+        <FallingBag key={bag.id} bag={bag} view={view} onCatch={catchBag} onGone={bagGone} onMiss={miss} />
       ))}
       {popups.map((p) => (
         <ScorePopup key={p.id} popup={p} onDone={popupDone} />
       ))}
       <Intro view={view} />
-      {done && <Final view={view} score={score} before={before} onReplay={onReplay} />}
+      {finalMisclicks !== null && <Final view={view} score={score} misclicks={finalMisclicks} before={before} onReplay={onReplay} />}
     </View>
   );
 }
@@ -152,11 +169,13 @@ function useFall(bag: Bag) {
   return fall;
 }
 
-function FallingBag({ bag, view, onCatch, onGone }: {
+function FallingBag({ bag, view, onCatch, onGone, onMiss }: {
   bag: Bag;
   view: FieldView;
   onCatch: (bag: Bag, at: Point) => void;
   onGone: (bag: Bag) => void;
+  /** A tap on a bag that's already caught or going. */
+  onMiss: () => void;
 }) {
   const kind = BAG_KINDS[bag.kind];
   const { size, hit, center, dropFrom } = bagLayout(bag, view);
@@ -192,7 +211,7 @@ function FallingBag({ bag, view, onCatch, onGone }: {
   }, [bag, thud, fade, finish]);
 
   function grab() {
-    if (state !== 'live' || gone.current) return;
+    if (state !== 'live' || gone.current) return onMiss();
     setState('caught');
     cancelAnimation(fall);
     cancelAnimation(fade);
@@ -337,9 +356,10 @@ function Intro({ view }: { view: FieldView }) {
 /** Feet from home plate to the pitcher's mound. */
 const MOUND_Z = 60.5;
 
-function Final({ view, score, before, onReplay }: {
+function Final({ view, score, misclicks, before, onReplay }: {
   view: FieldView;
   score: number;
+  misclicks: number;
   /** High scores before this game. */
   before: BagGameScores | undefined;
   onReplay: () => void;
@@ -349,22 +369,39 @@ function Final({ view, score, before, onReplay }: {
     show.value = withTiming(1, { duration: 450, easing: Easing.out(Easing.back(1.6)), ...always });
   }, [show]);
   const style = useAnimatedStyle(() => ({ opacity: Math.min(show.value, 1), transform: [{ scale: 0.7 + 0.3 * show.value }] }));
-  const newRecord = !!before && score > (before.record?.score ?? 0);
+  const run = { score, misclicks };
+  // More bags, or the same bags and no more misclicks: the last to reach a full tie holds it.
+  const takes = !!before && score > 0 && takesRecord(run, before.record);
+  const newRecord = takes && (!before.record || !before.record.yours || score > before.record.score || misclicks < before.record.misclicks);
+  const newBest = !!before && (score > before.mine || (score === before.mine && score > 0 && misclicks < before.mineMisclicks));
+  // Tied on bags with the record someone else held: misclicks decide it.
+  const tiedRecord = !!before?.record && !before.record.yours && score === before.record.score;
   const note =
-    score === PERFECT_SCORE
+    score === PERFECT_SCORE && misclicks === 0
       ? 'Nice.'
       : newRecord
-        ? 'New league record!'
-        : before && score > before.mine
-        ? 'New personal best!'
-        : null;
-  // Standings after this game, without waiting for the saved scores to reload. Tying the record
-  // takes it too: the last to reach it holds it.
-  const record = before && score > 0 && score >= (before.record?.score ?? 0) ? { score, name: 'you' } : before?.record;
+        ? tiedRecord
+          ? 'New league record, on misclicks!'
+          : 'New league record!'
+        : tiedRecord
+          ? 'Tied the record, but with more misclicks'
+          : newBest
+            ? 'New personal best!'
+            : null;
+  // Standings after this game, without waiting for the saved scores to reload.
+  const record = takes ? { score, name: 'you' } : before?.record;
   const details = before && [
     record && `Record ${record.score} (${record.name})`,
     `Your best ${Math.max(before.mine, score)}`,
   ].filter(Boolean).join(' · ');
+  // Misclicks only matter on a tie: shown when this game tied the record or your best on bags.
+  const tiedBest = !!before && score > 0 && score === before.mine;
+  const misclickLine = before && (tiedRecord || tiedBest)
+    ? [
+        `${misclicks} ${misclicks === 1 ? 'misclick' : 'misclicks'}`,
+        tiedRecord ? `${before.record!.name} had ${before.record!.misclicks}` : `your best had ${before.mineMisclicks}`,
+      ].join(' · ')
+    : null;
   // Counting this game, which may not have finished saving yet.
   const games = before && before.games + 1;
   const fontSize = Math.min(56, view.width / 7);
@@ -378,6 +415,7 @@ function Final({ view, score, before, onReplay }: {
         </Text>
         {note && <Text style={[styles.gameText, styles.outline, styles.note, { color: '#FFD84D' }]}>{note}</Text>}
         {details && <Text style={[styles.gameText, styles.outline, styles.details]}>{details}</Text>}
+        {misclickLine && <Text style={[styles.gameText, styles.outline, styles.details]}>{misclickLine}</Text>}
         {games && (
           <Text style={[styles.gameText, styles.outline, styles.details]}>
             You’ve played {games} {games === 1 ? 'time' : 'times'}
