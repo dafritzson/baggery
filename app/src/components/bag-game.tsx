@@ -381,9 +381,11 @@ function Final({ view, score, misclicks, before, onReplay }: {
       ? 'Nice.'
       : newRecord
         ? 'New league record!'
-        : newBest
-          ? 'New personal best!'
-          : null;
+        : tiedRecord
+          ? 'Tied the record, but with more misses'
+          : newBest
+            ? 'New personal best!'
+            : null;
   // Standings after this game, without waiting for the saved scores to reload.
   const record = takes ? { score, name: 'you' } : before?.record;
   const details = before && [
@@ -392,14 +394,12 @@ function Final({ view, score, misclicks, before, onReplay }: {
   ].filter(Boolean).join(' · ');
   // Misclicks only matter on a tie: shown, as "misses", when this game tied the record or your best on bags.
   const tiedBest = !!before && score > 0 && score === before.mine;
-  const line = (who: string, r: { score: number; misclicks: number }) => `${who}: bags ${r.score}, misses ${r.misclicks}`;
-  const tieLines = !before
-    ? []
-    : tiedRecord
-      ? [line('You', run), line(before.record!.name, before.record!)]
-      : tiedBest
-        ? [line('You', run), line('Your best', { score: before.mine, misclicks: before.mineMisclicks })]
-        : [];
+  const misclickLine = before && (tiedRecord || tiedBest)
+    ? [
+        `${misclicks} ${misclicks === 1 ? 'miss' : 'misses'}`,
+        tiedRecord ? `${before.record!.name} had ${before.record!.misclicks}` : `your best had ${before.mineMisclicks}`,
+      ].join(' · ')
+    : null;
   // Counting this game, which may not have finished saving yet.
   const games = before && before.games + 1;
   const fontSize = Math.min(56, view.width / 7);
@@ -413,9 +413,7 @@ function Final({ view, score, misclicks, before, onReplay }: {
         </Text>
         {note && <Text style={[styles.gameText, styles.outline, styles.note, { color: '#FFD84D' }]}>{note}</Text>}
         {details && <Text style={[styles.gameText, styles.outline, styles.details]}>{details}</Text>}
-        {tieLines.map((t) => (
-          <Text key={t} style={[styles.gameText, styles.outline, styles.details]}>{t}</Text>
-        ))}
+        {misclickLine && <Text style={[styles.gameText, styles.outline, styles.details]}>{misclickLine}</Text>}
         {games && (
           <Text style={[styles.gameText, styles.outline, styles.details]}>
             You’ve played {games} {games === 1 ? 'time' : 'times'}
