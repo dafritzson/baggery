@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { BAG_KINDS, PERFECT_SCORE, TOTAL_BAGS, TOTAL_DROPS, fenceDistance, fieldView, isNight, makeSchedule } from '../app/src/lib/bag-game.ts';
+import {
+  BAG_KINDS,
+  PERFECT_SCORE,
+  TOTAL_BAGS,
+  TOTAL_DROPS,
+  UNCOUNTED_MISCLICKS,
+  compareRuns,
+  fenceDistance,
+  fieldView,
+  isNight,
+  makeSchedule,
+  takesRecord,
+} from '../app/src/lib/bag-game.ts';
 
 describe('bag game schedule', () => {
   it('drops 56 bags (2 home runs, 1 triple, 5 doubles, the rest singles) and 10 decoys', () => {
@@ -103,5 +115,37 @@ describe('day or night', () => {
     expect(isNight(at(5, 59))).toBe(true);
     expect(isNight(at(6))).toBe(false);
     expect(isNight(at(12))).toBe(false);
+  });
+});
+
+describe('records', () => {
+  it('ranks by bags, then by fewer misclicks', () => {
+    const runs = [
+      { score: 40, misclicks: 0 },
+      { score: 45, misclicks: 9 },
+      { score: 45, misclicks: 2 },
+      { score: 45, misclicks: UNCOUNTED_MISCLICKS },
+    ];
+    expect([...runs].sort(compareRuns)).toEqual([
+      { score: 45, misclicks: 2 },
+      { score: 45, misclicks: 9 },
+      { score: 45, misclicks: UNCOUNTED_MISCLICKS },
+      { score: 40, misclicks: 0 },
+    ]);
+  });
+
+  it('takes a record with more bags, or the same bags and fewer or equal misclicks', () => {
+    const held = { score: 45, misclicks: 3 };
+    expect(takesRecord({ score: 46, misclicks: 50 }, held)).toBe(true);
+    expect(takesRecord({ score: 45, misclicks: 2 }, held)).toBe(true);
+    // A full tie goes to the most recent run.
+    expect(takesRecord({ score: 45, misclicks: 3 }, held)).toBe(true);
+    expect(takesRecord({ score: 45, misclicks: 4 }, held)).toBe(false);
+    expect(takesRecord({ score: 44, misclicks: 0 }, held)).toBe(false);
+    expect(takesRecord({ score: 0, misclicks: 0 }, null)).toBe(true);
+  });
+
+  it('beats any game from before misclicks were counted, on the same bags', () => {
+    expect(takesRecord({ score: 45, misclicks: 999 }, { score: 45, misclicks: UNCOUNTED_MISCLICKS })).toBe(true);
   });
 });

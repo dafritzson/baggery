@@ -33,9 +33,9 @@ export default function HomeScreen() {
     setBefore(undefined);
     setGame((g) => g + 1);
   }, []);
-  const finish = (score: number) => {
+  const finish = (score: number, misclicks: number) => {
     setBefore(scores);
-    save(score);
+    save(score, misclicks);
   };
 
   // Play whenever Home comes into view (unless motion is reduced: then wait for a tap), and stop
