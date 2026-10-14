@@ -377,14 +377,12 @@ function Final({ view, score, misclicks, before, onReplay }: {
   // Tied on bags with the record someone else held: misclicks decide it.
   const tiedRecord = !!before?.record && !before.record.yours && score === before.record.score;
   const note =
-    score === PERFECT_SCORE && misclicks === 0
+    score === PERFECT_SCORE
       ? 'Nice.'
       : newRecord
-        ? tiedRecord
-          ? 'New league record, on misclicks!'
-          : 'New league record!'
+        ? 'New league record!'
         : tiedRecord
-          ? 'Tied the record, but with more misclicks'
+          ? 'Tied the record, but with more misses'
           : newBest
             ? 'New personal best!'
             : null;
@@ -394,11 +392,11 @@ function Final({ view, score, misclicks, before, onReplay }: {
     record && `Record ${record.score} (${record.name})`,
     `Your best ${Math.max(before.mine, score)}`,
   ].filter(Boolean).join(' · ');
-  // Misclicks only matter on a tie: shown when this game tied the record or your best on bags.
+  // Misclicks only matter on a tie: shown, as "misses", when this game tied the record or your best on bags.
   const tiedBest = !!before && score > 0 && score === before.mine;
   const misclickLine = before && (tiedRecord || tiedBest)
     ? [
-        `${misclicks} ${misclicks === 1 ? 'misclick' : 'misclicks'}`,
+        `${misclicks} ${misclicks === 1 ? 'miss' : 'misses'}`,
         tiedRecord ? `${before.record!.name} had ${before.record!.misclicks}` : `your best had ${before.mineMisclicks}`,
       ].join(' · ')
     : null;
