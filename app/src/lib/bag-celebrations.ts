@@ -1,6 +1,7 @@
 // Bag celebrations: which bags get the rain and popup (components/bag-celebration), and whether
 // this device wants them at all (Settings). Bags come from the live scores broadcast while the
-// app is on screen, or from a tapped bag alert's link (`/games?bag=`, see lib/notification-taps).
+// app is on screen, or from a tapped bag alert (lib/notification-taps, or the `/games?bag=` link the
+// app opened with).
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useGlobalSearchParams } from 'expo-router';
@@ -15,11 +16,40 @@ import { coreSpells, useScoreChanges, useScores } from '@/lib/scores';
 import { useSeason } from '@/lib/season';
 
 export interface Celebration {
+  /** Unique per celebration, so one bag shown twice in a row is drawn afresh. */
+  id: number;
   bag: BagHit;
   /** The team the bag counts for, if any. */
   teamId: string | null;
-  /** Your own team's bag: "You got 2 bags!" with the rain. Others' (from a tapped alert) get just the popup. */
+  /** Your own team's bag: "You got 2 bags!". Others' (from a tapped alert) name their team. */
   yours: boolean;
+  /** The bags pour down and the screen shakes: your bags live, and every tapped bag alert. */
+  rain: boolean;
+}
+
+let nextId = 1;
+
+// Tapped bag alerts' bags (`bagParam`s), waiting for the season to load. Kept outside the hook so
+// a tap picked up before the app has its data, or while it's still coming to the front, isn't lost.
+const TAP_WAIT_FOR_SCORES_MS = 3000;
+const tapListeners = new Set<() => void>();
+let tappedBags: string[] = [];
+
+/** Shows a tapped bag alert's bag, with the rain, once the app can. */
+export function tapBag(param: string) {
+  tappedBags = [...tappedBags, param];
+  tapListeners.forEach((l) => l());
+}
+
+function useTappedBags(): string[] {
+  return useSyncExternalStore(
+    (listener) => {
+      tapListeners.add(listener);
+      return () => tapListeners.delete(listener);
+    },
+    () => tappedBags,
+    () => tappedBags,
+  );
 }
 
 // On or off for this device, like the player table's columns (localStorage on web).
@@ -88,7 +118,7 @@ export function useBagCelebrations(): { current: Celebration | null; done: () =>
   const [queue, setQueue] = useState<Celebration[]>([]);
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
 
-  const show = useCallback((celebration: Celebration, tap = false) => {
+  const show = useCallback((celebration: Omit<Celebration, 'id'>, tap = false) => {
     const key = bagKey(celebration.bag);
     if (tap) {
       const now = Date.now();
@@ -98,7 +128,8 @@ export function useBagCelebrations(): { current: Celebration | null; done: () =>
       return;
     }
     markShown(key);
-    setQueue((q) => [...q, celebration]);
+    // Already waiting or on screen (live, then tapped): once is enough.
+    setQueue((q) => (q.some((c) => bagKey(c.bag) === key) ? q : [...q, { ...celebration, id: nextId++ }]));
   }, []);
 
   // Your hitters' bags as they happen, after the spoiler delay. Only while the app is on screen:
@@ -112,7 +143,7 @@ export function useBagCelebrations(): { current: Celebration | null; done: () =>
       const timer = setTimeout(() => {
         timers.current.delete(timer);
         if (AppState.currentState !== 'active') return;
-        for (const bag of bags) show({ bag, teamId: myTeam.id, yours: true });
+        for (const bag of bags) show({ bag, teamId: myTeam.id, yours: true, rain: true });
       }, delay);
       timers.current.add(timer);
     });
@@ -122,18 +153,40 @@ export function useBagCelebrations(): { current: Celebration | null; done: () =>
     return () => pending.forEach(clearTimeout);
   }, []);
 
-  // A tapped bag alert: its bag, every time, once the scores have loaded for the popup's stats.
+  // The link the app opened with, from a tapped bag alert: its bag joins the taps below.
   const { bag: bagParam } = useGlobalSearchParams<{ bag?: string }>();
   useEffect(() => {
-    if (!bagParam || !data || !scores) return;
+    if (!bagParam) return;
+    tapBag(bagParam);
     router.setParams({ bag: undefined });
-    const bag = parseBagParam(bagParam);
-    if (!bag || !on) return;
-    const game = scores.games.find((g) => g.gamePk === bag.gamePk);
-    // Whoever had him when the game started, or now if the scores don't have the game yet.
-    const teamId = ownerAt(coreSpells(data), bag.playerId, game?.start ?? new Date().toISOString()) ?? null;
-    shownLoaded.then(() => show({ bag, teamId, yours: !!teamId && teamId === data.myTeam?.id }, true));
-  }, [bagParam, data, scores, on, show]);
+  }, [bagParam]);
+
+  // Tapped bag alerts: each one's bag, every time, with the rain. Once the season has loaded, and
+  // the scores for the popup's stats, or a few seconds on without them (they fill in when they come).
+  const taps = useTappedBags();
+  useEffect(() => {
+    if (!taps.length || !data) return;
+    const showTaps = () => {
+      const params = tappedBags;
+      tappedBags = [];
+      tapListeners.forEach((l) => l());
+      if (!on) return;
+      for (const param of params) {
+        const bag = parseBagParam(param);
+        if (!bag) continue;
+        const game = scores?.games.find((g) => g.gamePk === bag.gamePk);
+        // Whoever had him when the game started, or now if the scores don't have the game yet.
+        const teamId = ownerAt(coreSpells(data), bag.playerId, game?.start ?? new Date().toISOString()) ?? null;
+        shownLoaded.then(() => show({ bag, teamId, yours: !!teamId && teamId === data.myTeam?.id, rain: true }, true));
+      }
+    };
+    if (scores) {
+      showTaps();
+      return;
+    }
+    const wait = setTimeout(showTaps, TAP_WAIT_FOR_SCORES_MS);
+    return () => clearTimeout(wait);
+  }, [taps, data, scores, on, show]);
 
   const done = useCallback(() => setQueue((q) => q.slice(1)), []);
   return { current: queue[0] ?? null, done };
