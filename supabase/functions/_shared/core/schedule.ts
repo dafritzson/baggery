@@ -41,9 +41,14 @@ export function gameWinner(game: ScheduleGame): number | null {
   return game.homeScore > game.awayScore ? game.homeTeamId : game.awayTeamId;
 }
 
-/** Game n is only played if neither team has clinched before it (games 5–7 of a best-of-7). */
+/**
+ * Game n is only played if neither team clinches before it (games 5–7 of a best-of-7), until the
+ * results so far make it certain: game 6 once a best-of-7 is 2–2, game 7 at 3–3.
+ */
 export function ifNecessary(series: Series, number: number): boolean {
-  return number > series.needed;
+  if (number <= series.needed) return false;
+  const leftBefore = number - 1 - series.wins[0] - series.wins[1];
+  return Math.max(...series.wins) + leftBefore >= series.needed;
 }
 
 /** A game the series no longer needs: it was decided before this game started. */
