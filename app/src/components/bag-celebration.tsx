@@ -67,9 +67,9 @@ export function BagCelebrations() {
 }
 
 function CelebrationView({ celebration, onDone }: { celebration: Celebration; onDone: () => void }) {
-  const { bag } = celebration;
+  const { bag, yours } = celebration;
   const reduceMotion = useReducedMotion();
-  const rain = celebration.rain && !reduceMotion;
+  const rain = yours && !reduceMotion;
   const [fontsLoaded, fontError] = useFonts({ LuckiestGuy_400Regular });
   const openPlayer = useOpenPlayer();
 

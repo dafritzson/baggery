@@ -21,10 +21,8 @@ export interface Celebration {
   bag: BagHit;
   /** The team the bag counts for, if any. */
   teamId: string | null;
-  /** Your own team's bag: "You got 2 bags!". Others' (from a tapped alert) name their team. */
+  /** Your own team's bag: "You got 2 bags!" with the rain. Others' (from a tapped alert) get just the popup. */
   yours: boolean;
-  /** The bags pour down and the screen shakes: your bags live, and every tapped bag alert. */
-  rain: boolean;
 }
 
 let nextId = 1;
@@ -35,7 +33,7 @@ const TAP_WAIT_FOR_SCORES_MS = 3000;
 const tapListeners = new Set<() => void>();
 let tappedBags: string[] = [];
 
-/** Shows a tapped bag alert's bag, with the rain, once the app can. */
+/** Shows a tapped bag alert's bag once the app can. */
 export function tapBag(param: string) {
   tappedBags = [...tappedBags, param];
   tapListeners.forEach((l) => l());
@@ -143,7 +141,7 @@ export function useBagCelebrations(): { current: Celebration | null; done: () =>
       const timer = setTimeout(() => {
         timers.current.delete(timer);
         if (AppState.currentState !== 'active') return;
-        for (const bag of bags) show({ bag, teamId: myTeam.id, yours: true, rain: true });
+        for (const bag of bags) show({ bag, teamId: myTeam.id, yours: true });
       }, delay);
       timers.current.add(timer);
     });
@@ -161,7 +159,7 @@ export function useBagCelebrations(): { current: Celebration | null; done: () =>
     router.setParams({ bag: undefined });
   }, [bagParam]);
 
-  // Tapped bag alerts: each one's bag, every time, with the rain. Once the season has loaded, and
+  // Tapped bag alerts: each one's bag, every time. Once the season has loaded, and
   // the scores for the popup's stats, or a few seconds on without them (they fill in when they come).
   const taps = useTappedBags();
   useEffect(() => {
@@ -177,7 +175,7 @@ export function useBagCelebrations(): { current: Celebration | null; done: () =>
         const game = scores?.games.find((g) => g.gamePk === bag.gamePk);
         // Whoever had him when the game started, or now if the scores don't have the game yet.
         const teamId = ownerAt(coreSpells(data), bag.playerId, game?.start ?? new Date().toISOString()) ?? null;
-        shownLoaded.then(() => show({ bag, teamId, yours: !!teamId && teamId === data.myTeam?.id, rain: true }, true));
+        shownLoaded.then(() => show({ bag, teamId, yours: !!teamId && teamId === data.myTeam?.id }, true));
       }
     };
     if (scores) {
