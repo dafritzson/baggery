@@ -15,7 +15,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { bagHitBags, bagKey, bagSummary, hitHeadline, ordinal, shakeStrength } from '@core/bag-celebration.ts';
+import { bagHitBags, bagSummary, hitHeadline, ordinal, shakeStrength } from '@core/bag-celebration.ts';
 
 import { GAME_FONT } from '@/components/bag-game';
 import { BagRain } from '@/components/bag-rain';
@@ -63,7 +63,7 @@ function blockSelection(node: View | null) {
 export function BagCelebrations() {
   const { current, done } = useBagCelebrations();
   if (!current) return null;
-  return <CelebrationView key={bagKey(current.bag)} celebration={current} onDone={done} />;
+  return <CelebrationView key={current.id} celebration={current} onDone={done} />;
 }
 
 function CelebrationView({ celebration, onDone }: { celebration: Celebration; onDone: () => void }) {
