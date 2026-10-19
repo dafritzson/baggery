@@ -66,7 +66,7 @@ describe('postseasonSeries', () => {
       [...results].map((r, i) =>
         game({ gameType: 'W', seriesGameNumber: i + 1, homeTeamId: NYY, awayTeamId: SEA, homeScore: r === 'N' ? 4 : 1, awayScore: r === 'N' ? 1 : 4 }),
       );
-    const [start] = postseasonSeries(played(''));
+    const [start] = postseasonSeries([game({ gameType: 'W', seriesGameNumber: 1, homeTeamId: NYY, awayTeamId: SEA, status: 'Preview' })]);
     expect([4, 5, 6, 7].map((n) => ifNecessary(start, n))).toEqual([false, true, true, true]);
     const [twoOne] = postseasonSeries(played('NSN'));
     expect([5, 6, 7].map((n) => ifNecessary(twoOne, n))).toEqual([false, true, true]);
