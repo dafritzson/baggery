@@ -193,6 +193,16 @@ describe('the season being played', () => {
     expect(live('a').rounds.map((r) => r.round)).toEqual([1]);
   });
 
+  it('counts it as part of a year for bags a year: a third a closed round while alive, a whole one once out', () => {
+    // Alex: 20 + round 1's 12 over 1⅓ years (round 2's 5 so far waits for it to close).
+    // Bill: 11 + 6 over 1⅓. Curtis is out: 1 + 2 over 2 years.
+    expect(a.careers.map((c) => [c.name, c.bagsPerYear])).toEqual([
+      ['Alex', 24],
+      ['Bill', 12.75],
+      ['Curtis', 1.5],
+    ]);
+  });
+
   it('takes finished games for single-game records, and a bagger’s total once it is final', () => {
     expect(a.bestPlayerGames[0]).toMatchObject({ year: 2026, playerId: 10, tb: 12 });
     // Curtis is out, so player 12's 2 bags are final; Alex and Bill are still going.

@@ -64,6 +64,9 @@ const seriesGame = (gameType: string, n: number | null) => `${SERIES.find((s) =>
 function League({ data }: { data: AlmanacData }) {
   const a = data.almanac;
   const [betsBy, setBetsBy] = useState<'busts' | 'steals'>('busts');
+  const [bagsBy, setBagsBy] = useState<'total' | 'year'>('total');
+  // An almanac function from before bags a year: finished seasons only.
+  const perYear = (c: ManagerCareer) => c.bagsPerYear ?? c.bags / c.seasons;
   const { busts, steals } = bustsAndSteals(data.bets);
   // A record from the season being played gets a "Live" tag.
   const live = (year: number) => (year === a.liveYear ? ['Live'] : []);
@@ -108,22 +111,50 @@ function League({ data }: { data: AlmanacData }) {
         />
       </Card>
 
-      <Card title="Career bags">
-        {a.liveYear !== null && a.careers.some((c) => c.liveBags > 0) && (
+      <Card
+        title={bagsBy === 'total' ? 'Career bags' : 'Bags a year'}
+        action={
+          <Toggle
+            options={[{ value: 'total', label: 'Total' }, { value: 'year', label: 'Per year' }]}
+            value={bagsBy}
+            onChange={setBagsBy}
+          />
+        }>
+        {bagsBy === 'total' && a.liveYear !== null && a.careers.some((c) => c.liveBags > 0) && (
           <ThemedText type="small" themeColor="textSecondary">The faded end of each bar is {a.liveYear} so far.</ThemedText>
         )}
-        <LeaderBars
-          rows={[...a.careers]
-            .sort((x, y) => y.bags + y.liveBags - (x.bags + x.liveBags))
-            .map((c) => ({
-              key: c.key,
-              name: c.name,
-              value: c.bags,
-              extra: c.liveBags,
-              color: managerColor(data, c.key),
-              onPress: () => openManager(data, c.key),
-            }))}
-        />
+        {bagsBy === 'year' && a.liveYear !== null && (
+          <ThemedText type="small" themeColor="textSecondary">
+            {a.liveYear} counts as a third of a year for each round closed, or a whole year once you&apos;re out.
+          </ThemedText>
+        )}
+        {bagsBy === 'total' ? (
+          <LeaderBars
+            rows={[...a.careers]
+              .sort((x, y) => y.bags + y.liveBags - (x.bags + x.liveBags))
+              .map((c) => ({
+                key: c.key,
+                name: c.name,
+                value: c.bags,
+                extra: c.liveBags,
+                color: managerColor(data, c.key),
+                onPress: () => openManager(data, c.key),
+              }))}
+          />
+        ) : (
+          <LeaderBars
+            rows={[...a.careers]
+              .sort((x, y) => perYear(y) - perYear(x))
+              .map((c) => ({
+                key: c.key,
+                name: c.name,
+                value: perYear(c),
+                color: managerColor(data, c.key),
+                onPress: () => openManager(data, c.key),
+              }))}
+            format={(n) => n.toFixed(1)}
+          />
+        )}
       </Card>
 
       {/* The record book's headliners, as big cards in the record holder's color. */}
