@@ -104,6 +104,12 @@ export interface ManagerCareer {
   bagsPerRound: number;
   /** Bags so far in the season being played (finished games), on top of `bags`. */
   liveBags: number;
+  /**
+   * Career bags a year, the season being played included as part of one: a third of a year for
+   * each round closed while the team is alive, and a whole year once it's out (as a finished
+   * season counts). Only its closed rounds' bags count, to match.
+   */
+  bagsPerYear: number;
 }
 
 export interface PlayerGameRecord {
@@ -292,6 +298,8 @@ export function almanac(input: AlmanacInput, top = 20): Almanac {
     const mine = finished.filter((t) => t.managerKey === key);
     const roundsPlayed = mine.reduce((sum, t) => sum + t.rounds.length, 0);
     const bags = mine.reduce((sum, t) => sum + t.bags, 0);
+    const now = teamSeasons.find((t) => t.live && t.managerKey === key);
+    const years = mine.length + (now ? (now.alive ? now.rounds.length / ROUNDS.length : 1) : 0);
     return {
       key,
       name: managerName.get(key) ?? key,
@@ -305,6 +313,7 @@ export function almanac(input: AlmanacInput, top = 20): Almanac {
       bags,
       bagsPerRound: roundsPlayed ? bags / roundsPlayed : 0,
       liveBags: liveBags.get(key) ?? 0,
+      bagsPerYear: (bags + (now?.bags ?? 0)) / years,
     };
   });
   careers.sort((a, b) => b.titles - a.titles || a.averageFinish - b.averageFinish || b.bags - a.bags);
