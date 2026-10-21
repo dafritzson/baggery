@@ -112,7 +112,7 @@ function League({ data }: { data: AlmanacData }) {
       </Card>
 
       <Card
-        title={bagsBy === 'total' ? 'Career bags' : 'Bags a year'}
+        title="Career bags"
         action={
           <Toggle
             options={[{ value: 'total', label: 'Total' }, { value: 'year', label: 'Per year' }]}
