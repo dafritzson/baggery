@@ -31,7 +31,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { headshotUrl, mlbTeamAbbr } from '@/lib/format';
 import { outNameStyle } from '@/lib/out-name';
 import { type Scores, coreSpells } from '@/lib/scores';
-import type { SeasonData } from '@/lib/season';
+import { type SeasonData, ghostName } from '@/lib/season';
 import { ownerLine, teamName } from '@/lib/teams';
 
 /** Height of the round toggle and the team panel's header, which sit side by side. */
@@ -144,7 +144,8 @@ export function StandingsTable({
   const rows: GridRow[] = listed.map((s, i) => {
     const team = byId.get(s.teamId)!;
     const rank = rankOf.get(s.teamId)!;
-    const owner = ownerLine(data, team);
+    // The ghost team as it was in this round: the managers out before it.
+    const owner = ownerLine(data, team, round);
     const mine = team.id === data.myTeam?.id;
     const tied = all.some((o) => o.teamId !== s.teamId && o.rank === rank);
     const levelOnBags = started && tiedTotals.includes(s.total);
@@ -158,7 +159,7 @@ export function StandingsTable({
             <ThemedText type="small" themeColor="textSecondary" style={styles.rank}>{tied ? `T${rank}` : rank}</ThemedText>
           )}
           {!compact && <View style={styles.badge}><OwnerBadge teamId={team.id} owner={team.is_ghost ? '👻' : owner} photo={team.user_id ? data.photos.get(team.user_id) : null} mine={mine} /></View>}
-          <TeamLabel name={teamName(team)} owner={owner} mine={mine} />
+          <TeamLabel name={team.is_ghost ? ghostName(data, round) : teamName(team)} owner={owner} mine={mine} />
           {/* Places moved, left of the tiebreaker icon. While any team moved, every row keeps its slot,
               so the arrows line up. */}
           {anyMoved && (

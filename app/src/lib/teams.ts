@@ -40,11 +40,12 @@ export function ownerName(data: SeasonData, team: Team): string | null {
 
 /**
  * What to show under a team's name: its manager, "Open spot" while it can still be claimed, or
- * nothing in a finished season (past teams are named after their manager already).
+ * nothing in a finished season (past teams are named after their manager already). The ghost
+ * team's managers are those behind it now, or in `round`.
  */
-export function ownerLine(data: SeasonData, team: Team): string | null {
+export function ownerLine(data: SeasonData, team: Team, round?: number): string | null {
   if (team.is_ghost) {
-    const names = ghostManagers(data).map((t) => ownerName(data, t) ?? teamName(t));
+    const names = ghostManagers(data, round).map((t) => ownerName(data, t) ?? teamName(t));
     return names.length ? names.join(', ') : 'Eliminated managers';
   }
   return ownerName(data, team) ?? (data.season.status === 'complete' ? null : 'Open spot');

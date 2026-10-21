@@ -383,18 +383,21 @@ export function draftConfig(data: SeasonData, draft: Draft): DraftConfig {
 /**
  * The managers' teams behind the ghost team: whoever has had a ghost turn, in draft order, then
  * the managers out after round 2, who join it as soon as round 2 closes (before Draft 4 gives
- * them their turns).
+ * them their turns). For a `round`, only those behind it in that round: the managers out before
+ * it (round 2's ghost is round 1's eliminated managers, not round 2's).
  */
-export function ghostManagers(data: SeasonData): Team[] {
+export function ghostManagers(data: SeasonData, round?: number): Team[] {
   if (!data.teams.some((t) => t.is_ghost)) return [];
   const ids = new Set(data.drafts.flatMap((d) => d.ghost_turns.map((g) => g.by)));
   for (const t of data.teams) if (t.eliminated_after_round === 2) ids.add(t.id);
-  return [...ids].map((id) => data.teams.find((t) => t.id === id)).filter((t): t is Team => !!t);
+  return [...ids]
+    .map((id) => data.teams.find((t) => t.id === id))
+    .filter((t): t is Team => !!t && (round === undefined || (t.eliminated_after_round !== null && t.eliminated_after_round < round)));
 }
 
-/** The ghost team's name: a 👻 per manager behind it (👻👻 in round 2). */
-export function ghostName(data: SeasonData): string {
-  return '👻'.repeat(Math.max(1, ghostManagers(data).length));
+/** The ghost team's name: a 👻 per manager behind it (👻👻 in round 2), now or in a `round`. */
+export function ghostName(data: SeasonData, round?: number): string {
+  return '👻'.repeat(Math.max(1, ghostManagers(data, round).length));
 }
 
 /** Each team's current players (not dropped). */
