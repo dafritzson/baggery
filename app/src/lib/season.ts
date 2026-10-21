@@ -380,10 +380,16 @@ export function draftConfig(data: SeasonData, draft: Draft): DraftConfig {
   };
 }
 
-/** The managers' teams behind the ghost team: whoever has had a ghost turn, in draft order. */
+/**
+ * The managers' teams behind the ghost team: whoever has had a ghost turn, in draft order, then
+ * the managers out after round 2, who join it as soon as round 2 closes (before Draft 4 gives
+ * them their turns).
+ */
 export function ghostManagers(data: SeasonData): Team[] {
-  const ids = [...new Set(data.drafts.flatMap((d) => d.ghost_turns.map((g) => g.by)))];
-  return ids.map((id) => data.teams.find((t) => t.id === id)).filter((t): t is Team => !!t);
+  if (!data.teams.some((t) => t.is_ghost)) return [];
+  const ids = new Set(data.drafts.flatMap((d) => d.ghost_turns.map((g) => g.by)));
+  for (const t of data.teams) if (t.eliminated_after_round === 2) ids.add(t.id);
+  return [...ids].map((id) => data.teams.find((t) => t.id === id)).filter((t): t is Team => !!t);
 }
 
 /** The ghost team's name: a 👻 per manager behind it (👻👻 in round 2). */
