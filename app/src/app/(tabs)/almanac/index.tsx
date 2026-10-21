@@ -123,11 +123,6 @@ function League({ data }: { data: AlmanacData }) {
         {bagsBy === 'total' && a.liveYear !== null && a.careers.some((c) => c.liveBags > 0) && (
           <ThemedText type="small" themeColor="textSecondary">The faded end of each bar is {a.liveYear} so far.</ThemedText>
         )}
-        {bagsBy === 'year' && a.liveYear !== null && (
-          <ThemedText type="small" themeColor="textSecondary">
-            {a.liveYear} counts as a third of a year for each round closed, or a whole year once you&apos;re out.
-          </ThemedText>
-        )}
         {bagsBy === 'total' ? (
           <LeaderBars
             rows={[...a.careers]
