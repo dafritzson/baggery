@@ -100,13 +100,107 @@ export function lineupSplits(games: LineupGame[]): Splits {
   return splits;
 }
 
-/** His chance to start against a hand's starter, pulled toward his overall rate by a few games. */
-export function startChance(splits: Splits, hand: Hand): number {
+/** His regular-season chance to start against a hand's starter, pulled toward his overall rate by a few games. */
+function seasonStartChance(splits: Splits, hand: Hand): number {
   const games = splits.L.games + splits.R.games;
   if (games === 0) return 0;
   const overall = (splits.L.starts + splits.R.starts) / games;
   const split = splits[hand];
   return (split.starts + START_PRIOR_GAMES * overall) / (split.games + START_PRIOR_GAMES);
+}
+
+/** His regular-season chance to start a game whose starter is left-handed with chance `lhpChance`. */
+function seasonStartRate(splits: Splits, lhpChance: number): number {
+  return lhpChance * seasonStartChance(splits, 'L') + (1 - lhpChance) * seasonStartChance(splits, 'R');
+}
+
+/**
+ * How he's being used, for the chances below: his chance to start against each hand, and the plate
+ * appearances a game he doesn't start gives him. The regular season's by default; postseasonUsage
+ * blends in this postseason's.
+ */
+export interface Usage {
+  /** Null: the regular season's (seasonStartChance). */
+  start: Record<Hand, number> | null;
+  benchPa: number;
+}
+
+export const SEASON_USAGE: Usage = { start: null, benchPa: BENCH_PA };
+
+/** His chance to start against a hand's starter. */
+export function startChance(splits: Splits, hand: Hand, usage: Usage = SEASON_USAGE): number {
+  return usage.start ? usage.start[hand] : seasonStartChance(splits, hand);
+}
+
+/** A hitter's postseason so far: his team's finished games and his plate appearances and starts in them. */
+export interface PostseasonUsage {
+  /** All of them, and those by the opposing starter's hand (a game with no known starter is in neither). */
+  teamGames: number;
+  teamGamesVs: Record<Hand, number>;
+  /** Null when some of his box score rows have no PA. */
+  pa: number | null;
+  /**
+   * Games he started (all of them, and by the opposing starter's hand) and his plate appearances
+   * in them; null when some of his rows have no batting order.
+   */
+  starts: number | null;
+  startsVs: Record<Hand, number> | null;
+  startPa: number | null;
+}
+
+/**
+ * Team games of the regular season blended with this postseason's, against each hand: after 2
+ * postseason games against lefties his chance to start against them is half what's expected of
+ * him, half how often he's started against them; after 6, three quarters how often he's started.
+ */
+export const POSTSEASON_PRIOR_GAMES = 2;
+/**
+ * Starts of evidence for his role overall: starting none of the games his regular season says he'd
+ * have started 3 of halves his chances against both hands, and none of 9 quarters them.
+ */
+export const POSTSEASON_PRIOR_STARTS = 3;
+
+/**
+ * His usage with this postseason's blended in, in two steps. First his role: his starts against
+ * the starts his regular season says he'd have had against the starters his team faced scale his
+ * chances against both hands (a backup who hasn't started is used less, against either hand).
+ * Then each hand: his chance against it moves toward how often he's started against that hand's
+ * starters. So a summer platoon bat who sat against the lefties his team has faced mostly sits,
+ * while one whose team has only faced righties, where he'd rarely have started anyway, keeps most
+ * of his chance against lefties. His plate appearances off the bench move the same way. Without
+ * batting orders, his plate appearances a game scale both hands' chances instead.
+ */
+export function postseasonUsage(splits: Splits, post: PostseasonUsage | null): Usage {
+  const n = post?.teamGames ?? 0;
+  if (!post || n <= 0 || post.pa === null) return SEASON_USAGE;
+  const k = POSTSEASON_PRIOR_GAMES;
+  const season = { L: seasonStartChance(splits, 'L'), R: seasonStartChance(splits, 'R') };
+  if (post.starts !== null && post.startsVs !== null && post.startPa !== null) {
+    const starts = Math.min(post.starts, n);
+    const unknown = Math.max(0, n - post.teamGamesVs.L - post.teamGamesVs.R);
+    const expected = post.teamGamesVs.L * season.L + post.teamGamesVs.R * season.R + unknown * seasonStartRate(splits, LEAGUE_LHP_SHARE);
+    const role = (starts + POSTSEASON_PRIOR_STARTS) / (expected + POSTSEASON_PRIOR_STARTS);
+    const blend = (hand: Hand) => {
+      const games = post.teamGamesVs[hand];
+      return (Math.min(post.startsVs![hand], games) + k * Math.min(1, season[hand] * role)) / (games + k);
+    };
+    return {
+      start: { L: blend('L'), R: blend('R') },
+      benchPa: (Math.max(0, post.pa - post.startPa) + k * BENCH_PA) / (n - starts + k),
+    };
+  }
+  // Only PA: the start rate that gives the blended PA a game, at his usual PA a start.
+  const seasonRate = seasonStartRate(splits, LEAGUE_LHP_SHARE);
+  const seasonPa = seasonExpectedPaPerGame(splits);
+  const perStart = seasonRate > 0 ? (seasonPa - (1 - seasonRate) * BENCH_PA) / seasonRate : PA_BY_SPOT[8];
+  const pa = (post.pa + k * seasonPa) / (n + k);
+  const rate = perStart > BENCH_PA ? Math.min(1, Math.max(0, (pa - BENCH_PA) / (perStart - BENCH_PA))) : seasonRate;
+  const scale = (hand: Hand) => (seasonRate > 0 ? Math.min(1, (season[hand] * rate) / seasonRate) : rate);
+  return { start: { L: scale('L'), R: scale('R') }, benchPa: BENCH_PA };
+}
+
+function seasonExpectedPaPerGame(splits: Splits): number {
+  return expectedPaPerGame(splits, LEAGUE_LHP_SHARE);
 }
 
 /** Where he usually bats against a hand (1–9), or null if he hasn't started against it. */
@@ -131,25 +225,25 @@ export function paPerStart(splits: Splits, hand: Hand): number {
  * other by 40 points or more. Null for everyday players and for bench players who rarely start
  * against either.
  */
-export function platoonSide(splits: Splits): Hand | null {
-  const l = startChance(splits, 'L');
-  const r = startChance(splits, 'R');
+export function platoonSide(splits: Splits, usage: Usage = SEASON_USAGE): Hand | null {
+  const l = startChance(splits, 'L', usage);
+  const r = startChance(splits, 'R', usage);
   if (Math.abs(l - r) < PLATOON_GAP) return null;
   return l > r ? 'L' : 'R';
 }
 
 /** Plate appearances he can expect against a hand's starter: starts at his spot, plus the odd bench game. */
-export function expectedPa(splits: Splits, hand: Hand): number {
-  const start = startChance(splits, hand);
-  return start * paPerStart(splits, hand) + (1 - start) * BENCH_PA;
+export function expectedPa(splits: Splits, hand: Hand, usage: Usage = SEASON_USAGE): number {
+  const start = startChance(splits, hand, usage);
+  return start * paPerStart(splits, hand) + (1 - start) * usage.benchPa;
 }
 
 /**
  * Plate appearances he can expect in one team game whose starter is left-handed with chance
  * `lhpChance`.
  */
-export function expectedPaPerGame(splits: Splits, lhpChance: number): number {
-  return lhpChance * expectedPa(splits, 'L') + (1 - lhpChance) * expectedPa(splits, 'R');
+export function expectedPaPerGame(splits: Splits, lhpChance: number, usage: Usage = SEASON_USAGE): number {
+  return lhpChance * expectedPa(splits, 'L', usage) + (1 - lhpChance) * expectedPa(splits, 'R', usage);
 }
 
 /** A start by one of a team's pitchers. */
@@ -242,13 +336,25 @@ export const DAYS_PER_POSTSEASON_GAME = 1.5;
  * something about (the current series), and league-average starters for the rest. None in games
  * before he's back from the injured list.
  */
-export function expectedPaOver(splits: Splits, known: ExpectedGame[], totalGames: number, sidelined: Sidelined | null = null): number {
-  return overGames(known, totalGames, (lhp) => expectedPaPerGame(splits, lhp), sidelined);
+export function expectedPaOver(
+  splits: Splits,
+  known: ExpectedGame[],
+  totalGames: number,
+  sidelined: Sidelined | null = null,
+  usage: Usage = SEASON_USAGE,
+): number {
+  return overGames(known, totalGames, (lhp) => expectedPaPerGame(splits, lhp, usage), sidelined);
 }
 
 /** Games he can expect to start over `totalGames` expected team games, like expectedPaOver. */
-export function expectedStartsOver(splits: Splits, known: ExpectedGame[], totalGames: number, sidelined: Sidelined | null = null): number {
-  return overGames(known, totalGames, (lhp) => lhp * startChance(splits, 'L') + (1 - lhp) * startChance(splits, 'R'), sidelined);
+export function expectedStartsOver(
+  splits: Splits,
+  known: ExpectedGame[],
+  totalGames: number,
+  sidelined: Sidelined | null = null,
+  usage: Usage = SEASON_USAGE,
+): number {
+  return overGames(known, totalGames, (lhp) => lhp * startChance(splits, 'L', usage) + (1 - lhp) * startChance(splits, 'R', usage), sidelined);
 }
 
 /** Of `totalGames` expected team games, how many he can expect to be there for (all of them unless he's injured). */

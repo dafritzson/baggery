@@ -477,18 +477,32 @@ describe('live stats poller', () => {
     expect(seen!.length).toBeGreaterThan(20);
   });
 
-  it("sums each hitter's postseason PA and TB for the draft table, up to a draft's lock", async () => {
+  it("sums each hitter's postseason PA, TB and starts for the draft table, up to a draft's lock", async () => {
     const FREEMAN = 518692;
-    const { data: lines } = await admin.from('player_game_stats').select('pa, tb, mlb_games!inner(season_year)').eq('mlb_player_id', FREEMAN).eq('mlb_games.season_year', 2025);
+    const { data: lines } = await admin
+      .from('player_game_stats')
+      .select('pa, tb, batting_order, mlb_games!inner(season_year)')
+      .eq('mlb_player_id', FREEMAN)
+      .eq('mlb_games.season_year', 2025);
     const kyle = clients.get('Kyle')!;
     const { data: totals, error } = await kyle.rpc('postseason_totals', { p_year: 2025 });
     expect(error).toBeNull();
     const freeman = totals!.find((t: { mlb_player_id: number }) => t.mlb_player_id === FREEMAN);
-    expect(freeman).toEqual({
+    const starts = lines!.filter((l) => l.batting_order! % 100 === 0);
+    expect(freeman).toMatchObject({
       mlb_player_id: FREEMAN,
       pa: lines!.reduce((sum, l) => sum + l.pa!, 0),
       tb: lines!.reduce((sum, l) => sum + l.tb, 0),
+      starts: starts.length,
+      start_pa: starts.reduce((sum, l) => sum + l.pa!, 0),
     });
+    expect(starts.length).toBeGreaterThan(0);
+    // By the opposing starter's hand, where it was announced.
+    expect(freeman!.starts_vs_l + freeman!.starts_vs_r).toBeLessThanOrEqual(freeman!.starts);
+
+    // The player popup asks for his row alone.
+    const { data: one } = await kyle.rpc('postseason_totals', { p_year: 2025, p_player: FREEMAN });
+    expect(one).toEqual([freeman]);
 
     // Before the World Series started, his World Series TB don't count yet.
     const { data: ws1 } = await admin.from('mlb_games').select('start_time').eq('season_year', 2025).eq('game_type', 'W').eq('series_game_number', 1).single();

@@ -38,7 +38,8 @@ import { useTheme } from '@/hooks/use-theme';
 import { ownership, releasingTeams } from '@/lib/board';
 import { headshotUrl, shortDate } from '@/lib/format';
 import type { DraftAction } from '@/lib/player';
-import { matchupsByTeam, playerPlatoon, usePlatoons } from '@/lib/platoon';
+import { matchupsByTeam, playerPlatoon, playerPostseason, teamGamesPlayed, usePlatoons } from '@/lib/platoon';
+import { usePostseasonTotals } from '@/lib/postseason-totals';
 import { type Projection, projection, teamOdds } from '@/lib/projections';
 import { coreSpells, usePlayerScores, useScores } from '@/lib/scores';
 import { type SeasonData, injuredDraftable, useSeason } from '@/lib/season';
@@ -202,13 +203,18 @@ function MatchupsSection({ data, playerId }: { data: SeasonData; playerId: numbe
   const platoons = usePlatoons(data);
   const { scores } = useScores();
   const entry = data.poolByPlayer.get(playerId);
+  const teamGames = useMemo(() => teamGamesPlayed(scores?.games ?? [], platoons?.probables ?? null), [scores, platoons]);
+  const played = entry ? teamGames.get(entry.mlb_team_id) : undefined;
+  // His postseason so far, for xBags: just his row.
+  const totals = usePostseasonTotals(data.season.year, null, scores ? (played?.all ?? 0) : null, playerId);
   const platoon = useMemo(() => {
     if (!entry || !platoons || !scores) return null;
     const team = data.mlbTeams.get(entry.mlb_team_id);
     const live = data.season.status !== 'complete' && !team?.eliminated;
     const matchups = live ? (matchupsByTeam(data, platoons, scores.games).get(entry.mlb_team_id) ?? []) : [];
-    return playerPlatoon(entry, platoons, matchups, live ? teamOdds(data, scores.games)?.get(entry.mlb_team_id) : undefined);
-  }, [data, entry, platoons, scores]);
+    const post = playerPostseason(playerId, played, totals);
+    return playerPlatoon(entry, platoons, matchups, live ? teamOdds(data, scores.games)?.get(entry.mlb_team_id) : undefined, undefined, post);
+  }, [data, entry, platoons, scores, played, totals, playerId]);
   if (!platoon) return null;
   return (
     <Section id="matchups" title={platoon.matchups.length ? 'Matchups this round' : 'Against each hand'}>
