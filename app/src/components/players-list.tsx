@@ -17,8 +17,9 @@ import { useTheme } from '@/hooks/use-theme';
 import { type Range, filterRows } from '@/lib/column-filters';
 import { useOpenPlayer } from '@/lib/player';
 import { usePlayerColumns } from '@/lib/player-columns';
-import { type PlatoonData, availableGames, matchupsByTeam, playerPlatoon, usePlatoons } from '@/lib/platoon';
+import { type PlatoonData, type TeamGames, availableGames, matchupsByTeam, playerPlatoon, playerPostseason, teamGamesPlayed, usePlatoons } from '@/lib/platoon';
 import { projection, teamOdds } from '@/lib/projections';
+import { type PostseasonTotals, usePostseasonTotals } from '@/lib/postseason-totals';
 import { useScores } from '@/lib/scores';
 import { type Ownership, draftablePlayers, ownership, releasingTeams } from '@/lib/board';
 import { type Draft, type SeasonData, injuredDraftable } from '@/lib/season';
@@ -43,28 +44,6 @@ export interface Board {
   injured: boolean;
   /** Postseason stats count games that started before this (a finished draft's lock); all when not set. */
   statsBefore?: string | null;
-}
-
-/** Each player's postseason PA and TB so far, by player id. */
-export type PostseasonTotals = Map<number, { pa: number | null; tb: number }>;
-
-/**
- * This postseason's PA and TB per player (games before `before`, if given), loaded once: one small
- * row per hitter. Empty until the postseason has games; null while loading.
- */
-export function usePostseasonTotals(year: number, before?: string | null): PostseasonTotals | null {
-  const [totals, setTotals] = useState<PostseasonTotals | null>(null);
-  useEffect(() => {
-    let stale = false;
-    supabase.rpc('postseason_totals', { p_year: year, p_before: before ?? null }).then(({ data: rows }) => {
-      if (stale) return;
-      setTotals(new Map((rows ?? []).map((r: { mlb_player_id: number; pa: number | null; tb: number }) => [r.mlb_player_id, { pa: r.pa, tb: r.tb }])));
-    });
-    return () => {
-      stale = true;
-    };
-  }, [year, before]);
-  return totals;
 }
 
 /** Filters a board starts with: only unowned players on alive teams, for a draft's board. */
@@ -140,6 +119,8 @@ export function boardPlayers(
   odds: Map<number, TeamOdds> | null = null,
   platoons: PlatoonData | null = null,
   matchups: Map<number, MatchupSeries[]> = new Map(),
+  /** Each MLB team's finished postseason games, for blending this postseason's playing time into xBags. */
+  teamGames: Map<number, TeamGames> = new Map(),
 ): (PlayerRow & { mlbTeamId: number })[] {
   const postseason = !!totals?.size;
   // Teams that have played: any of their hitters has a postseason line.
@@ -160,7 +141,8 @@ export function boardPlayers(
       const teamOdd = odds?.get(p.mlb_team_id);
       const { bye, rdslg, tbExpected, rdtb } = projection(data, p);
       const teamMatchups = matchups.get(p.mlb_team_id) ?? [];
-      const platoon = playerPlatoon(p, platoons, teamMatchups, teamOdd, now);
+      const post = playerPostseason(p.mlb_player_id, teamGames.get(p.mlb_team_id), totals);
+      const platoon = playerPlatoon(p, platoons, teamMatchups, teamOdd, now, post);
       const gamesLeft = availableGames(p, teamMatchups, teamOdd, now);
       const ab = p.at_bats;
       const h = p.hits;
@@ -257,18 +239,24 @@ export function PlayersList({
       if (Object.keys(start).length) setFilters((f) => ({ ...f, ...start }));
     }, []),
   );
-  const totals = usePostseasonTotals(data.season.year, shownBoard.statsBefore);
   const { scores } = useScores();
+  const platoons = usePlatoons(data);
+  const teamGames = useMemo(
+    () => teamGamesPlayed(scores?.games ?? [], platoons?.probables ?? null, shownBoard.statsBefore),
+    [scores, platoons, shownBoard.statsBefore],
+  );
+  // Once the scores are in: they say which games have finished.
+  const finals = scores ? [...teamGames.values()].reduce((a, t) => a + t.all, 0) : null;
+  const totals = usePostseasonTotals(data.season.year, shownBoard.statsBefore, finals);
   // Waits for the games, so a series under way isn't shown from 0-0.
   const odds = useMemo(() => (scores ? teamOdds(data, scores.games, shownBoard.statsBefore) : null), [data, scores, shownBoard.statsBefore]);
-  const platoons = usePlatoons(data);
   const matchups = useMemo(
     () => matchupsByTeam(data, platoons, scores?.games ?? null, shownBoard.statsBefore),
     [data, platoons, scores, shownBoard.statsBefore],
   );
   const available = useMemo(
-    () => boardPlayers(data, shownBoard, totals, odds, platoons, matchups),
-    [data, shownBoard, totals, odds, platoons, matchups],
+    () => boardPlayers(data, shownBoard, totals, odds, platoons, matchups, teamGames),
+    [data, shownBoard, totals, odds, platoons, matchups, teamGames],
   );
   // Postseason columns only once it has games (before that they'd be empty), Draft 1's (Bye) only
   // before; the odds columns only with odds.

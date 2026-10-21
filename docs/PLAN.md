@@ -88,7 +88,15 @@ main   → deploy-staging (Supabase staging + Vercel staging URL)
   gets no xBags from his team's games before the day he can come off it (`injury_return`, or a
   full stay from now when that's unknown) and every game after: known games by their start time,
   the rest (and games MLB hasn't scheduled yet) about a game every day and a half. The old xBags
-  takes his team's expected games less the same missed ones. Which table columns show is each person's choice, saved in their browser. `season_mlb_teams` holds each team's wins and Wild Card bye.
+  takes his team's expected games less the same missed ones. Once his team has played, xBags blends in this
+  postseason's playing time (`postseasonUsage`, from `postseason_totals`: his starts, all and by
+  the opposing starter's hand, and his PA in and out of them). First his role: his starts against
+  the starts his regular season says he'd have had against the starters his team faced (with 3
+  starts of prior) scale his chances against both hands. Then each hand: his chance against it
+  moves toward how often he's started against that hand's starters (2 games of prior), so a
+  summer platoon bat who has sat against the lefties his team faced mostly sits, while one whose
+  team has only faced righties keeps more of his chance against lefties. His PA off the bench
+  blends the same way. The draft table, the vs L/vs R chip and the popup's matchups all use it. Which table columns show is each person's choice, saved in their browser. `season_mlb_teams` holds each team's wins and Wild Card bye.
 - `drafts`, `draft_actions`: every pick or yield, numbered. `unique(draft_id, action_number)`
   prevents double picks.
 - `draft_queue`: each manager's ranked players for a draft, which autodraft takes first (and in a

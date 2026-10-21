@@ -200,7 +200,7 @@ export function MatchupStrip({ platoon }: { platoon: PlayerPlatoon }) {
             </ThemedText>
             <View style={styles.tiles}>
               {s.games.map((g) => {
-                const start = g.starter ? startChance(splits, g.starter.hand) : null;
+                const start = g.starter ? startChance(splits, g.starter.hand, platoon.usage) : null;
                 const status = g.played
                   ? 'Played'
                   : start === null

@@ -17,6 +17,8 @@ import {
   lineupSplits,
   paPerStart,
   platoonSide,
+  postseasonUsage,
+  SEASON_USAGE,
   seriesStarters,
   startChance,
   usualSpot,
@@ -256,5 +258,71 @@ describe('a hitter on the injured list', () => {
     });
     const starts = expectedGames([ds], now).map((g) => (g.start! - now) / DAY);
     expect(starts).toEqual([1.5, 3, 4.5, 6, 7.5]);
+  });
+});
+
+describe('postseasonUsage', () => {
+  // A summer platoon bat: starts against every lefty (8th), and one righty in three (9th).
+  const backup = lineupSplits(
+    Array.from({ length: 120 }, (_, i) => ({
+      date: new Date(Date.parse('2026-05-01') + i * 86_400_000).toISOString().slice(0, 10),
+      starterHand: i % 4 === 0 ? 'L' : 'R',
+      spot: i % 4 === 0 ? 8 : i % 4 === 1 ? 9 : null,
+    })) satisfies LineupGame[],
+  );
+  const sat = (vsL: number, vsR: number, pa: number) => ({
+    teamGames: vsL + vsR,
+    teamGamesVs: { L: vsL, R: vsR },
+    pa,
+    starts: 0,
+    startsVs: { L: 0, R: 0 },
+    startPa: 0,
+  });
+
+  it('is the regular season before his team has played', () => {
+    expect(postseasonUsage(backup, null)).toBe(SEASON_USAGE);
+    expect(postseasonUsage(backup, { ...sat(0, 0, 0) })).toBe(SEASON_USAGE);
+    expect(startChance(backup, 'L', SEASON_USAGE)).toBe(startChance(backup, 'L'));
+  });
+
+  it('mostly sits a summer platoon bat who has sat against the lefties his team faced', () => {
+    expect(platoonSide(backup)).toBe('L');
+    const usage = postseasonUsage(backup, sat(2, 7, 1));
+    expect(startChance(backup, 'L', usage)).toBeLessThan(0.25);
+    expect(startChance(backup, 'R', usage)).toBeLessThan(0.05);
+    expect(platoonSide(backup, usage)).toBeNull();
+    // One pinch-hit PA in 9 games: less than the usual bench PA.
+    expect(usage.benchPa).toBeLessThan(BENCH_PA);
+    // About a PA and a half over 4 more games, from nearly 8.
+    expect(expectedPaOver(backup, [], 4, null, usage)).toBeLessThan(2);
+    expect(expectedPaOver(backup, [], 4)).toBeGreaterThan(7);
+  });
+
+  it('keeps more of his chance against lefties when his team has only faced righties', () => {
+    const onlyRighties = postseasonUsage(backup, sat(0, 9, 1));
+    const satVsLefties = postseasonUsage(backup, sat(2, 7, 1));
+    expect(startChance(backup, 'L', onlyRighties)).toBeGreaterThan(startChance(backup, 'L', satVsLefties) + 0.15);
+    // Still less than the summer's: he hasn't started at all.
+    expect(startChance(backup, 'L', onlyRighties)).toBeLessThan(startChance(backup, 'L'));
+  });
+
+  it('keeps him starting against lefties when he has', () => {
+    const usage = postseasonUsage(backup, { ...sat(2, 7, 8), starts: 2, startsVs: { L: 2, R: 0 }, startPa: 7 });
+    expect(startChance(backup, 'L', usage)).toBeGreaterThan(0.75);
+    expect(startChance(backup, 'R', usage)).toBeLessThan(0.1);
+  });
+
+  it("leaves an everyday player's chances near 1 when he's started every game", () => {
+    const everyday = lineupSplits(season(3, 3));
+    const usage = postseasonUsage(everyday, { teamGames: 9, teamGamesVs: { L: 2, R: 7 }, pa: 40, starts: 9, startsVs: { L: 2, R: 7 }, startPa: 40 });
+    expect(startChance(everyday, 'L', usage)).toBeGreaterThan(0.95);
+    expect(startChance(everyday, 'R', usage)).toBeGreaterThan(0.95);
+  });
+
+  it('reads his role from his PA a game without batting orders', () => {
+    const usage = postseasonUsage(backup, { ...sat(2, 7, 1), starts: null, startsVs: null, startPa: null });
+    expect(startChance(backup, 'L', usage)).toBeLessThan(0.4);
+    expect(startChance(backup, 'L', usage)).toBeGreaterThan(startChance(backup, 'R', usage));
+    expect(postseasonUsage(backup, { ...sat(2, 7, 1), pa: null, starts: null, startsVs: null, startPa: null })).toBe(SEASON_USAGE);
   });
 });

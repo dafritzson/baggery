@@ -6,12 +6,15 @@ import type { OddsTeam, TeamOdds } from '@core/odds.ts';
 import {
   type Hand,
   type PlatoonRecord,
+  type PostseasonUsage,
   type Sidelined,
+  type Usage,
   expectedGamesAvailable,
   expectedPaOver,
   expectedStartsOver,
   paPerStart,
   platoonSide,
+  postseasonUsage,
   recordSplits,
   usualSpot,
 } from '@core/platoon.ts';
@@ -99,6 +102,8 @@ export interface PlayerPlatoon {
   spotLabel: string | null;
   /** His team's games this round from here, with the opposing starters. */
   matchups: MatchupSeries[];
+  /** How often he starts, and his PA off the bench: the regular season's, with this postseason's blended in. */
+  usage: Usage;
   /** Over the rest of the postseason: expected starts, team games and xBags; null without odds. */
   starts: number | null;
   teamGames: number | null;
@@ -140,12 +145,14 @@ export function playerPlatoon(
   matchups: MatchupSeries[],
   odds: TeamOdds | undefined,
   now = Date.now(),
+  post: PostseasonUsage | null = null,
 ): PlayerPlatoon | null {
   const found = platoons?.players.get(entry.mlb_player_id);
   if (!found) return null;
   const { record, batSide } = found;
   const splits = recordSplits(record);
-  const side = platoonSide(splits);
+  const usage = postseasonUsage(splits, post);
+  const side = platoonSide(splits, usage);
   const primary: Hand = side ?? (record.R.weighted.starts >= record.L.weighted.starts ? 'R' : 'L');
   const other: Hand = primary === 'L' ? 'R' : 'L';
   const spots = { L: usualSpot(record.L.weighted), R: usualSpot(record.R.weighted) };
@@ -167,12 +174,50 @@ export function playerPlatoon(
     spots,
     spotLabel,
     matchups,
-    starts: teamGames === null ? null : expectedStartsOver(splits, known, teamGames, out),
+    usage,
+    starts: teamGames === null ? null : expectedStartsOver(splits, known, teamGames, out, usage),
     teamGames,
-    xBags: teamGames === null || perPa === null ? null : perPa * expectedPaOver(splits, known, teamGames, out),
+    xBags: teamGames === null || perPa === null ? null : perPa * expectedPaOver(splits, known, teamGames, out, usage),
     everyDayXBags:
       teamGames === null || perPa === null ? null : perPa * paPerStart(splits, primary) * expectedGamesAvailable(known, teamGames, out),
   };
+}
+
+/** An MLB team's finished postseason games: all of them, and by the opposing starter's hand where it's known. */
+export interface TeamGames {
+  all: number;
+  vs: Record<Hand, number>;
+}
+
+/**
+ * Each MLB team's postseason games that have finished (before `before`, if given), by team id,
+ * with the opposing starters' hands from the announced starters.
+ */
+export function teamGamesPlayed(games: GameInfo[], probables: PlatoonData['probables'] | null, before?: string | null): Map<number, TeamGames> {
+  const cut = before ? Date.parse(before) : Infinity;
+  const played = new Map<number, TeamGames>();
+  for (const g of games) {
+    if (g.status !== 'Final' || Date.parse(g.start) >= cut) continue;
+    for (const [id, opponent] of [[g.homeTeamId, g.awayTeamId], [g.awayTeamId, g.homeTeamId]]) {
+      const team = played.get(id) ?? { all: 0, vs: { L: 0, R: 0 } };
+      team.all++;
+      const hand = probables?.get(`${g.gamePk}:${opponent}`)?.hand;
+      if (hand) team.vs[hand]++;
+      played.set(id, team);
+    }
+  }
+  return played;
+}
+
+/** A hitter's postseason so far, for xBags: nothing missing from `totals` once his team has played means he hasn't batted. */
+export function playerPostseason(
+  playerId: number,
+  teamGames: TeamGames | undefined,
+  totals: Map<number, { pa: number | null; starts: number | null; startsVs: Record<Hand, number> | null; startPa: number | null }> | null,
+): PostseasonUsage | null {
+  if (!totals || !teamGames || teamGames.all <= 0) return null;
+  const t = totals.get(playerId) ?? { pa: 0, starts: 0, startsVs: { L: 0, R: 0 }, startPa: 0 };
+  return { teamGames: teamGames.all, teamGamesVs: teamGames.vs, pa: t.pa, starts: t.starts, startsVs: t.startsVs, startPa: t.startPa };
 }
 
 /** Each team's round matchups, for the teams on the board. */

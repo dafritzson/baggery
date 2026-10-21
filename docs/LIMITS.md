@@ -136,12 +136,17 @@ Supabase billing and usage pages; the dashboard shows actual usage.
   poll-games saves these lines from the play-by-play it already reads for the hits, plus one more
   read of each game 10 minutes after it ends: ~15 extra MLB requests a postseason day, no extra
   Edge Function calls. The table is ~22,000 rows for 2020–2025 (~3 MB).
-- **Post PA and Post TB.** The draft table (draft room and Research) loads each hitter's postseason
-  PA and TB once when it opens, summed in the database (`postseason_totals`): one small row per
-  hitter who has batted, ~15 KB at most by the World Series. Research stays open once opened (see
-  Tabs), so that's once per app open rather than per visit. At ~15 people opening it ~10 times a
-  day, that's ~70 MB a month at most. It doesn't follow live games, so it adds nothing per poll; the
-  poller's box score rows just carry one more number (PA).
+- **Post PA and Post TB, and postseason playing time for xBags.** The draft table (draft room and
+  Research) loads each hitter's postseason PA, TB and starts (all, and by the opposing starter's
+  hand) when it opens, summed in the database (`postseason_totals`): one small row per hitter who
+  has batted, ~20 KB at most by the World Series. Research stays open once opened (see Tabs), so
+  that's once per app open rather than per visit, plus once more each time a game finishes while
+  it's open (so xBags doesn't count that game as one he sat out): a few times a day at most. At ~15
+  people opening it ~10 times a day, with ~2 reloads a day each, that's ~110 MB a month at most
+  (~70 MB before starts were added). The player popup asks for its hitter's row alone (~150
+  bytes), under 5 MB a month at ~15 people opening ~20 popups a day. It doesn't follow live games,
+  so it adds nothing per poll; the poller's box score rows already carry PA and batting order.
+  No Edge Function calls (it's a database function).
 - **Tabs.** Like a phone app's, each tab stays mounted once it's opened (`TabScreen` in
   `app/src/components/section-nav.tsx`), so going back to one loads nothing, where every switch
   used to open it anew and reload what it loads for itself (Research's Post PA and TB, the
