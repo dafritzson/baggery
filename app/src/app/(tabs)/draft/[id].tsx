@@ -748,7 +748,8 @@ function PickSheet({
   const empty = dropOptions.filter((id) => isOut(data, id));
   const alive = dropOptions.filter((id) => !isOut(data, id));
   const [chosen, setDrop] = useState<number | undefined>();
-  const drop = chosen ?? empty[0];
+  // No drop while the ghost fills an empty spot, even if a hitter of its is out.
+  const drop = needsDrop ? chosen ?? empty[0] : undefined;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const injury = playerId !== null ? injuryText(data.poolByPlayer.get(playerId)) : null;
