@@ -80,6 +80,8 @@ interface Ctx {
   teamOwners: Map<string, string | null>;
   /** Each manager's queue for this draft (by the team making the turns), top first. */
   queues: Map<string, QueueEntry[]>;
+  /** Each team's hitters who left it with their eliminated MLB team (spell ended, not dropped). */
+  leftWithTeam: Map<string, Set<number>>;
   /** The picks and passes autodraft made in this request (advance), for their alerts. */
   autopicks: { turn: Turn; action: DraftAction }[];
   /** This request made the draft's last pick. */
@@ -160,6 +162,9 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
       injured: p.injured_list !== null,
     })),
     teamOwners: new Map(teams.map((t) => [t.id, t.user_id])),
+    leftWithTeam: spells
+      .filter((s) => s.to_at !== null && s.dropped_by_draft_id === null)
+      .reduce((m, s) => m.set(s.fantasy_team_id, (m.get(s.fantasy_team_id) ?? new Set()).add(s.mlb_player_id)), new Map<string, Set<number>>()),
     queues,
     autopicks: [],
     completed: false,
@@ -503,9 +508,12 @@ serve(async (req) => {
         await requireLive(ctx);
         const teamId = actingFor();
         if (body.addPlayerId === undefined) throw new UserError('Choose a player.');
-        await commit(tx, ctx, { type: 'pick', teamId, addPlayerId: body.addPlayerId, dropPlayerId: body.dropPlayerId }, userId, false);
+        // An app loaded before a hitter left with his eliminated MLB team still names him as the drop:
+        // his spot is already empty, so the pick just fills it.
+        const drop = body.dropPlayerId !== undefined && ctx.leftWithTeam.get(teamId)?.has(body.dropPlayerId) ? undefined : body.dropPlayerId;
+        await commit(tx, ctx, { type: 'pick', teamId, addPlayerId: body.addPlayerId, dropPlayerId: drop }, userId, false);
         if (forSomeoneElse()) {
-          await logPick(tx, ctx, userId, 'pick', teamId, body.addPlayerId, body.dropPlayerId ?? null);
+          await logPick(tx, ctx, userId, 'pick', teamId, body.addPlayerId, drop ?? null);
         }
         await advance(tx, ctx);
         break;
