@@ -126,6 +126,12 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
       rosters.set(s.fantasy_team_id, [...(rosters.get(s.fantasy_team_id) ?? []), s.mlb_player_id]);
     }
   }
+  const leftWithTeam = new Map<string, Set<number>>();
+  for (const s of spells) {
+    if (s.to_at !== null && s.dropped_by_draft_id === null) {
+      leftWithTeam.set(s.fantasy_team_id, (leftWithTeam.get(s.fantasy_team_id) ?? new Set<number>()).add(s.mlb_player_id));
+    }
+  }
   // Draft 1 also takes hitters on the injured list; later drafts only the postseason roster.
   const canDraft = (p: (typeof pool)[number]) =>
     draftable({ onActiveRoster: p.on_postseason_roster, injured: p.injured_list !== null, eliminated: p.eliminated }, draft.number);
@@ -162,9 +168,7 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
       injured: p.injured_list !== null,
     })),
     teamOwners: new Map(teams.map((t) => [t.id, t.user_id])),
-    leftWithTeam: spells
-      .filter((s) => s.to_at !== null && s.dropped_by_draft_id === null)
-      .reduce((m, s) => m.set(s.fantasy_team_id, (m.get(s.fantasy_team_id) ?? new Set()).add(s.mlb_player_id)), new Map<string, Set<number>>()),
+    leftWithTeam,
     queues,
     autopicks: [],
     completed: false,
