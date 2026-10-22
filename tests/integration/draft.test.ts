@@ -786,7 +786,9 @@ describe('ghost team', () => {
         }
         expect((await call(manager, 'draft', { draftId: draft4, action: 'yield' })).error).toMatch(/Fill your/);
         const add = await bestAlive();
-        expect((await call(manager, 'draft', { draftId: draft4, action: 'pick', addPlayerId: add })).ok).toBe(true);
+        // Alex's app was loaded before the knockout, so it still names his hitter who left as the drop.
+        const stale = manager === 'Alex' && roster.length === 3 ? { dropPlayerId: alexOut } : {};
+        expect((await call(manager, 'draft', { draftId: draft4, action: 'pick', addPlayerId: add, ...stale })).ok).toBe(true);
         expect(await rosterOf(turn.teamId)).toEqual(sorted([...roster, add]));
         continue;
       }
