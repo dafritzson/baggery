@@ -10,7 +10,7 @@ import {
   autodraftAction,
   draftable,
   emptySpots,
-  mustReplace,
+  mustFill,
   ghostTurns,
   nextTurn,
   orderByOptions,
@@ -18,7 +18,6 @@ import {
   raffleTickets,
   randomOrder,
   redraftOrder,
-  resolvePick,
   snakeSlots,
   takenPlayers,
   validateAction,
@@ -131,20 +130,15 @@ describe('validateAction: redraft', () => {
     expect(validateAction(s(), pick('A', 1))).toMatch(/must drop/);
   });
 
-  it('counts a hitter who’s out as an empty spot: fill it with no drop, or name him, or swap out someone else', () => {
-    const out = state(redraft, { rosters, taken, out: new Set([12]) });
-    expect(emptySpots(out, 'A')).toBe(1);
-    expect(validateAction(out, pick('A', 1))).toBeNull();
-    expect(validateAction(out, pick('A', 1, 12))).toBeNull();
-    expect(validateAction(out, pick('A', 1, 11))).toBeNull();
-    // The fill takes his spot: he leaves the roster, just as if he'd been named.
-    expect(resolvePick(out, pick('A', 1))).toEqual(pick('A', 1, 12));
-    expect(applyAction(out, pick('A', 1)).rosters.get('A')).toEqual([10, 11, 13, 1]);
-    expect(applyAction(out, pick('A', 1, 11)).rosters.get('A')).toEqual([10, 12, 13, 1]);
-    // An eliminated hitter's spot fills before one who's off the postseason roster.
-    const two = state(redraft, { rosters, taken, out: new Set([11, 12]), eliminated: new Set([12]) });
-    expect(emptySpots(two, 'A')).toBe(2);
-    expect(resolvePick(two, pick('A', 1))).toEqual(pick('A', 1, 12));
+  it('fills an empty spot (a hitter gone with his eliminated MLB team) with no drop, or swaps out a hitter', () => {
+    // 12's MLB team was eliminated: he's left A's roster.
+    const short = state(redraft, { rosters: new Map([...rosters, ['A', [10, 11, 13]]]), taken });
+    expect(emptySpots(short, 'A')).toBe(1);
+    expect(validateAction(short, pick('A', 1))).toBeNull();
+    expect(applyAction(short, pick('A', 1)).rosters.get('A')).toEqual([10, 11, 13, 1]);
+    expect(validateAction(short, pick('A', 1, 11))).toBeNull();
+    expect(applyAction(short, pick('A', 1, 11)).rosters.get('A')).toEqual([10, 13, 1]);
+    expect(validateAction(short, pick('A', 1, 12))).toMatch(/not on your roster/);
   });
 
   it('rejects dropping a player not on your roster', () => {
@@ -163,20 +157,20 @@ describe('validateAction: redraft', () => {
     expect(validateAction(s(), yieldTurn('A'))).toBeNull();
   });
 
-  it('won’t let a team yield while it has a hitter whose MLB team is eliminated', () => {
-    const out = state(redraft, { rosters, taken, eliminated: new Set([10, 12, 20]) });
-    expect(mustReplace(out, 'A')).toBe(2);
-    expect(validateAction(out, yieldTurn('A'))).toMatch(/Replace your 2 eliminated hitters/);
-    // Once they're replaced it can yield.
-    const replaced = state(redraft, { rosters: new Map([...rosters, ['A', [1, 11, 2, 13]]]), taken, eliminated: new Set([10, 12]) });
-    expect(validateAction(replaced, yieldTurn('A'))).toBeNull();
+  it('won’t let a team yield with an empty spot', () => {
+    const short = state(redraft, { rosters: new Map([...rosters, ['A', [11, 13]]]), taken });
+    expect(mustFill(short, 'A')).toBe(2);
+    expect(validateAction(short, yieldTurn('A'))).toMatch(/Fill your 2 empty spots/);
+    // Once they're filled it can yield.
+    const filled = state(redraft, { rosters: new Map([...rosters, ['A', [1, 11, 2, 13]]]), taken });
+    expect(validateAction(filled, yieldTurn('A'))).toBeNull();
   });
 
-  it('lets a team with an eliminated hitter yield once nobody is left to replace him', () => {
+  it('lets a team with an empty spot yield once nobody is left to fill it', () => {
     const everyone = new Set([...taken, ...Array.from({ length: 100 }, (_, i) => i + 1)]);
-    const out = state(redraft, { rosters, taken: everyone, eliminated: new Set([10]) });
-    expect(mustReplace(out, 'A')).toBe(0);
-    expect(validateAction(out, yieldTurn('A'))).toBeNull();
+    const short = state(redraft, { rosters: new Map([...rosters, ['A', [11, 12, 13]]]), taken: everyone });
+    expect(mustFill(short, 'A')).toBe(0);
+    expect(validateAction(short, yieldTurn('A'))).toBeNull();
   });
 });
 
@@ -197,17 +191,21 @@ describe('autodraftAction', () => {
     expect(autodraftAction(s, [...candidates, { playerId: 4, regularSeasonTb: 400, injured: true }])).toEqual(pick('A', 2));
   });
 
-  it('redraft: fills an out hitter’s empty spot with the best available, and he leaves the roster', () => {
-    const s = state(redraft, { rosters: new Map([['A', [10, 11, 12, 13]]]), out: new Set([12]) });
+  it('redraft: fills an empty spot with the best available', () => {
+    const s = state(redraft, { rosters: new Map([['A', [10, 11, 13]]]) });
     const action = autodraftAction(s, candidates)!;
     expect(action).toEqual(pick('A', 2));
     expect(validateAction(s, action)).toBeNull();
-    expect(applyAction(s, action).rosters.get('A')).toEqual([10, 11, 13, 2]);
   });
 
   it('redraft: yields when there’s no empty spot', () => {
-    const s = state(redraft, { rosters: new Map([['A', [10, 11, 12, 13]]]), out: new Set([99]) });
+    const s = state(redraft, { rosters: new Map([['A', [10, 11, 12, 13]]]) });
     expect(autodraftAction(s, candidates)).toEqual(yieldTurn('A'));
+  });
+
+  it('redraft: waits for the manager when only injured hitters are left to fill a spot', () => {
+    const s = state(redraft, { rosters: new Map([['A', [10, 11, 13]]]), eligible: new Set([4]) });
+    expect(autodraftAction(s, [{ playerId: 4, regularSeasonTb: 400, injured: true }])).toBeNull();
   });
 
   describe('with a queue', () => {
@@ -227,12 +225,12 @@ describe('autodraftAction', () => {
     });
 
     it('redraft: swaps out the player queued with him, even with an empty spot', () => {
-      const s = state(redraft, { rosters: new Map([['A', [10, 11, 12, 13]]]), out: new Set([12]) });
+      const s = state(redraft, { rosters: new Map([['A', [10, 11, 13]]]) });
       expect(autodraftAction(s, candidates, [{ playerId: 1, dropPlayerId: 11 }])).toEqual(pick('A', 1, 11));
     });
 
-    it('redraft: with no swap queued, or one already gone or out, fills an empty spot', () => {
-      const s = state(redraft, { rosters: new Map([['A', [10, 11, 12, 13]]]), out: new Set([12]) });
+    it('redraft: with no swap queued, or one already gone, fills an empty spot', () => {
+      const s = state(redraft, { rosters: new Map([['A', [10, 11, 13]]]) });
       expect(autodraftAction(s, candidates, [{ playerId: 1 }])).toEqual(pick('A', 1));
       expect(autodraftAction(s, candidates, [{ playerId: 1, dropPlayerId: 99 }])).toEqual(pick('A', 1));
       expect(autodraftAction(s, candidates, [{ playerId: 1, dropPlayerId: 12 }])).toEqual(pick('A', 1));
@@ -245,7 +243,7 @@ describe('autodraftAction', () => {
     });
 
     it('every queued pick is legal', () => {
-      const s = state(redraft, { rosters: new Map([['A', [10, 11, 12, 13]]]), out: new Set([10]) });
+      const s = state(redraft, { rosters: new Map([['A', [11, 12, 13]]]) });
       for (const queue of [[{ playerId: 3, dropPlayerId: 13 }], [{ playerId: 3 }]]) {
         expect(validateAction(s, autodraftAction(s, candidates, queue)!)).toBeNull();
       }
@@ -368,22 +366,27 @@ describe('ghost turns', () => {
     expect(validateAction(s, yieldTurn('G'))).toMatch(/can’t skip/);
   });
 
-  it('an add with a hitter who’s out: fills without a drop, or by naming him, never by swapping', () => {
-    // The WS bug: the ghost had 2 hitters, one of them out, and its add was refused.
-    const s = { ...s4([pick('A', 1, 10), pick('B', 2, 20)]), out: new Set([30]) };
+  /** A state where the ghost's hitter has left with his eliminated MLB team. */
+  const gone = (st: DraftState, playerId: number): DraftState => ({
+    ...st,
+    rosters: new Map([...st.rosters, ['G', st.rosters.get('G')!.filter((p) => p !== playerId)]]),
+  });
+
+  it('an add after a hitter left with his MLB team: fills with no drop, never by swapping', () => {
+    // The 2026 WS draft: the ghost had 2 hitters, one of them on an eliminated team.
+    const s = gone(s4([pick('A', 1, 10), pick('B', 2, 20)]), 30);
     expect(emptySpots(s, 'G')).toBe(3);
     expect(validateAction(s, pick('G', 3))).toBeNull();
-    expect(validateAction(s, pick('G', 3, 30))).toBeNull();
     expect(validateAction(s, pick('G', 3, 31))).toMatch(/empty spot/);
     expect(applyAction(s, pick('G', 3)).rosters.get('G')).toEqual([31, 3]);
   });
 
-  it('a redraft turn with an empty spot (a hitter who’s out) must fill it', () => {
-    const s = { ...s4([pick('A', 1, 10), pick('B', 2, 20), pick('G', 3), pick('G', 4), pick('B', 5, 21), pick('A', 6, 11), pick('A', 7, 12), pick('B', 8, 22)]), out: new Set([31]) };
+  it('a redraft turn with an empty spot must fill it, and can’t pass it', () => {
+    const s = gone(s4([pick('A', 1, 10), pick('B', 2, 20), pick('G', 3), pick('G', 4), pick('B', 5, 21), pick('A', 6, 11), pick('A', 7, 12), pick('B', 8, 22)]), 31);
     expect(nextTurn(s.config, s.actions)?.ghost).toEqual({ by: 'X', kind: 'redraft' });
     expect(validateAction(s, pick('G', 9))).toBeNull();
-    expect(validateAction(s, pick('G', 9, 31))).toBeNull();
     expect(validateAction(s, pick('G', 9, 30))).toMatch(/empty spot/);
+    expect(validateAction(s, yieldTurn('G'))).toMatch(/can’t skip/);
   });
 
   it('a redraft turn is an ordinary redraft pick', () => {
@@ -400,7 +403,7 @@ describe('ghost turns', () => {
     expect(nextTurn(bYields.config, bYields.actions)).toEqual({ teamId: 'A', round: 4, slot: 11 });
   });
 
-  it('autodraft fills an add with the best hitter and redrafts only dead hitters', () => {
+  it('autodraft fills an add, and an empty spot on a redraft turn, with the best hitter', () => {
     const candidates = [
       { playerId: 1, regularSeasonTb: 200 },
       { playerId: 2, regularSeasonTb: 350 },
@@ -408,9 +411,7 @@ describe('ghost turns', () => {
     const add = s4([pick('A', 5, 10), pick('B', 6, 20)]);
     expect(autodraftAction(add, candidates)).toEqual(pick('G', 2));
     const redraftTurn = s4([pick('A', 5, 10), pick('B', 6, 20), pick('G', 7), pick('G', 8), pick('B', 9, 21), pick('A', 14, 11), pick('A', 15, 12), pick('B', 16, 22)]);
-    const withOut = { ...redraftTurn, out: new Set([31]) };
-    expect(autodraftAction(withOut, candidates)).toEqual(pick('G', 2));
-    expect(applyAction(withOut, pick('G', 2)).rosters.get('G')).toEqual([30, 7, 8, 2]);
+    expect(autodraftAction(gone(redraftTurn, 31), candidates)).toEqual(pick('G', 2));
     expect(autodraftAction(redraftTurn, candidates)).toEqual(yieldTurn('G'));
   });
 

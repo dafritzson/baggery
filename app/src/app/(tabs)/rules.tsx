@@ -107,20 +107,19 @@ export default function RulesScreen() {
           round), plus 1. The first ticket drawn picks first, and that team&apos;s tickets leave the pot.
         </Bullet>
         <Bullet>
-          Drafts 2 to 4 are redrafts. A hitter whose MLB team has been eliminated, or who was left off its postseason roster,
-          leaves an empty spot on your roster.
+          Drafts 2 to 4 are redrafts. When a hitter&apos;s MLB team is eliminated, he leaves your roster (keeping the bags he
+          earned) and leaves an empty spot.
         </Bullet>
         <Bullet>
           Each redraft pick adds an undrafted hitter. He either fills one of your empty spots or replaces a hitter of yours
-          who&apos;s still playing.
+          (say, one left off his team&apos;s postseason roster).
         </Bullet>
         <Bullet>
           You can yield to skip the rest of a redraft, but only once every empty spot on your roster is filled, or nobody
           undrafted is left.
         </Bullet>
         <Bullet>
-          If the undrafted hitters run out, whoever still has picks yields and plays with what they have: an eliminated hitter
-          scores 0.
+          If the undrafted hitters run out, whoever still has picks yields and plays short.
         </Bullet>
         <Bullet>
           A hitter you drop is burned: nobody can take him again. The exception is a hitter dropped by a manager who&apos;s
@@ -140,7 +139,8 @@ export default function RulesScreen() {
         <Bullet>
           <B>Draft 4:</B> the Ghost drafts with the finalists, placed by its round 2 bags like everyone else (in a raffle, no tickets if it finished below the best manager knocked out). Its first 2
           turns fill its 2 empty spots, with no drop and no pass (unless nobody undrafted is left), and go to the 2 managers eliminated in round 2. Its last
-          2 turns are regular redraft picks and go to the 2 managers eliminated in round 1. In each pair, the manager who
+          2 turns are regular redraft picks and go to the 2 managers eliminated in round 1, but while it has an empty spot
+          (a hitter whose team was knocked out), it fills that first. In each pair, the manager who
           finished higher in the round they went out picks first.
         </Bullet>
         <Bullet><B>Round 3:</B> it&apos;s ranked with the finalists. If it finishes first, its 4 managers share the title.</Bullet>

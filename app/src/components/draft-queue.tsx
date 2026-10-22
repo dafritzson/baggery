@@ -2,7 +2,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Pressable, StyleSheet, View } from 'react-native';
 import * as DropdownMenu from 'zeego/dropdown-menu';
 
-import { type QueueEntry, draftTurns } from '@core/draft.ts';
+import { type QueueEntry, ROSTER_SIZE, draftTurns } from '@core/draft.ts';
 
 import { Card } from '@/components/card';
 import { PlayerName } from '@/components/player-name';
@@ -117,9 +117,8 @@ export function QueueList({
   const theme = useTheme();
   const shown = queue.entries.filter((e) => available.has(e.playerId));
   const roster = dropFrom ? currentRosters(data).get(dropFrom) ?? [] : [];
-  // Hitters whose team is out (or who are off its postseason roster) leave empty spots to fill.
-  const empty = roster.filter((id) => isOut(data, id));
-  const alive = roster.filter((id) => !isOut(data, id));
+  // Hitters whose MLB team is eliminated have left the roster, leaving empty spots to fill.
+  const empty = Math.max(0, ROSTER_SIZE - roster.length);
   const move = (from: number, to: number) =>
     queue.update((q) => {
       const next = [...q];
@@ -138,9 +137,9 @@ export function QueueList({
         {!dropFrom && ' If the queue runs out, it goes back to the most regular-season TB.'}
       </ThemedText>
       {dropFrom && (
-        <ThemedText type="small" themeColor={empty.length ? 'text' : 'textSecondary'}>
-          {empty.length
-            ? `${empty.length === 1 ? '1 empty spot' : `${empty.length} empty spots`} to fill (${empty.map((id) => playerName(data, id)).join(', ')}: team out). Your queue fills them from the top.`
+        <ThemedText type="small" themeColor={empty ? 'text' : 'textSecondary'}>
+          {empty
+            ? `${empty === 1 ? '1 empty spot' : `${empty} empty spots`} to fill (team out). Your queue fills them from the top.`
             : 'Your spots fill when a hitter’s team is knocked out. To swap out someone still playing, choose him under Replaces.'}
         </ThemedText>
       )}
@@ -158,7 +157,7 @@ export function QueueList({
               <ThemedText type="smallBold" themeColor="textSecondary" style={styles.rank}>{i + 1}</ThemedText>
               <View style={styles.main}>
                 <PlayerName playerId={e.playerId} numberOfLines={1}>{playerLine(data, e.playerId)}</PlayerName>
-                {dropFrom && <DropPicker data={data} alive={alive} value={e.dropPlayerId} onChange={(d) => setDrop(e.playerId, d)} />}
+                {dropFrom && <DropPicker data={data} alive={roster} value={e.dropPlayerId} onChange={(d) => setDrop(e.playerId, d)} />}
               </View>
               <IconButton label="↑" hint="Move up" disabled={i === 0} onPress={() => move(i, i - 1)} />
               <IconButton label="↓" hint="Move down" disabled={i === shown.length - 1} onPress={() => move(i, i + 1)} />
@@ -185,7 +184,7 @@ export function WhenQueueRunsOut() {
   );
 }
 
-/** Whether a rostered hitter leaves an empty spot: his MLB team is out, or he's off its postseason roster. */
+/** Whether a hitter can't play on: his MLB team is out, or he's off its postseason roster. */
 export function isOut(data: SeasonData, playerId: number): boolean {
   const pool = data.poolByPlayer.get(playerId);
   return !pool || !pool.on_postseason_roster || !!data.mlbTeams.get(pool.mlb_team_id)?.eliminated;
@@ -193,7 +192,7 @@ export function isOut(data: SeasonData, playerId: number): boolean {
 
 /**
  * "Fills: an empty spot ▾", or "Replaces: Mookie Betts ▾" to swap out a hitter still playing.
- * Unset, autodraft fills a spot left by a hitter whose team is out, and skips him when there's none.
+ * Unset, autodraft fills an empty spot (left by a hitter whose team is out), and skips him when there's none.
  */
 function DropPicker({
   data,
@@ -202,7 +201,7 @@ function DropPicker({
   onChange,
 }: {
   data: SeasonData;
-  /** Rostered hitters still playing: the ones a manager would choose to swap out. */
+  /** The roster: the hitters a manager can choose to swap out. */
   alive: number[];
   value: number | undefined;
   onChange: (dropPlayerId: number | undefined) => void;

@@ -26,7 +26,6 @@ import {
   raffleTickets,
   randomOrder,
   redraftOrder,
-  resolvePick,
   takenPlayers,
   validateAction,
 } from '../_shared/core/draft.ts';
@@ -102,7 +101,7 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
   const [actions, spells, pool, teams, queued] = await Promise.all([
     tx`select type, fantasy_team_id, add_player_id, drop_player_id
        from draft_actions where draft_id = ${draftId} order by action_number`,
-    tx`select fantasy_team_id, mlb_player_id, dropped_by_draft_id
+    tx`select fantasy_team_id, mlb_player_id, to_at, dropped_by_draft_id
        from roster_spells where season_id = ${draft.season_id}`,
     tx`select p.mlb_player_id, p.regular_season_tb, p.on_postseason_roster, p.injured_list, t.eliminated
        from season_player_pool p
@@ -119,8 +118,9 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
   const ghostId: string | undefined = teams.find((t) => t.is_ghost)?.id;
   const ghost = ghostId && draft.ghost_turns.length ? { teamId: ghostId, turns: draft.ghost_turns } : undefined;
   const rosters = new Map<string, number[]>([...draft.pick_order, ...(ghost ? [ghost.teamId] : [])].map((id) => [id, []]));
+  // Open spells: a hitter whose MLB team is eliminated has left (his spell ended), leaving an empty spot.
   for (const s of spells) {
-    if (s.dropped_by_draft_id === null) {
+    if (s.to_at === null) {
       rosters.set(s.fantasy_team_id, [...(rosters.get(s.fantasy_team_id) ?? []), s.mlb_player_id]);
     }
   }
@@ -128,7 +128,6 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
   const canDraft = (p: (typeof pool)[number]) =>
     draftable({ onActiveRoster: p.on_postseason_roster, injured: p.injured_list !== null, eliminated: p.eliminated }, draft.number);
   const available = pool.filter(canDraft);
-  const unavailable = new Set(pool.filter((p) => !canDraft(p)).map((p) => p.mlb_player_id));
 
   return {
     draft,
@@ -153,9 +152,6 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
       ),
       eligible: new Set(available.map((p) => p.mlb_player_id)),
       // Players on a knocked-out MLB team can't stay on a roster (no yielding while holding one).
-      eliminated: new Set(pool.filter((p) => p.eliminated).map((p) => p.mlb_player_id)),
-      // Rostered players who can't play on (MLB team eliminated, or off its postseason roster) leave empty spots.
-      out: new Set(spells.filter((s) => s.dropped_by_draft_id === null && unavailable.has(s.mlb_player_id)).map((s) => s.mlb_player_id)),
     },
     autodraftTeams: new Set(teams.filter((t) => t.autodraft).map((t) => t.id)),
     candidates: available.map((p) => ({
@@ -184,11 +180,9 @@ function effectiveAt(draft: DraftRow): Date {
   return draft.locks_at;
 }
 
-/** Validates and saves an action. Returns it as it landed: a fill names the out hitter whose spot it took. */
-async function commit(tx: Tx, ctx: Ctx, picked: DraftAction, madeBy: string | null, isAuto: boolean): Promise<DraftAction> {
-  const error = validateAction(ctx.state, picked);
+async function commit(tx: Tx, ctx: Ctx, action: DraftAction, madeBy: string | null, isAuto: boolean) {
+  const error = validateAction(ctx.state, action);
   if (error) throw new UserError(error);
-  const action = resolvePick(ctx.state, picked);
 
   const { draft } = ctx;
   const add = action.type === 'pick' ? action.addPlayerId : null;
@@ -210,7 +204,6 @@ async function commit(tx: Tx, ctx: Ctx, picked: DraftAction, madeBy: string | nu
       values (${draft.season_id}, ${action.teamId}, ${add}, ${at}, ${draft.id})`;
   }
   ctx.state = applyAction(ctx.state, action);
-  return action;
 }
 
 /** Makes picks for autodraft teams while they're on the clock, then marks the draft complete if done. */
@@ -219,7 +212,8 @@ async function advance(tx: Tx, ctx: Ctx) {
     if (!ctx.autodraftTeams.has(turnOwner(turn))) break;
     const action = autodraftAction(ctx.state, ctx.candidates, ctx.queues.get(turnOwner(turn)));
     if (!action) break;
-    ctx.autopicks.push({ turn, action: await commit(tx, ctx, action, null, true) });
+    await commit(tx, ctx, action, null, true);
+    ctx.autopicks.push({ turn, action });
   }
   if (!nextTurn(ctx.state.config, ctx.state.actions)) {
     await tx`update drafts set status = 'complete' where id = ${ctx.draft.id}`;
@@ -509,9 +503,9 @@ serve(async (req) => {
         await requireLive(ctx);
         const teamId = actingFor();
         if (body.addPlayerId === undefined) throw new UserError('Choose a player.');
-        const picked = await commit(tx, ctx, { type: 'pick', teamId, addPlayerId: body.addPlayerId, dropPlayerId: body.dropPlayerId }, userId, false);
-        if (forSomeoneElse() && picked.type === 'pick') {
-          await logPick(tx, ctx, userId, 'pick', teamId, picked.addPlayerId, picked.dropPlayerId ?? null);
+        await commit(tx, ctx, { type: 'pick', teamId, addPlayerId: body.addPlayerId, dropPlayerId: body.dropPlayerId }, userId, false);
+        if (forSomeoneElse()) {
+          await logPick(tx, ctx, userId, 'pick', teamId, body.addPlayerId, body.dropPlayerId ?? null);
         }
         await advance(tx, ctx);
         break;
@@ -537,9 +531,9 @@ serve(async (req) => {
         commissionerOnly();
         await requireLive(ctx);
         // Their queue first, like their own autodraft.
-        const chosen = autodraftAction(ctx.state, ctx.candidates, turn ? ctx.queues.get(turnOwner(turn)) : undefined);
-        if (!chosen) throw new UserError('No eligible players left.');
-        const action = await commit(tx, ctx, chosen, userId, true);
+        const action = autodraftAction(ctx.state, ctx.candidates, turn ? ctx.queues.get(turnOwner(turn)) : undefined);
+        if (!action) throw new UserError('No eligible players left.');
+        await commit(tx, ctx, action, userId, true);
         if (action.type === 'pick') {
           await logPick(tx, ctx, userId, 'autopick', action.teamId, action.addPlayerId, action.dropPlayerId ?? null);
         } else {
@@ -624,8 +618,14 @@ serve(async (req) => {
             where season_id = ${ctx.draft.season_id} and mlb_player_id = ${last.add_player_id}
               and added_by_draft_id = ${ctx.draft.id} and dropped_by_draft_id is null`;
           if (last.drop_player_id !== null) {
+            // Back on the roster, unless his MLB team has been eliminated since: then he's left it.
             await tx`
-              update roster_spells set to_at = null, dropped_by_draft_id = null
+              update roster_spells r set dropped_by_draft_id = null,
+                to_at = case when exists (
+                  select 1 from season_player_pool p
+                  join season_mlb_teams t on t.season_id = p.season_id and t.mlb_team_id = p.mlb_team_id
+                  where p.season_id = r.season_id and p.mlb_player_id = r.mlb_player_id and t.eliminated
+                ) then greatest(now(), r.from_at) end
               where season_id = ${ctx.draft.season_id} and mlb_player_id = ${last.drop_player_id}
                 and dropped_by_draft_id = ${ctx.draft.id}`;
           }
