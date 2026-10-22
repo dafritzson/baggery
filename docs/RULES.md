@@ -77,7 +77,10 @@ xSLG, xwOBA, WAR and age were dropped as tiebreakers. They may come back later, 
     every pick already made still falls on its team's turn (switching snake and circular is
     always fine in round 1); otherwise undo picks first.
 - **Initial draft**: each pick adds a player. Every team ends with 4.
-- **Redraft**: each pick drops any player on your roster and adds an undrafted player.
+- **Empty spots**: a rostered hitter whose MLB team is eliminated, or who's off its postseason
+  roster, is out: his spot counts as empty, like a spot never filled.
+- **Redraft**: each pick adds an undrafted player, either into an empty spot (the out hitter whose
+  spot it takes leaves the roster) or in place of any hitter on your roster who's still playing.
   A manager may **yield** instead, which skips them for the rest of that draft, but not while
   they have a player whose MLB team is eliminated: he can't stay, so his spot must be filled
   first (unless nobody undrafted is left). The same goes for passing a ghost turn.
@@ -118,7 +121,8 @@ The eliminated managers' team, so they keep following along. It's in the Standin
 - **Draft 4**: the ghost drafts with the 3 finalists, placed by round 2 bags like everyone (by its
   rank, or its raffle tickets).
   Its first 2 turns fill its empty spots (no drop, no yield), made by the 2 managers out after
-  round 2. Its last 2 are ordinary redraft picks, made by the 2 managers out after round 1. Each
+  round 2. Its last 2 are ordinary redraft picks, made by the 2 managers out after round 1, except
+  that the ghost fills any empty spot (a hitter who's out) before it swaps anyone. Each
   pair goes higher-ranked first, so each of the 4 managers makes one turn. Unlike a manager's
   yield, a pass on a ghost turn (by the manager or autodraft) passes only that turn: the other
   manager still gets theirs. If nobody undrafted is left, an empty-spot turn is passed too (by
@@ -139,9 +143,8 @@ The eliminated managers' team, so they keep following along. It's in the Standin
 - Available to any manager (and famously to Daniel Fritzson).
 - Initial draft: picks the available player with the most regular-season TB, passing over
   players on the injured list.
-- Redraft: drops the manager's players whose MLB team is eliminated and replaces each
-  with the available player with the most regular-season TB. Yields when there's
-  nothing left to replace. Replacing an injured player through autodraft needs a group
+- Redraft: fills the manager's empty spots (hitters who are out) with the available players with
+  the most regular-season TB. Yields when there's no empty spot left. Replacing an injured player through autodraft needs a group
   vote, and the commissioner triggers it manually.
 - **Queue**: a manager who'd rather not leave it to TB can queue players for a draft, in order
   (the draft room's Queue tab, or Add to queue on a player). Autodraft, their switch or the

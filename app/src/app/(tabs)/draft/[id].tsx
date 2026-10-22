@@ -76,8 +76,8 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
   const canAct = !!turn && (myTurn || data.isCommissioner);
   const onBehalfOf = turn && !myTurn ? teamLabel(data, teamsById.get(turn.ghost?.by ?? turn.teamId)) : undefined;
   const dropOptions = turn ? currentRosters(data).get(turn.teamId) ?? [] : [];
-  // The ghost fills its empty spots without dropping anyone.
-  const filling = !!turn?.ghost && dropOptions.length < ROSTER_SIZE;
+  // The ghost fills its empty spots (hitters who are out leave one too) before it swaps anyone.
+  const filling = !!turn?.ghost && emptySpotCount(data, dropOptions) > 0;
 
   // The player popup's Draft button opens the pick sheet, for anyone the drafter can still take:
   // decided apart from the board, which lists owned players and eliminated teams too.
@@ -744,12 +744,13 @@ function PickSheet({
 }) {
   const theme = useTheme();
   // Hitters whose team is out (or who are off its postseason roster) leave empty spots: the pick
-  // fills one by default, like the queue. Choosing someone still playing swaps him out instead.
+  // fills one by default, like the queue, and sends no drop. Choosing someone still playing swaps
+  // him out instead.
   const empty = dropOptions.filter((id) => isOut(data, id));
   const alive = dropOptions.filter((id) => !isOut(data, id));
+  const spots = emptySpotCount(data, dropOptions);
   const [chosen, setDrop] = useState<number | undefined>();
-  // No drop while the ghost fills an empty spot, even if a hitter of its is out.
-  const drop = needsDrop ? chosen ?? empty[0] : undefined;
+  const drop = needsDrop ? chosen : undefined;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const injury = playerId !== null ? injuryText(data.poolByPlayer.get(playerId)) : null;
@@ -779,18 +780,18 @@ function PickSheet({
       {forGhost && <ThemedText type="smallBold">For {ghostName(data)}</ThemedText>}
       {needsDrop && (
         <View style={{ gap: Spacing.one }}>
-          <ThemedText type="smallBold">{empty.length ? 'He fills' : 'Drop which player?'}</ThemedText>
-          {empty.length > 0 && (
+          <ThemedText type="smallBold">{spots ? 'He fills' : 'Drop which player?'}</ThemedText>
+          {spots > 0 && (
             <Pressable
-              onPress={() => setDrop(empty[0])}
-              style={[styles.dropRow, { borderColor: empty.includes(drop ?? -1) ? theme.accent : theme.border }]}>
+              onPress={() => setDrop(undefined)}
+              style={[styles.dropRow, { borderColor: drop === undefined ? theme.accent : theme.border }]}>
               <ThemedText type="small">
-                {empty.length === 1 ? 'An empty spot' : `One of your ${empty.length} empty spots`} (
-                {empty.map((id) => `${playerName(data, id)}: ${outReason(data, id)}`).join(', ')})
+                {spots === 1 ? 'An empty spot' : `One of your ${spots} empty spots`}
+                {empty.length > 0 && ` (${empty.map((id) => `${playerName(data, id)}: ${outReason(data, id)}`).join(', ')})`}
               </ThemedText>
             </Pressable>
           )}
-          {empty.length > 0 && alive.length > 0 && (
+          {spots > 0 && alive.length > 0 && (
             <ThemedText type="smallBold" themeColor="textSecondary">Or swap out</ThemedText>
           )}
           {alive.map((id) => (
@@ -804,10 +805,15 @@ function PickSheet({
         </View>
       )}
       {error && <ThemedText themeColor="danger">{error}</ThemedText>}
-      <Button label="Draft" onPress={confirm} loading={saving} disabled={needsDrop && drop === undefined} />
+      <Button label="Draft" onPress={confirm} loading={saving} disabled={needsDrop && !spots && drop === undefined} />
       <Button label="Cancel" variant="secondary" onPress={close} />
     </Sheet>
   );
+}
+
+/** A roster's empty spots: spots never filled, and those of hitters who are out. */
+function emptySpotCount(data: SeasonData, roster: number[]): number {
+  return Math.max(0, ROSTER_SIZE - roster.filter((id) => !isOut(data, id)).length);
 }
 
 /** Why a rostered hitter left an empty spot. */

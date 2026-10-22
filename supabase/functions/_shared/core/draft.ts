@@ -63,6 +63,11 @@ export interface DraftState {
    * (or pass a ghost turn) while there's anyone left to replace him with.
    */
   eliminated?: Set<PlayerId>;
+  /**
+   * Rostered players who are out: MLB team eliminated, or off its postseason roster. Each leaves an
+   * empty spot (see emptySpots). Includes everyone in `eliminated`.
+   */
+  out?: Set<PlayerId>;
 }
 
 export const ROSTER_SIZE = 4;
@@ -136,18 +141,43 @@ export function validateAction(state: DraftState, action: DraftAction): string |
   if (state.taken.has(action.addPlayerId)) return 'That player has already been drafted.';
   if (!state.eligible.has(action.addPlayerId)) return 'That player is not eligible.';
 
-  // The ghost fills its empty spots without dropping anyone; after that it redrafts like anyone.
-  if (state.config.kind === 'initial' || turn.ghost?.kind === 'add' || (turn.ghost && roster.length < ROSTER_SIZE)) {
-    if (action.dropPlayerId !== undefined) {
-      return turn.ghost ? 'The ghost has an empty spot to fill first.' : 'You cannot drop players in the initial draft.';
-    }
-    if (roster.length >= ROSTER_SIZE) return 'Your roster is full.';
-    return null;
+  if (state.config.kind === 'initial') {
+    if (action.dropPlayerId !== undefined) return 'You cannot drop players in the initial draft.';
+    return roster.length >= ROSTER_SIZE ? 'Your roster is full.' : null;
   }
+  if (action.dropPlayerId !== undefined && !roster.includes(action.dropPlayerId)) return 'That player is not on your roster.';
 
-  if (action.dropPlayerId === undefined) return 'A redraft pick must drop a player.';
-  if (!roster.includes(action.dropPlayerId)) return 'That player is not on your roster.';
+  // A pick fills an empty spot, or swaps out a hitter who's still playing. Naming a hitter who's
+  // out as the drop just fills his spot.
+  const empty = emptySpots(state, action.teamId);
+  if (action.dropPlayerId === undefined || state.out?.has(action.dropPlayerId)) {
+    if (empty > 0) return null;
+    return turn.ghost?.kind === 'add' ? 'Your roster is full.' : 'A redraft pick must drop a player.';
+  }
+  // The ghost fills its empty spots before it swaps anyone; after that it redrafts like anyone.
+  if (turn.ghost?.kind === 'add' || (turn.ghost && empty > 0)) return 'The ghost has an empty spot to fill first.';
   return null;
+}
+
+/**
+ * A team's empty spots: spots never filled, and spots held by a hitter who's out (MLB team
+ * eliminated, or off its postseason roster). A redraft pick can fill one without dropping anyone.
+ */
+export function emptySpots(state: DraftState, teamId: TeamId): number {
+  const roster = state.rosters.get(teamId) ?? [];
+  return Math.max(0, ROSTER_SIZE - roster.filter((p) => !state.out?.has(p)).length);
+}
+
+/**
+ * A pick as it lands on the roster. One that fills an empty spot takes the spot of a hitter who's
+ * out, if there is one (a hitter whose MLB team is eliminated first), and he leaves the roster;
+ * otherwise a spot never filled. A swap is unchanged.
+ */
+export function resolvePick(state: DraftState, action: DraftAction): DraftAction {
+  if (action.type !== 'pick' || action.dropPlayerId !== undefined) return action;
+  const out = (state.rosters.get(action.teamId) ?? []).filter((p) => state.out?.has(p));
+  const drop = out.find((p) => state.eliminated?.has(p)) ?? out[0];
+  return drop === undefined ? action : { ...action, dropPlayerId: drop };
 }
 
 /**
@@ -188,10 +218,11 @@ export function takenPlayers(stints: Stint[], eliminatedTeams: Set<TeamId>): Set
   return new Set(stints.filter((s) => !s.dropped || !eliminatedTeams.has(s.teamId)).map((s) => s.playerId));
 }
 
-/** Applies a legal action to the roster state. Does not validate. */
-export function applyAction(state: DraftState, action: DraftAction): DraftState {
+/** Applies a legal action to the roster state (a fill takes an out hitter's spot: resolvePick). Does not validate. */
+export function applyAction(state: DraftState, picked: DraftAction): DraftState {
   const rosters = new Map(state.rosters);
   const taken = new Set(state.taken);
+  const action = resolvePick(state, picked);
   if (action.type === 'pick') {
     const roster = (rosters.get(action.teamId) ?? []).filter((p) => p !== action.dropPlayerId);
     rosters.set(action.teamId, [...roster, action.addPlayerId]);
@@ -227,46 +258,41 @@ export interface QueueEntry {
 
 /**
  * The action autodraft takes for the team on the clock. First the manager's queue (whoever makes
- * the turn), top to bottom: the first queued player still available, dropping the player queued
- * with him (if he's still on the roster) or else a droppable one; entries that can't be made are
- * skipped. The queue may hold injured players: that's the manager's call. Then, as without one:
+ * the turn), top to bottom: the first queued player still available, swapping out the hitter queued
+ * with him (if he's still on the roster and playing) or else filling an empty spot (emptySpots);
+ * entries that can't be made are skipped. The ghost fills its empty spots before it swaps anyone.
+ * The queue may hold injured players: that's the manager's call. Then, as without one:
  * - Initial draft: the available player with the most regular-season TB, passing over injured ones.
- * - Redraft: drop the first droppable player (MLB team eliminated, or an injury the group
- *   voted on) and add the best available player; yield when nothing needs replacing.
+ * - Redraft: fill an empty spot with the best available player; yield when there's none.
  */
-export function autodraftAction(
-  state: DraftState,
-  candidates: AutodraftCandidate[],
-  droppable: PlayerId[],
-  queue: QueueEntry[] = [],
-): DraftAction | null {
+export function autodraftAction(state: DraftState, candidates: AutodraftCandidate[], queue: QueueEntry[] = []): DraftAction | null {
   const turn = nextTurn(state.config, state.actions);
   if (!turn) return null;
   const teamId = turn.teamId;
   const available = (id: PlayerId) => state.eligible.has(id) && !state.taken.has(id);
 
   const roster = state.rosters.get(teamId) ?? [];
-  const filling = state.config.kind === 'initial' || turn.ghost?.kind === 'add' || (turn.ghost && roster.length < ROSTER_SIZE);
-  const autoDrop = droppable.find((p) => roster.includes(p));
+  const empty = emptySpots(state, teamId) > 0;
+  const canSwap = state.config.kind === 'redraft' && turn.ghost?.kind !== 'add' && !(turn.ghost && empty);
 
   for (const entry of queue) {
     if (!available(entry.playerId)) continue;
-    if (filling) return { type: 'pick', teamId, addPlayerId: entry.playerId };
-    const drop = entry.dropPlayerId !== undefined && roster.includes(entry.dropPlayerId) ? entry.dropPlayerId : autoDrop;
-    if (drop !== undefined) return { type: 'pick', teamId, addPlayerId: entry.playerId, dropPlayerId: drop };
+    const swap = entry.dropPlayerId;
+    if (canSwap && swap !== undefined && roster.includes(swap) && !state.out?.has(swap)) {
+      return { type: 'pick', teamId, addPlayerId: entry.playerId, dropPlayerId: swap };
+    }
+    if (empty) return { type: 'pick', teamId, addPlayerId: entry.playerId };
   }
 
   const best = candidates
     .filter((c) => !c.injured && available(c.playerId))
     .sort((a, b) => b.regularSeasonTb - a.regularSeasonTb || a.playerId - b.playerId)[0];
 
-  if (filling) {
-    if (best) return { type: 'pick', teamId, addPlayerId: best.playerId };
-    // Nobody left to fill a redraft spot with: pass, so the draft can end.
-    return state.config.kind === 'redraft' && !undraftedLeft(state) ? { type: 'yield', teamId } : null;
-  }
-  if (autoDrop === undefined || !best) return { type: 'yield', teamId };
-  return { type: 'pick', teamId, addPlayerId: best.playerId, dropPlayerId: autoDrop };
+  if (state.config.kind === 'initial') return best ? { type: 'pick', teamId, addPlayerId: best.playerId } : null;
+  if (empty && best) return { type: 'pick', teamId, addPlayerId: best.playerId };
+  // The ghost can't pass a spot it must fill while anyone undrafted is left.
+  if (empty && turn.ghost && undraftedLeft(state)) return null;
+  return { type: 'yield', teamId };
 }
 
 /**

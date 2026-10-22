@@ -26,6 +26,7 @@ import {
   raffleTickets,
   randomOrder,
   redraftOrder,
+  resolvePick,
   takenPlayers,
   validateAction,
 } from '../_shared/core/draft.ts';
@@ -76,8 +77,6 @@ interface Ctx {
   draft: DraftRow;
   state: DraftState;
   autodraftTeams: Set<string>;
-  /** Rostered players autodraft may replace: MLB team eliminated or not on the active roster. */
-  droppable: number[];
   candidates: AutodraftCandidate[];
   teamOwners: Map<string, string | null>;
   /** Each manager's queue for this draft (by the team making the turns), top first. */
@@ -155,9 +154,10 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
       eligible: new Set(available.map((p) => p.mlb_player_id)),
       // Players on a knocked-out MLB team can't stay on a roster (no yielding while holding one).
       eliminated: new Set(pool.filter((p) => p.eliminated).map((p) => p.mlb_player_id)),
+      // Rostered players who can't play on (MLB team eliminated, or off its postseason roster) leave empty spots.
+      out: new Set(spells.filter((s) => s.dropped_by_draft_id === null && unavailable.has(s.mlb_player_id)).map((s) => s.mlb_player_id)),
     },
     autodraftTeams: new Set(teams.filter((t) => t.autodraft).map((t) => t.id)),
-    droppable: spells.filter((s) => s.dropped_by_draft_id === null && unavailable.has(s.mlb_player_id)).map((s) => s.mlb_player_id),
     candidates: available.map((p) => ({
       playerId: p.mlb_player_id,
       regularSeasonTb: p.regular_season_tb,
@@ -184,9 +184,11 @@ function effectiveAt(draft: DraftRow): Date {
   return draft.locks_at;
 }
 
-async function commit(tx: Tx, ctx: Ctx, action: DraftAction, madeBy: string | null, isAuto: boolean) {
-  const error = validateAction(ctx.state, action);
+/** Validates and saves an action. Returns it as it landed: a fill names the out hitter whose spot it took. */
+async function commit(tx: Tx, ctx: Ctx, picked: DraftAction, madeBy: string | null, isAuto: boolean): Promise<DraftAction> {
+  const error = validateAction(ctx.state, picked);
   if (error) throw new UserError(error);
+  const action = resolvePick(ctx.state, picked);
 
   const { draft } = ctx;
   const add = action.type === 'pick' ? action.addPlayerId : null;
@@ -208,17 +210,16 @@ async function commit(tx: Tx, ctx: Ctx, action: DraftAction, madeBy: string | nu
       values (${draft.season_id}, ${action.teamId}, ${add}, ${at}, ${draft.id})`;
   }
   ctx.state = applyAction(ctx.state, action);
-  ctx.droppable = ctx.droppable.filter((p) => p !== drop);
+  return action;
 }
 
 /** Makes picks for autodraft teams while they're on the clock, then marks the draft complete if done. */
 async function advance(tx: Tx, ctx: Ctx) {
   for (let turn = nextTurn(ctx.state.config, ctx.state.actions); turn; turn = nextTurn(ctx.state.config, ctx.state.actions)) {
     if (!ctx.autodraftTeams.has(turnOwner(turn))) break;
-    const action = autodraftAction(ctx.state, ctx.candidates, ctx.droppable, ctx.queues.get(turnOwner(turn)));
+    const action = autodraftAction(ctx.state, ctx.candidates, ctx.queues.get(turnOwner(turn)));
     if (!action) break;
-    await commit(tx, ctx, action, null, true);
-    ctx.autopicks.push({ turn, action });
+    ctx.autopicks.push({ turn, action: await commit(tx, ctx, action, null, true) });
   }
   if (!nextTurn(ctx.state.config, ctx.state.actions)) {
     await tx`update drafts set status = 'complete' where id = ${ctx.draft.id}`;
@@ -508,9 +509,9 @@ serve(async (req) => {
         await requireLive(ctx);
         const teamId = actingFor();
         if (body.addPlayerId === undefined) throw new UserError('Choose a player.');
-        await commit(tx, ctx, { type: 'pick', teamId, addPlayerId: body.addPlayerId, dropPlayerId: body.dropPlayerId }, userId, false);
-        if (forSomeoneElse()) {
-          await logPick(tx, ctx, userId, 'pick', teamId, body.addPlayerId, body.dropPlayerId ?? null);
+        const picked = await commit(tx, ctx, { type: 'pick', teamId, addPlayerId: body.addPlayerId, dropPlayerId: body.dropPlayerId }, userId, false);
+        if (forSomeoneElse() && picked.type === 'pick') {
+          await logPick(tx, ctx, userId, 'pick', teamId, picked.addPlayerId, picked.dropPlayerId ?? null);
         }
         await advance(tx, ctx);
         break;
@@ -536,9 +537,9 @@ serve(async (req) => {
         commissionerOnly();
         await requireLive(ctx);
         // Their queue first, like their own autodraft.
-        const action = autodraftAction(ctx.state, ctx.candidates, ctx.droppable, turn ? ctx.queues.get(turnOwner(turn)) : undefined);
-        if (!action) throw new UserError('No eligible players left.');
-        await commit(tx, ctx, action, userId, true);
+        const chosen = autodraftAction(ctx.state, ctx.candidates, turn ? ctx.queues.get(turnOwner(turn)) : undefined);
+        if (!chosen) throw new UserError('No eligible players left.');
+        const action = await commit(tx, ctx, chosen, userId, true);
         if (action.type === 'pick') {
           await logPick(tx, ctx, userId, 'autopick', action.teamId, action.addPlayerId, action.dropPlayerId ?? null);
         } else {
