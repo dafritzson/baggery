@@ -76,8 +76,6 @@ interface Ctx {
   draft: DraftRow;
   state: DraftState;
   autodraftTeams: Set<string>;
-  /** Rostered players autodraft may replace: MLB team eliminated or not on the active roster. */
-  droppable: number[];
   candidates: AutodraftCandidate[];
   teamOwners: Map<string, string | null>;
   /** Each manager's queue for this draft (by the team making the turns), top first. */
@@ -103,7 +101,7 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
   const [actions, spells, pool, teams, queued] = await Promise.all([
     tx`select type, fantasy_team_id, add_player_id, drop_player_id
        from draft_actions where draft_id = ${draftId} order by action_number`,
-    tx`select fantasy_team_id, mlb_player_id, dropped_by_draft_id
+    tx`select fantasy_team_id, mlb_player_id, to_at, dropped_by_draft_id
        from roster_spells where season_id = ${draft.season_id}`,
     tx`select p.mlb_player_id, p.regular_season_tb, p.on_postseason_roster, p.injured_list, t.eliminated
        from season_player_pool p
@@ -120,8 +118,9 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
   const ghostId: string | undefined = teams.find((t) => t.is_ghost)?.id;
   const ghost = ghostId && draft.ghost_turns.length ? { teamId: ghostId, turns: draft.ghost_turns } : undefined;
   const rosters = new Map<string, number[]>([...draft.pick_order, ...(ghost ? [ghost.teamId] : [])].map((id) => [id, []]));
+  // Open spells: a hitter whose MLB team is eliminated has left (his spell ended), leaving an empty spot.
   for (const s of spells) {
-    if (s.dropped_by_draft_id === null) {
+    if (s.to_at === null) {
       rosters.set(s.fantasy_team_id, [...(rosters.get(s.fantasy_team_id) ?? []), s.mlb_player_id]);
     }
   }
@@ -129,7 +128,6 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
   const canDraft = (p: (typeof pool)[number]) =>
     draftable({ onActiveRoster: p.on_postseason_roster, injured: p.injured_list !== null, eliminated: p.eliminated }, draft.number);
   const available = pool.filter(canDraft);
-  const unavailable = new Set(pool.filter((p) => !canDraft(p)).map((p) => p.mlb_player_id));
 
   return {
     draft,
@@ -154,10 +152,8 @@ async function load(tx: Tx, draftId: string): Promise<Ctx> {
       ),
       eligible: new Set(available.map((p) => p.mlb_player_id)),
       // Players on a knocked-out MLB team can't stay on a roster (no yielding while holding one).
-      eliminated: new Set(pool.filter((p) => p.eliminated).map((p) => p.mlb_player_id)),
     },
     autodraftTeams: new Set(teams.filter((t) => t.autodraft).map((t) => t.id)),
-    droppable: spells.filter((s) => s.dropped_by_draft_id === null && unavailable.has(s.mlb_player_id)).map((s) => s.mlb_player_id),
     candidates: available.map((p) => ({
       playerId: p.mlb_player_id,
       regularSeasonTb: p.regular_season_tb,
@@ -208,14 +204,13 @@ async function commit(tx: Tx, ctx: Ctx, action: DraftAction, madeBy: string | nu
       values (${draft.season_id}, ${action.teamId}, ${add}, ${at}, ${draft.id})`;
   }
   ctx.state = applyAction(ctx.state, action);
-  ctx.droppable = ctx.droppable.filter((p) => p !== drop);
 }
 
 /** Makes picks for autodraft teams while they're on the clock, then marks the draft complete if done. */
 async function advance(tx: Tx, ctx: Ctx) {
   for (let turn = nextTurn(ctx.state.config, ctx.state.actions); turn; turn = nextTurn(ctx.state.config, ctx.state.actions)) {
     if (!ctx.autodraftTeams.has(turnOwner(turn))) break;
-    const action = autodraftAction(ctx.state, ctx.candidates, ctx.droppable, ctx.queues.get(turnOwner(turn)));
+    const action = autodraftAction(ctx.state, ctx.candidates, ctx.queues.get(turnOwner(turn)));
     if (!action) break;
     await commit(tx, ctx, action, null, true);
     ctx.autopicks.push({ turn, action });
@@ -536,7 +531,7 @@ serve(async (req) => {
         commissionerOnly();
         await requireLive(ctx);
         // Their queue first, like their own autodraft.
-        const action = autodraftAction(ctx.state, ctx.candidates, ctx.droppable, turn ? ctx.queues.get(turnOwner(turn)) : undefined);
+        const action = autodraftAction(ctx.state, ctx.candidates, turn ? ctx.queues.get(turnOwner(turn)) : undefined);
         if (!action) throw new UserError('No eligible players left.');
         await commit(tx, ctx, action, userId, true);
         if (action.type === 'pick') {
@@ -623,8 +618,14 @@ serve(async (req) => {
             where season_id = ${ctx.draft.season_id} and mlb_player_id = ${last.add_player_id}
               and added_by_draft_id = ${ctx.draft.id} and dropped_by_draft_id is null`;
           if (last.drop_player_id !== null) {
+            // Back on the roster, unless his MLB team has been eliminated since: then he's left it.
             await tx`
-              update roster_spells set to_at = null, dropped_by_draft_id = null
+              update roster_spells r set dropped_by_draft_id = null,
+                to_at = case when exists (
+                  select 1 from season_player_pool p
+                  join season_mlb_teams t on t.season_id = p.season_id and t.mlb_team_id = p.mlb_team_id
+                  where p.season_id = r.season_id and p.mlb_player_id = r.mlb_player_id and t.eliminated
+                ) then greatest(now(), r.from_at) end
               where season_id = ${ctx.draft.season_id} and mlb_player_id = ${last.drop_player_id}
                 and dropped_by_draft_id = ${ctx.draft.id}`;
           }

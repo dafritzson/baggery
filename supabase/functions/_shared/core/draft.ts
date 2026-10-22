@@ -58,11 +58,6 @@ export interface DraftState {
   taken: Set<PlayerId>;
   /** Players currently eligible to be drafted (in the pool and their MLB team alive). */
   eligible: Set<PlayerId>;
-  /**
-   * Rostered players whose MLB team is eliminated. They can't stay: a team holding one can't yield
-   * (or pass a ghost turn) while there's anyone left to replace him with.
-   */
-  eliminated?: Set<PlayerId>;
 }
 
 export const ROSTER_SIZE = 4;
@@ -125,10 +120,10 @@ export function validateAction(state: DraftState, action: DraftAction): string |
   if (turn.teamId !== action.teamId) return 'It is not your turn.';
 
   if (action.type === 'yield') {
-    if (turn.ghost?.kind === 'add' && undraftedLeft(state)) return 'The ghost can’t skip filling a spot.';
     if (state.config.kind === 'initial') return 'You cannot yield in the initial draft.';
-    const out = mustReplace(state, turn.teamId);
-    if (out > 0) return `Replace your ${out === 1 ? 'eliminated hitter' : `${out} eliminated hitters`} before you yield.`;
+    const empty = mustFill(state, turn.teamId);
+    if (turn.ghost && empty > 0) return 'The ghost can’t skip filling a spot.';
+    if (empty > 0) return `Fill your ${empty === 1 ? 'empty spot' : `${empty} empty spots`} before you yield.`;
     return null;
   }
 
@@ -136,34 +131,42 @@ export function validateAction(state: DraftState, action: DraftAction): string |
   if (state.taken.has(action.addPlayerId)) return 'That player has already been drafted.';
   if (!state.eligible.has(action.addPlayerId)) return 'That player is not eligible.';
 
-  // The ghost fills its empty spots without dropping anyone; after that it redrafts like anyone.
-  if (state.config.kind === 'initial' || turn.ghost?.kind === 'add' || (turn.ghost && roster.length < ROSTER_SIZE)) {
-    if (action.dropPlayerId !== undefined) {
-      return turn.ghost ? 'The ghost has an empty spot to fill first.' : 'You cannot drop players in the initial draft.';
-    }
-    if (roster.length >= ROSTER_SIZE) return 'Your roster is full.';
-    return null;
+  if (state.config.kind === 'initial') {
+    if (action.dropPlayerId !== undefined) return 'You cannot drop players in the initial draft.';
+    return roster.length >= ROSTER_SIZE ? 'Your roster is full.' : null;
   }
+  if (action.dropPlayerId !== undefined && !roster.includes(action.dropPlayerId)) return 'That player is not on your roster.';
 
-  if (action.dropPlayerId === undefined) return 'A redraft pick must drop a player.';
-  if (!roster.includes(action.dropPlayerId)) return 'That player is not on your roster.';
+  // A pick fills an empty spot, or swaps out a hitter on the roster.
+  const empty = emptySpots(state, action.teamId);
+  if (action.dropPlayerId === undefined) {
+    if (empty > 0) return null;
+    return turn.ghost?.kind === 'add' ? 'Your roster is full.' : 'A redraft pick must drop a player.';
+  }
+  // The ghost fills its empty spots before it swaps anyone; after that it redrafts like anyone.
+  if (turn.ghost?.kind === 'add' || (turn.ghost && empty > 0)) return 'The ghost has an empty spot to fill first.';
   return null;
 }
 
 /**
- * How many of a team's players are on an eliminated MLB team and must be replaced: 0 once nobody
- * undrafted is left to replace them with.
+ * A team's empty spots. A hitter whose MLB team is eliminated leaves the roster then (his spell
+ * ends), so his spot is simply empty. A redraft pick can fill one without dropping anyone.
  */
-export function mustReplace(state: DraftState, teamId: TeamId): number {
-  const eliminated = state.eliminated;
-  if (!eliminated?.size) return 0;
-  const out = (state.rosters.get(teamId) ?? []).filter((p) => eliminated.has(p)).length;
-  return out && undraftedLeft(state) ? out : 0;
+export function emptySpots(state: DraftState, teamId: TeamId): number {
+  return Math.max(0, ROSTER_SIZE - (state.rosters.get(teamId) ?? []).length);
 }
 
 /**
- * Whether anyone eligible is still undrafted. Once nobody is, a turn that must add someone (an
- * eliminated hitter's spot, a ghost's empty spot) can be passed instead, so the draft can end.
+ * How many empty spots a team must fill before it can yield (or pass a ghost turn): all of them,
+ * or 0 once nobody undrafted is left to fill them with. Not in the initial draft, which can't yield.
+ */
+export function mustFill(state: DraftState, teamId: TeamId): number {
+  return undraftedLeft(state) ? emptySpots(state, teamId) : 0;
+}
+
+/**
+ * Whether anyone eligible is still undrafted. Once nobody is, a team with an empty spot can yield
+ * (or pass a ghost turn) instead, so the draft can end.
  */
 export function undraftedLeft(state: DraftState): boolean {
   for (const p of state.eligible) if (!state.taken.has(p)) return true;
@@ -221,52 +224,47 @@ export interface AutodraftCandidate {
 /** A player a manager queued up for autodraft, and in a redraft who to drop for him. */
 export interface QueueEntry {
   playerId: PlayerId;
-  /** Unset: whoever autodraft would drop (MLB team eliminated). */
+  /** Unset: he fills an empty spot. */
   dropPlayerId?: PlayerId;
 }
 
 /**
  * The action autodraft takes for the team on the clock. First the manager's queue (whoever makes
- * the turn), top to bottom: the first queued player still available, dropping the player queued
- * with him (if he's still on the roster) or else a droppable one; entries that can't be made are
- * skipped. The queue may hold injured players: that's the manager's call. Then, as without one:
+ * the turn), top to bottom: the first queued player still available, swapping out the hitter queued
+ * with him (if he's still on the roster) or else filling an empty spot (emptySpots);
+ * entries that can't be made are skipped. The ghost fills its empty spots before it swaps anyone.
+ * The queue may hold injured players: that's the manager's call. Then, as without one:
  * - Initial draft: the available player with the most regular-season TB, passing over injured ones.
- * - Redraft: drop the first droppable player (MLB team eliminated, or an injury the group
- *   voted on) and add the best available player; yield when nothing needs replacing.
+ * - Redraft: fill an empty spot with the best available player; yield when there's none.
  */
-export function autodraftAction(
-  state: DraftState,
-  candidates: AutodraftCandidate[],
-  droppable: PlayerId[],
-  queue: QueueEntry[] = [],
-): DraftAction | null {
+export function autodraftAction(state: DraftState, candidates: AutodraftCandidate[], queue: QueueEntry[] = []): DraftAction | null {
   const turn = nextTurn(state.config, state.actions);
   if (!turn) return null;
   const teamId = turn.teamId;
   const available = (id: PlayerId) => state.eligible.has(id) && !state.taken.has(id);
 
   const roster = state.rosters.get(teamId) ?? [];
-  const filling = state.config.kind === 'initial' || turn.ghost?.kind === 'add' || (turn.ghost && roster.length < ROSTER_SIZE);
-  const autoDrop = droppable.find((p) => roster.includes(p));
+  const empty = emptySpots(state, teamId) > 0;
+  const canSwap = state.config.kind === 'redraft' && turn.ghost?.kind !== 'add' && !(turn.ghost && empty);
 
   for (const entry of queue) {
     if (!available(entry.playerId)) continue;
-    if (filling) return { type: 'pick', teamId, addPlayerId: entry.playerId };
-    const drop = entry.dropPlayerId !== undefined && roster.includes(entry.dropPlayerId) ? entry.dropPlayerId : autoDrop;
-    if (drop !== undefined) return { type: 'pick', teamId, addPlayerId: entry.playerId, dropPlayerId: drop };
+    const swap = entry.dropPlayerId;
+    if (canSwap && swap !== undefined && roster.includes(swap)) {
+      return { type: 'pick', teamId, addPlayerId: entry.playerId, dropPlayerId: swap };
+    }
+    if (empty) return { type: 'pick', teamId, addPlayerId: entry.playerId };
   }
 
   const best = candidates
     .filter((c) => !c.injured && available(c.playerId))
     .sort((a, b) => b.regularSeasonTb - a.regularSeasonTb || a.playerId - b.playerId)[0];
 
-  if (filling) {
-    if (best) return { type: 'pick', teamId, addPlayerId: best.playerId };
-    // Nobody left to fill a redraft spot with: pass, so the draft can end.
-    return state.config.kind === 'redraft' && !undraftedLeft(state) ? { type: 'yield', teamId } : null;
-  }
-  if (autoDrop === undefined || !best) return { type: 'yield', teamId };
-  return { type: 'pick', teamId, addPlayerId: best.playerId, dropPlayerId: autoDrop };
+  if (state.config.kind === 'initial') return best ? { type: 'pick', teamId, addPlayerId: best.playerId } : null;
+  if (empty && best) return { type: 'pick', teamId, addPlayerId: best.playerId };
+  // Nobody but injured hitters left: an empty spot can't be passed while anyone undrafted is.
+  if (empty && undraftedLeft(state)) return null;
+  return { type: 'yield', teamId };
 }
 
 /**

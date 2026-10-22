@@ -400,11 +400,11 @@ export function ghostName(data: SeasonData, round?: number): string {
   return '👻'.repeat(Math.max(1, ghostManagers(data, round).length));
 }
 
-/** Each team's current players (not dropped). */
+/** Each team's current players: not dropped, and not gone with their eliminated MLB team. */
 export function currentRosters(data: SeasonData): Map<string, number[]> {
   const rosters = new Map<string, number[]>(data.teams.map((t) => [t.id, []]));
   for (const s of data.spells) {
-    if (s.dropped_by_draft_id === null) rosters.get(s.fantasy_team_id)?.push(s.mlb_player_id);
+    if (s.to_at === null) rosters.get(s.fantasy_team_id)?.push(s.mlb_player_id);
   }
   return rosters;
 }

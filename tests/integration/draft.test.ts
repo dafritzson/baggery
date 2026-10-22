@@ -637,8 +637,28 @@ describe('ghost team', () => {
     const ghost = d!.ghost_turns.length ? { teamId: ghostId, turns: d!.ghost_turns } : undefined;
     return nextTurn({ kind: d!.kind, order: d!.pick_order, rounds: d!.rounds, pattern: d!.pattern, ghost }, actions);
   }
-  const ghostRoster = async () =>
-    (await admin.from('roster_spells').select('mlb_player_id').eq('fantasy_team_id', ghostId).is('dropped_by_draft_id', null)).data!.map((s) => s.mlb_player_id);
+  const rosterOf = async (teamId: string) =>
+    (await admin.from('roster_spells').select('mlb_player_id').eq('fantasy_team_id', teamId).is('to_at', null))
+      .data!.map((s) => s.mlb_player_id as number)
+      .sort((a, b) => a - b);
+  const sorted = (ids: number[]) => [...ids].sort((a, b) => a - b);
+  const ghostRoster = () => rosterOf(ghostId);
+  const mlbTeamOf = async (playerId: number) =>
+    (await admin.from('season_player_pool').select('mlb_team_id').eq('season_id', SEASON_ID).eq('mlb_player_id', playerId).single()).data!.mlb_team_id as number;
+  /** The undrafted hitter with the most regular-season TB whose MLB team is still alive. */
+  async function bestAlive(): Promise<number> {
+    const { data: dead } = await admin.from('season_mlb_teams').select('mlb_team_id').eq('season_id', SEASON_ID).eq('eliminated', true);
+    const { data: taken } = await admin.from('roster_spells').select('mlb_player_id').eq('season_id', SEASON_ID);
+    const skip = new Set(taken!.map((t) => t.mlb_player_id));
+    const { data: pool } = await admin
+      .from('season_player_pool')
+      .select('mlb_player_id, mlb_team_id')
+      .eq('season_id', SEASON_ID)
+      .eq('on_postseason_roster', true)
+      .order('regular_season_tb', { ascending: false });
+    const out = new Set(dead!.map((t) => t.mlb_team_id));
+    return pool!.find((p) => !skip.has(p.mlb_player_id) && !out.has(p.mlb_team_id))!.mlb_player_id;
+  }
 
   it('joins Draft 3 once round 1 closes, with its 2 adds after the survivors’ snake', async () => {
     const { data: drafts } = await admin.from('drafts').select('id, number').eq('season_id', SEASON_ID).in('number', [3, 4]);
@@ -679,7 +699,7 @@ describe('ghost team', () => {
     const player = await bestAvailable();
     expect((await call(other, 'draft', { draftId: draft3, action: 'pick', addPlayerId: player })).error).toMatch(/not your turn/);
     expect((await call(by, 'draft', { draftId: draft3, action: 'yield' })).error).toMatch(/can’t skip/);
-    expect((await call(by, 'draft', { draftId: draft3, action: 'pick', addPlayerId: player, dropPlayerId: player })).error).toMatch(/empty spot/);
+    expect((await call(by, 'draft', { draftId: draft3, action: 'pick', addPlayerId: player, dropPlayerId: player })).error).toMatch(/not on your roster/);
     expect((await call(by, 'draft', { draftId: draft3, action: 'pick', addPlayerId: player })).ok).toBe(true);
 
     const { data: action } = await admin.from('draft_actions').select('fantasy_team_id, by_team_id').eq('draft_id', draft3).eq('add_player_id', player).single();
@@ -714,6 +734,30 @@ describe('ghost team', () => {
 
   it('drafts in Draft 4 with the finalists, by raffle in a circle: 2 adds, then 2 ordinary redraft turns', async () => {
     await admin.from('fantasy_teams').update({ eliminated_after_round: 2 }).in('id', teamIds(OUT_2));
+    // Knock out the MLB teams of one ghost hitter and of one hitter each of Alex (picks by hand) and
+    // Mookie (autodraft), before the start so Mookie's autodraft (maybe first up) has a spot to fill.
+    // As in the 2026 WS draft that refused the ghost's pick.
+    const [ghostOut, ghostKept] = await ghostRoster();
+    const alexOut = (await rosterOf(teamIdByManager.get('Alex')!))[0];
+    const mookieOut = (await rosterOf(teamIdByManager.get('Mookie')!))[0];
+    const knockedOut = [...new Set(await Promise.all([ghostOut, alexOut, mookieOut].map(mlbTeamOf)))];
+    const knockOut = (eliminated: boolean) =>
+      admin.from('season_mlb_teams').update({ eliminated }).eq('season_id', SEASON_ID).in('mlb_team_id', knockedOut);
+    const spellOf = async (playerId: number) =>
+      (await admin.from('roster_spells').select('to_at, dropped_by_draft_id').eq('season_id', SEASON_ID).eq('mlb_player_id', playerId).single()).data!;
+    await knockOut(true);
+    // They leave their rosters at once, with no drop: their spots are empty.
+    for (const p of [ghostOut, alexOut, mookieOut]) {
+      expect(await spellOf(p)).toMatchObject({ to_at: expect.any(String), dropped_by_draft_id: null });
+    }
+    expect(await ghostRoster()).toEqual([ghostKept]);
+    // Reinstating a team (a mistake fixed) puts them back; then out again for the draft.
+    await knockOut(false);
+    expect(await spellOf(ghostOut)).toMatchObject({ to_at: null, dropped_by_draft_id: null });
+    await knockOut(true);
+    const { data: outPlayers } = await admin.from('season_player_pool').select('mlb_player_id').eq('season_id', SEASON_ID).in('mlb_team_id', knockedOut);
+    const out = new Set(outPlayers!.map((p) => p.mlb_player_id as number));
+
     expect((await call('Daniel', 'draft', { draftId: draft4, action: 'start' })).ok).toBe(true);
     const { data: d } = await admin.from('drafts').select('pick_order, ghost_turns, raffle').eq('id', draft4).single();
     expect(d!.pick_order).toHaveLength(4);
@@ -728,28 +772,66 @@ describe('ghost team', () => {
     expect(turns.slice(0, 2).map((g) => managerByTeamId.get(g.by)).sort()).toEqual([...OUT_2].sort());
     expect(turns.slice(2).map((g) => managerByTeamId.get(g.by)).sort()).toEqual([...OUT_1].sort());
 
-    // The finalists stand pat; the ghost fills its spots, then its first redraft turn passes and
-    // the second manager still gets theirs.
-    let passed = false;
+    // The finalists fill their empty spots (no drop) and stand pat. The ghost fills its spots with its
+    // adds and its first redraft turn (which can't be passed while it has one), then the second
+    // passes.
+    let undone = false;
     for (let turn = await turnIn(draft4), i = 0; turn && i < 20; turn = await turnIn(draft4), i++) {
       if (!turn.ghost) {
-        expect((await call(managerByTeamId.get(turn.teamId)!, 'draft', { draftId: draft4, action: 'yield' })).ok).toBe(true);
+        const manager = managerByTeamId.get(turn.teamId)!;
+        const roster = await rosterOf(turn.teamId);
+        if (roster.length === 4) {
+          expect((await call(manager, 'draft', { draftId: draft4, action: 'yield' })).ok).toBe(true);
+          continue;
+        }
+        expect((await call(manager, 'draft', { draftId: draft4, action: 'yield' })).error).toMatch(/Fill your/);
+        const add = await bestAlive();
+        expect((await call(manager, 'draft', { draftId: draft4, action: 'pick', addPlayerId: add })).ok).toBe(true);
+        expect(await rosterOf(turn.teamId)).toEqual(sorted([...roster, add]));
         continue;
       }
       const by = managerByTeamId.get(turn.ghost.by)!;
-      if (turn.ghost.kind === 'add') {
-        expect((await call(by, 'draft', { draftId: draft4, action: 'pick', addPlayerId: await bestAvailable() })).ok).toBe(true);
-      } else if (!passed) {
+      const roster = await ghostRoster();
+      if (roster.length === 4) {
+        expect(turn.ghost.kind).toBe('redraft');
         expect((await call(by, 'draft', { draftId: draft4, action: 'yield' })).ok).toBe(true);
-        passed = true;
-      } else {
-        const drop = (await ghostRoster())[0];
-        expect((await call(by, 'draft', { draftId: draft4, action: 'pick', addPlayerId: await bestAvailable() })).error).toMatch(/must drop/);
-        expect((await call(by, 'draft', { draftId: draft4, action: 'pick', addPlayerId: await bestAvailable(), dropPlayerId: drop })).ok).toBe(true);
+        continue;
+      }
+      if (turn.ghost.kind === 'redraft') expect((await call(by, 'draft', { draftId: draft4, action: 'yield' })).error).toMatch(/can’t skip/);
+      const add = await bestAlive();
+      // A hitter can't be swapped out while the ghost has an empty spot.
+      expect((await call(by, 'draft', { draftId: draft4, action: 'pick', addPlayerId: add, dropPlayerId: ghostKept })).error).toMatch(/empty spot/);
+      expect((await call(by, 'draft', { draftId: draft4, action: 'pick', addPlayerId: add })).ok).toBe(true);
+      expect(await ghostRoster()).toEqual(sorted([...roster, add]));
+      if (!undone) {
+        // Undoing a fill (and any autopicks after it, one at a time) just empties the spot again.
+        while ((await ghostRoster()).includes(add)) {
+          expect((await call('Daniel', 'draft', { draftId: draft4, action: 'undo' })).ok).toBe(true);
+        }
+        expect(await ghostRoster()).toEqual(roster);
+        undone = true;
+        expect((await call(by, 'draft', { draftId: draft4, action: 'pick', addPlayerId: add })).ok).toBe(true);
       }
     }
     expect((await admin.from('drafts').select('status').eq('id', draft4).single()).data!.status).toBe('complete');
     expect(await ghostRoster()).toHaveLength(4);
+    // Every finalist ends with 4 hitters still playing: Alex by hand, Mookie by autodraft.
+    for (const teamId of (await admin.from('drafts').select('pick_order').eq('id', draft4).single()).data!.pick_order as string[]) {
+      const roster = await rosterOf(teamId);
+      expect(roster).toHaveLength(4);
+      expect(roster.filter((p) => out.has(p))).toEqual([]);
+    }
+    const { count: mookieAuto } = await admin
+      .from('draft_actions')
+      .select('*', { count: 'exact', head: true })
+      .eq('draft_id', draft4)
+      .eq('is_auto', true)
+      .eq('type', 'pick')
+      .eq('fantasy_team_id', teamIdByManager.get('Mookie')!);
+    expect(mookieAuto).toBeGreaterThan(0);
+    // No pick dropped anyone: every spot filled was empty.
+    const { data: drops } = await admin.from('draft_actions').select('drop_player_id').eq('draft_id', draft4).not('drop_player_id', 'is', null);
+    expect(drops).toEqual([]);
     const { data: ghostActions } = await admin.from('draft_actions').select('by_team_id').eq('draft_id', draft4).eq('fantasy_team_id', ghostId);
     expect(ghostActions!.map((a) => managerByTeamId.get(a.by_team_id)).sort()).toEqual([...OUT_1, ...OUT_2].sort());
   });

@@ -76,8 +76,10 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
   const canAct = !!turn && (myTurn || data.isCommissioner);
   const onBehalfOf = turn && !myTurn ? teamLabel(data, teamsById.get(turn.ghost?.by ?? turn.teamId)) : undefined;
   const dropOptions = turn ? currentRosters(data).get(turn.teamId) ?? [] : [];
-  // The ghost fills its empty spots without dropping anyone.
-  const filling = !!turn?.ghost && dropOptions.length < ROSTER_SIZE;
+  // Empty spots: hitters whose MLB team is eliminated have left the roster. The ghost fills its
+  // empty spots before it swaps anyone.
+  const emptySpots = Math.max(0, ROSTER_SIZE - dropOptions.length);
+  const filling = !!turn?.ghost && emptySpots > 0;
 
   // The player popup's Draft button opens the pick sheet, for anyone the drafter can still take:
   // decided apart from the board, which lists owned players and eliminated teams too.
@@ -112,19 +114,16 @@ function DraftRoom({ data, draft, refetch }: { data: SeasonData; draft: Draft; r
   const status = clockStatus(data, draft, turn, myTurn, actions.length);
   const errorText = error && <ThemedText themeColor="danger">{error}</ThemedText>;
   const commissioner = useCommissionerActions(data, draft, turn, run);
-  // Hitters whose MLB team is out can't stay: no yielding (or passing a ghost turn) until they're
-  // replaced, and the ghost can't skip filling a spot. Unless nobody undrafted is left.
+  // No yielding (or passing a ghost turn) with an empty spot, unless nobody undrafted is left.
   const nobodyLeft = draftable.size === 0;
-  const mustReplace = nobodyLeft
-    ? 0
-    : dropOptions.filter((id) => data.mlbTeams.get(data.poolByPlayer.get(id)?.mlb_team_id ?? 0)?.eliminated).length;
+  const mustFill = nobodyLeft ? 0 : emptySpots;
   const yieldButton =
     myTurn &&
     draft.kind === 'redraft' &&
     (!filling || nobodyLeft) &&
-    (mustReplace > 0 ? (
+    (mustFill > 0 ? (
       <ThemedText type="small" themeColor="textSecondary">
-        {mustReplace === 1 ? 'You have 1 empty spot' : `You have ${mustReplace} empty spots`} (team out) to fill before you can{' '}
+        {mustFill === 1 ? 'You have 1 empty spot' : `You have ${mustFill} empty spots`} to fill before you can{' '}
         {turn?.ghost ? 'pass' : 'yield'}.
       </ThemedText>
     ) : (
@@ -277,7 +276,7 @@ function GhostTurnHelp({ name, filling, nobodyLeft }: { name: string; filling: b
           ? 'Nobody undrafted is left to fill its empty spot, so pass this turn.'
           : filling
           ? "Add an undrafted hitter to fill one of its empty spots. There's no drop, and this turn can't be passed."
-          : "A regular redraft pick: add an undrafted hitter to fill one of its empty spots or replace one of its hitters who's still playing. Passing skips only this turn."}
+          : "A regular redraft pick: swap one of its hitters for an undrafted one. Passing skips only this turn."}
       </ThemedText>
       <Pressable
         accessibilityRole="link"
@@ -743,13 +742,11 @@ function PickSheet({
   onConfirm: (dropPlayerId?: number) => Promise<string | null>;
 }) {
   const theme = useTheme();
-  // Hitters whose team is out (or who are off its postseason roster) leave empty spots: the pick
-  // fills one by default, like the queue. Choosing someone still playing swaps him out instead.
-  const empty = dropOptions.filter((id) => isOut(data, id));
-  const alive = dropOptions.filter((id) => !isOut(data, id));
+  // Hitters whose MLB team is eliminated have left the roster, leaving empty spots: the pick fills
+  // one by default, like the queue, and sends no drop. Choosing a hitter swaps him out instead.
+  const spots = Math.max(0, ROSTER_SIZE - dropOptions.length);
   const [chosen, setDrop] = useState<number | undefined>();
-  // No drop while the ghost fills an empty spot, even if a hitter of its is out.
-  const drop = needsDrop ? chosen ?? empty[0] : undefined;
+  const drop = needsDrop ? chosen : undefined;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const injury = playerId !== null ? injuryText(data.poolByPlayer.get(playerId)) : null;
@@ -779,38 +776,40 @@ function PickSheet({
       {forGhost && <ThemedText type="smallBold">For {ghostName(data)}</ThemedText>}
       {needsDrop && (
         <View style={{ gap: Spacing.one }}>
-          <ThemedText type="smallBold">{empty.length ? 'He fills' : 'Drop which player?'}</ThemedText>
-          {empty.length > 0 && (
+          <ThemedText type="smallBold">{spots ? 'He fills' : 'Drop which player?'}</ThemedText>
+          {spots > 0 && (
             <Pressable
-              onPress={() => setDrop(empty[0])}
-              style={[styles.dropRow, { borderColor: empty.includes(drop ?? -1) ? theme.accent : theme.border }]}>
+              onPress={() => setDrop(undefined)}
+              style={[styles.dropRow, { borderColor: drop === undefined ? theme.accent : theme.border }]}>
               <ThemedText type="small">
-                {empty.length === 1 ? 'An empty spot' : `One of your ${empty.length} empty spots`} (
-                {empty.map((id) => `${playerName(data, id)}: ${outReason(data, id)}`).join(', ')})
+                {spots === 1 ? 'An empty spot' : `One of your ${spots} empty spots`}
               </ThemedText>
             </Pressable>
           )}
-          {empty.length > 0 && alive.length > 0 && (
+          {spots > 0 && dropOptions.length > 0 && (
             <ThemedText type="smallBold" themeColor="textSecondary">Or swap out</ThemedText>
           )}
-          {alive.map((id) => (
+          {dropOptions.map((id) => (
             <Pressable
               key={id}
               onPress={() => setDrop(id)}
               style={[styles.dropRow, { borderColor: drop === id ? theme.accent : theme.border }]}>
-              <ThemedText type="small">{playerLine(data, id)}</ThemedText>
+              <ThemedText type="small">
+                {playerLine(data, id)}
+                {isOut(data, id) && ` (${outReason(data, id)})`}
+              </ThemedText>
             </Pressable>
           ))}
         </View>
       )}
       {error && <ThemedText themeColor="danger">{error}</ThemedText>}
-      <Button label="Draft" onPress={confirm} loading={saving} disabled={needsDrop && drop === undefined} />
+      <Button label="Draft" onPress={confirm} loading={saving} disabled={needsDrop && !spots && drop === undefined} />
       <Button label="Cancel" variant="secondary" onPress={close} />
     </Sheet>
   );
 }
 
-/** Why a rostered hitter left an empty spot. */
+/** Why a hitter can't play on: his MLB team is out, or he's off its postseason roster. */
 function outReason(data: SeasonData, playerId: number): string {
   const pool = data.poolByPlayer.get(playerId);
   return pool && data.mlbTeams.get(pool.mlb_team_id)?.eliminated ? 'team out' : 'off the postseason roster';
