@@ -638,8 +638,10 @@ describe('ghost team', () => {
     return nextTurn({ kind: d!.kind, order: d!.pick_order, rounds: d!.rounds, pattern: d!.pattern, ghost }, actions);
   }
   const rosterOf = async (teamId: string) =>
-    (await admin.from('roster_spells').select('mlb_player_id').eq('fantasy_team_id', teamId).is('to_at', null).order('from_at').order('mlb_player_id'))
-      .data!.map((s) => s.mlb_player_id as number);
+    (await admin.from('roster_spells').select('mlb_player_id').eq('fantasy_team_id', teamId).is('to_at', null))
+      .data!.map((s) => s.mlb_player_id as number)
+      .sort((a, b) => a - b);
+  const sorted = (ids: number[]) => [...ids].sort((a, b) => a - b);
   const ghostRoster = () => rosterOf(ghostId);
   const mlbTeamOf = async (playerId: number) =>
     (await admin.from('season_player_pool').select('mlb_team_id').eq('season_id', SEASON_ID).eq('mlb_player_id', playerId).single()).data!.mlb_team_id as number;
@@ -785,7 +787,7 @@ describe('ghost team', () => {
         expect((await call(manager, 'draft', { draftId: draft4, action: 'yield' })).error).toMatch(/Fill your/);
         const add = await bestAlive();
         expect((await call(manager, 'draft', { draftId: draft4, action: 'pick', addPlayerId: add })).ok).toBe(true);
-        expect(await rosterOf(turn.teamId)).toEqual([...roster, add]);
+        expect(await rosterOf(turn.teamId)).toEqual(sorted([...roster, add]));
         continue;
       }
       const by = managerByTeamId.get(turn.ghost.by)!;
@@ -800,7 +802,7 @@ describe('ghost team', () => {
       // A hitter can't be swapped out while the ghost has an empty spot.
       expect((await call(by, 'draft', { draftId: draft4, action: 'pick', addPlayerId: add, dropPlayerId: ghostKept })).error).toMatch(/empty spot/);
       expect((await call(by, 'draft', { draftId: draft4, action: 'pick', addPlayerId: add })).ok).toBe(true);
-      expect(await ghostRoster()).toEqual([...roster, add]);
+      expect(await ghostRoster()).toEqual(sorted([...roster, add]));
       if (!undone) {
         // Undoing a fill (and any autopicks after it, one at a time) just empties the spot again.
         while ((await ghostRoster()).includes(add)) {
