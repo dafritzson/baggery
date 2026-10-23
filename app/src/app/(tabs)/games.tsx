@@ -32,7 +32,7 @@ import { dayLabel, gameDay, useToday } from '@/lib/game-day';
 import { lineScore, playingOwnerOf, seriesLabel, shortSeriesLabel, statusLine } from '@/lib/game-labels';
 import { type Previews, type Probable, usePreviews } from '@/lib/previews';
 import { type BattingLine, type GameInfo, type ScoreHit, type Scores, useScores } from '@/lib/scores';
-import { type SeasonData, ghostManagers, useSeason } from '@/lib/season';
+import { type SeasonData, ghostManagers, isMyTeam, useSeason } from '@/lib/season';
 import { ownerName, teamName } from '@/lib/teams';
 import { zoom, zoomFixed, zoomKey, zoomView } from '@/lib/zoom';
 
@@ -411,7 +411,8 @@ function BaggerCard({
   const compact = useLayout() === 'compact';
   const [nameRoom, setNameRoom] = useState(0);
   const [ownerRoom, setOwnerRoom] = useState(0);
-  const mine = !ghosts && team.id === data.myTeam?.id;
+  // The ghost's hitters are mine too once I'm one of its managers (they keep the 👻 line).
+  const mine = isMyTeam(data, team.id);
   const owner = ownerName(data, team);
   const bags = tb ? hitBags(tb, hits.map((h) => h.event), playerId, gamePk, line) : [];
   // ▶ only once there's a video to watch: MLB's clip (most home runs, within minutes) or Savant's.
@@ -441,7 +442,7 @@ function BaggerCard({
             Phones only have room for the owner's name.
           */}
           <View style={styles.ownerLine}>
-            {mine ? (
+            {mine && !ghosts ? (
               <YouTag />
             ) : (
               <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.owner}>
@@ -560,7 +561,7 @@ function OpenCard({ data, scores, previews, game, fill, onTeam }: CardProps) {
   const live = game.status === 'Live';
   const bagger = (playerId: number): Bagger => {
     const owner = playingOwnerOf(data, playerId, game);
-    return owner ? (owner === data.myTeam?.id ? 'mine' : 'other') : null;
+    return owner ? (isMyTeam(data, owner) ? 'mine' : 'other') : null;
   };
   const lines = new Map(scores.lines.filter((l) => l.gamePk === game.gamePk).map((l) => [l.playerId, l]));
   /**

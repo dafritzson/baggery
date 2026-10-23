@@ -23,7 +23,7 @@ import { type BoxScore, useBoxScore } from '@/lib/box-score';
 import { lineScore, nickname, ownerOf, seriesLabel, statusLine } from '@/lib/game-labels';
 import { PlayerProvider } from '@/lib/player';
 import { type GameInfo, useScores } from '@/lib/scores';
-import { type SeasonData, ghostName } from '@/lib/season';
+import { type SeasonData, ghostName, isMyTeam } from '@/lib/season';
 import { teamColors } from '@/lib/team-colors';
 import { ownerName, teamName } from '@/lib/teams';
 
@@ -34,7 +34,7 @@ type Owner = { bagger: Bagger; owner: string | null; out?: boolean };
 /**
  * Whose hitter he is in this game, and the name to show for another manager. An eliminated
  * manager's hitter isn't highlighted and their name is struck through; the ghost shows a 👻 for
- * each manager behind it.
+ * each manager behind it, and its hitters are green for those managers.
  */
 function baggersFor(data: SeasonData, game: GameInfo) {
   const ghosts = ghostName(data);
@@ -42,7 +42,7 @@ function baggersFor(data: SeasonData, game: GameInfo) {
     const teamId = ownerOf(data, playerId, game);
     if (!teamId) return { bagger: null, owner: null };
     const team = data.teams.find((t) => t.id === teamId);
-    if (team?.is_ghost) return { bagger: 'other', owner: ghosts };
+    if (team?.is_ghost) return { bagger: isMyTeam(data, teamId) ? 'mine' : 'other', owner: ghosts };
     const owner = team ? (ownerName(data, team) ?? teamName(team)) : null;
     if (team && team.eliminated_after_round !== null) return { bagger: null, owner, out: true };
     if (teamId === data.myTeam?.id) return { bagger: 'mine', owner: null };
@@ -52,7 +52,7 @@ function baggersFor(data: SeasonData, game: GameInfo) {
 
 /** The owner under a hitter's name: YOU, another manager, or an eliminated one struck through. */
 function OwnerLabel({ bagger, owner, out }: Owner) {
-  if (bagger === 'mine') return <YouTag />;
+  if (bagger === 'mine' && !owner) return <YouTag />;
   if (!owner) return null;
   return (
     <ThemedText themeColor="textSecondary" numberOfLines={1} style={[styles.owner, out && styles.out]}>
@@ -519,7 +519,7 @@ function Lineup({ data, game, box, teamId, title }: { data: SeasonData; game: Ga
   const bench = drafted.filter((id) => !inLineup.has(id));
   const benchLabel = (id: number) => {
     const { bagger, owner, out } = baggers(id);
-    return `${data.players.get(id)?.full_name ?? `Player ${id}`} · ${bagger === 'mine' ? 'you' : out ? `${owner} (out)` : owner}`;
+    return `${data.players.get(id)?.full_name ?? `Player ${id}`} · ${bagger === 'mine' && !owner ? 'you' : out ? `${owner} (out)` : owner}`;
   };
   return (
     <View style={styles.lineup}>
