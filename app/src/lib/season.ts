@@ -395,6 +395,14 @@ export function ghostManagers(data: SeasonData, round?: number): Team[] {
     .filter((t): t is Team => !!t && (round === undefined || (t.eliminated_after_round !== null && t.eliminated_after_round < round)));
 }
 
+/** Whether a team's hitters are mine: my team's, or the ghost's once I'm one of its managers. */
+export function isMyTeam(data: SeasonData, teamId: string | null | undefined): boolean {
+  const me = data.myTeam;
+  if (!me || !teamId) return false;
+  if (teamId === me.id) return true;
+  return !!data.teams.find((t) => t.id === teamId)?.is_ghost && ghostManagers(data).some((t) => t.id === me.id);
+}
+
 /** The ghost team's name: a 👻 per manager behind it (👻👻 in round 2), now or in a `round`. */
 export function ghostName(data: SeasonData, round?: number): string {
   return '👻'.repeat(Math.max(1, ghostManagers(data, round).length));
