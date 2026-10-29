@@ -288,7 +288,6 @@ export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; sco
   const team = data.teams.find((t) => t.id === teamId);
   if (!team) return null;
   const blocks = teamSeriesBlocks(teamId, scores.games, scores.stats, coreSpells(data), (id) => data.poolByPlayer.get(id)?.mlb_team_id);
-  const totals = roundTotals(blocks);
   const out = team.eliminated_after_round;
   const started = (round: FantasyRound) =>
     roundSeries(round).some((s) => scores.games.some((g) => g.gameType === s.gameType && (g.status === 'Live' || g.status === 'Final')));
@@ -300,6 +299,8 @@ export function TeamScoreboard({ data, scores, teamId }: { data: SeasonData; sco
     if (team.is_ghost && roundOf(b) === 1) return false;
     return i === 0 || scores.games.some((g) => g.gameType === b.gameType);
   });
+  // Only what counted: an eliminated team's leftover hitters keep playing, but not for it.
+  const totals = roundTotals(shown);
   const mine = team.id === data.myTeam?.id;
   const owner = [ownerLine(data, team), mine ? 'You' : null].filter(Boolean).join(' · ');
   const status = (playerId: number) => playerStatus(data, teamId, playerId, scores.games);
